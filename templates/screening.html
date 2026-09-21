@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排敏看板 · 豚豚喂养记录</title>
+    <script>
+        try {
+            if (localStorage.getItem('theme') === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+            if (localStorage.getItem('elder-mode') === '1') {
+                document.body && document.documentElement.classList.add('elder');
+                document.addEventListener('DOMContentLoaded', () => document.body.classList.add('elder'));
+            }
+        } catch (error) {}
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/screening.css') }}">
+    <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/screening.js') }}"></script>
+</head>
+<body>
+    <main class="screening-page" id="screening-page" aria-labelledby="screening-title">
+        <header class="screening-header">
+            <a class="screening-back" href="{{ url_for('index') }}">← 返回首页</a>
+            <div class="screening-header-row">
+                <h1 id="screening-title">🛡️ 排敏看板</h1>
+                <button type="button" class="screening-elder-toggle" id="screening-elder">A+ 大字</button>
+            </div>
+            <p class="screening-hint">跟踪每种食物的排敏进度、反应档案和结论</p>
+            <div class="screening-links">
+                <a href="{{ url_for('planning_page') }}">📅 排敏规划（队列与日历）</a>
+                <a href="{{ url_for('food_library_page') }}">🥣 辅食库</a>
+            </div>
+        </header>
+        <p id="screening-message" class="screening-message" role="status" aria-live="polite" hidden></p>
+        <section class="screening-settings" aria-labelledby="screening-settings-title">
+            <h2 id="screening-settings-title">默认观察天数</h2>
+            <div class="screening-options" id="screening-days-options" role="group" aria-label="默认观察天数"></div>
+            <p class="screening-hint">仅作为新排敏的默认值，每种食物可单独调整（1–14 天）。</p>
+        </section>
+        <nav class="screening-tabs" id="screening-tabs" aria-label="排敏看板分类">
+            <button type="button" class="screening-tab active" data-tab="screening">排敏中 <span id="screening-count-screening">0</span></button>
+            <button type="button" class="screening-tab" data-tab="allergic">过敏 <span id="screening-count-allergic">0</span></button>
+            <button type="button" class="screening-tab" data-tab="normal">正常 <span id="screening-count-normal">0</span></button>
+            <button type="button" class="screening-tab" data-tab="untouched">未排敏 <span id="screening-count-untouched">0</span></button>
+            <button type="button" class="screening-tab" data-tab="stats">统计</button>
+        </nav>
+        <section id="screening-panel" class="screening-panel" aria-live="polite"></section>
+    </main>
+    <div class="screening-overlay" id="screening-overlay" hidden>
+        <div class="screening-dialog" role="dialog" aria-modal="true" aria-labelledby="screening-dialog-title">
+            <h2 id="screening-dialog-title"></h2>
+            <div id="screening-dialog-body"></div>
+        </div>
+    </div>
+</body>
+</html>

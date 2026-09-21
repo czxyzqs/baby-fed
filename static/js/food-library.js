@@ -181,7 +181,8 @@
             library = await api();
             loaded = true;
             render();
-            message(success);
+            message();
+            window.showToast?.(success);
         } catch (error) {
             message(saved ? `${success}，但列表刷新失败，请点击“刷新”重试。` : error.message, true);
         } finally {
@@ -205,7 +206,8 @@
             data.is_high_allergen = element('allergen').checked;
         }
         const collection = kind === 'food' ? 'foods' : 'categories';
-        await mutate(`/${collection}${id === null ? '' : `/${id}`}`, id === null ? 'POST' : 'PUT', data, '已保存', () => {
+        await mutate(`/${collection}${id === null ? '' : `/${id}`}`, id === null ? 'POST' : 'PUT', data,
+            `已保存${kind === 'food' ? '食物' : '品类'}「${data.name}」`, () => {
             element('search').value = '';
             element('filter').value = kind === 'food' ? String(data.category_id) : '';
             showPool();

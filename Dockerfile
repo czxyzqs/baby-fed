@@ -15,6 +15,7 @@ COPY reminder.py .
 COPY storage.py .
 COPY food_library.py .
 COPY food_entries.py .
+COPY food_screening.py .
 COPY templates/ templates/
 COPY static/ static/
 

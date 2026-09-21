@@ -128,6 +128,11 @@
             </div>
         </section>
 
+        <section class="food-screening-banner" id="food-screening-banner" aria-labelledby="food-screening-banner-title" hidden>
+            <h2 class="section-title" id="food-screening-banner-title">🛡️ 排敏动态</h2>
+            <div id="food-screening-banner-body"></div>
+        </section>
+
         <section class="food-intake-history" aria-labelledby="food-intake-history-title">
             <div class="food-intake-history-header">
                 <h2 class="section-title" id="food-intake-history-title">辅食记录</h2>
@@ -215,6 +220,16 @@
                 <a class="health-management-item" href="{{ url_for('food_library_page') }}" onclick="closeModal('health-management')">
                     <span class="health-management-icon" aria-hidden="true">🥣</span>
                     <span class="health-management-copy"><strong>辅食设置（辅食库）</strong><span>查看食物池，管理食物和品类</span></span>
+                    <span aria-hidden="true">›</span>
+                </a>
+                <a class="health-management-item" href="{{ url_for('screening_page') }}" onclick="closeModal('health-management')">
+                    <span class="health-management-icon" aria-hidden="true">🛡️</span>
+                    <span class="health-management-copy"><strong>排敏看板</strong><span>排敏进度、反应档案与结果标记</span></span>
+                    <span aria-hidden="true">›</span>
+                </a>
+                <a class="health-management-item" href="{{ url_for('planning_page') }}" onclick="closeModal('health-management')">
+                    <span class="health-management-icon" aria-hidden="true">📅</span>
+                    <span class="health-management-copy"><strong>排敏规划</strong><span>排敏队列、日历排期与暂停段</span></span>
                     <span aria-hidden="true">›</span>
                 </a>
             </div>
@@ -782,6 +797,7 @@
 
     <script defer src="{{ url_for('static', filename='js/index.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/food-banner.js') }}"></script>
 <!-- 药品配置弹窗 -->
 <div id="medicine-settings-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1002;justify-content:center;align-items:center;">
   <div style="background:white;border-radius:16px;width:90%;max-width:420px;padding:24px;">

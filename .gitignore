@@ -8,6 +8,7 @@ data/
 # Python
 __pycache__/
 *.pyc
+.venv/
 
 # 工具产物
 .gitnexus/

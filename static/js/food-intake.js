@@ -108,6 +108,35 @@
         renderBlocks();
     }
 
+    async function prefillPlans() {
+        // 本餐还没有记录时，把当天计划中尚未记录的食物自动成块（BR-08）
+        if (blocks.length || !selectedMeal) return;
+        let plans;
+        try {
+            const result = await api(`screening/plans?date=${encodeURIComponent(selectedDate)}`);
+            plans = result.items || [];
+        } catch (error) {
+            return; // 计划加载失败不影响手动记录
+        }
+        const recorded = new Set(context.entries.map(entry => entry.food_id));
+        plans = plans.filter(plan => !recorded.has(plan.food_id) &&
+            !blocks.some(block => block.food_id === plan.food_id));
+        if (!plans.length) return;
+        plans.forEach(plan => {
+            blocks.push({
+                id: null, original_food_id: null,
+                food_id: plan.food_id, food_name: plan.food_name,
+                amount: plan.is_new ? amounts[0] : '',
+                rating: null, note: '',
+                mode: plan.is_new ? 'start' : 'keep',
+                auto_amount: plan.is_new
+            });
+        });
+        dirty = true;
+        element('title').textContent = '添加辅食记录';
+        renderBlocks();
+    }
+
     async function loadEditor(dateValue, mealValue) {
         setBusy(true);
         message('正在加载食物和本餐记录…');
@@ -119,6 +148,7 @@
             element('date').value = selectedDate;
             element('meal').value = selectedMeal;
             selectMeal();
+            await prefillPlans();
             message();
         } catch (error) {
             element('date').value = selectedDate || dateValue;

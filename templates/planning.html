@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排敏规划 · 豚豚喂养记录</title>
+    <script>
+        try {
+            if (localStorage.getItem('theme') === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+            if (localStorage.getItem('elder-mode') === '1') {
+                document.addEventListener('DOMContentLoaded', () => document.body.classList.add('elder'));
+            }
+        } catch (error) {}
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/planning.css') }}">
+    <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/planning.js') }}"></script>
+</head>
+<body>
+    <main class="planning-page" id="planning-page" aria-labelledby="planning-title">
+        <header class="planning-header">
+            <a class="planning-back" href="{{ url_for('index') }}">← 返回首页</a>
+            <div class="planning-header-row">
+                <h1 id="planning-title">📅 排敏规划</h1>
+                <button type="button" class="planning-elder-toggle" id="planning-elder">A+ 大字</button>
+            </div>
+            <div class="planning-links">
+                <a href="{{ url_for('screening_page') }}">🛡️ 排敏看板</a>
+                <a href="{{ url_for('food_library_page') }}">🥣 辅食库</a>
+            </div>
+        </header>
+        <p id="planning-message" class="planning-message" role="status" aria-live="polite" hidden></p>
+        <section class="planning-card" aria-labelledby="planning-queue-title">
+            <h2 id="planning-queue-title">排敏队列（只放新食物）</h2>
+            <div id="planning-queue-list"></div>
+            <div class="planning-actions">
+                <button type="button" class="planning-btn" id="planning-queue-add">＋ 从食物池添加</button>
+                <button type="button" class="planning-btn primary" id="planning-auto">⚡ 自动生成排期</button>
+            </div>
+        </section>
+        <div id="planning-conflicts" class="planning-conflicts" hidden></div>
+        <div id="planning-movebar" class="planning-movebar" hidden></div>
+        <section class="planning-card" aria-labelledby="planning-calendar-title">
+            <div class="planning-calendar-head">
+                <button type="button" class="planning-nav" id="planning-prev">‹</button>
+                <h2 id="planning-calendar-title">日历</h2>
+                <button type="button" class="planning-nav" id="planning-next">›</button>
+                <button type="button" class="planning-btn" id="planning-repack">一键重排未来项</button>
+            </div>
+            <div class="planning-calendar" id="planning-calendar"></div>
+            <div id="planning-day" class="planning-day-detail" aria-live="polite"></div>
+            <p class="planning-hint">点日期查看当天安排；未来的日期可在当天详情里添加常规计划、划暂停段或调整排敏。</p>
+        </section>
+        <section class="planning-card" aria-labelledby="planning-agenda-title">
+            <h2 id="planning-agenda-title">排期一览</h2>
+            <div id="planning-agenda"></div>
+        </section>
+    </main>
+    <div class="planning-overlay" id="planning-overlay" hidden>
+        <div class="planning-dialog" role="dialog" aria-modal="true" aria-labelledby="planning-dialog-title">
+            <h2 id="planning-dialog-title"></h2>
+            <div id="planning-dialog-body"></div>
+        </div>
+    </div>
+</body>
+</html>

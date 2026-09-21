@@ -113,7 +113,57 @@ class FoodLibraryStore:
                 )''')
                 connection.execute('CREATE INDEX food_entries_round_date ON food_entries(round_id, date)')
                 connection.execute('PRAGMA user_version = 2')
-            elif version != 2:
+                version = 2
+            if version == 2:
+                connection.execute('''CREATE TABLE food_reactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    round_id INTEGER NOT NULL REFERENCES food_rounds(id),
+                    date TEXT NOT NULL,
+                    symptoms TEXT NOT NULL,
+                    note TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                )''')
+                connection.execute('CREATE INDEX food_reactions_round ON food_reactions(round_id, date)')
+                connection.execute('''CREATE TABLE food_plan_blocks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    food_id INTEGER NOT NULL REFERENCES foods(id) ON DELETE CASCADE,
+                    start_date TEXT NOT NULL,
+                    days INTEGER NOT NULL,
+                    pinned INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'scheduled',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )''')
+                connection.execute('CREATE INDEX food_plan_blocks_date ON food_plan_blocks(start_date)')
+                connection.execute('''CREATE TABLE food_pauses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    start_date TEXT NOT NULL,
+                    end_date TEXT NOT NULL,
+                    reason TEXT NOT NULL DEFAULT '',
+                    source TEXT NOT NULL DEFAULT 'manual',
+                    created_at TEXT NOT NULL
+                )''')
+                connection.execute('''CREATE TABLE food_normal_plans (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    food_id INTEGER NOT NULL REFERENCES foods(id) ON DELETE CASCADE,
+                    start_date TEXT NOT NULL,
+                    days INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL
+                )''')
+                connection.execute('''CREATE TABLE food_queue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    food_id INTEGER NOT NULL UNIQUE REFERENCES foods(id) ON DELETE CASCADE,
+                    sort_order INTEGER NOT NULL,
+                    observe_days INTEGER,
+                    created_at TEXT NOT NULL
+                )''')
+                connection.execute('CREATE INDEX food_queue_order ON food_queue(sort_order, id)')
+                connection.execute('''CREATE TABLE food_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )''')
+                connection.execute('PRAGMA user_version = 3')
+            elif version != 3:
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             yield connection
             connection.commit()

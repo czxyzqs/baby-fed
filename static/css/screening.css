@@ -1,0 +1,121 @@
+/* 排敏看板页（含老年模式 body.elder 加大规格） */
+.screening-page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 16px 14px 60px;
+}
+.screening-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.screening-page h1 { font-size: 20px; margin: 8px 0 4px; }
+.screening-back { color: var(--text-secondary, #9aa4b2); text-decoration: none; font-size: 14px; }
+.screening-hint { color: var(--text-secondary, #8a94a3); font-size: 12px; margin: 4px 0 10px; }
+.screening-links { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.screening-links a {
+    color: var(--accent, #4da3ff); text-decoration: none; font-size: 14px; font-weight: 600;
+    background: var(--card-bg, rgba(255, 255, 255, 0.06)); border-radius: 10px; padding: 8px 12px;
+}
+.screening-message { font-size: 13px; margin-bottom: 10px; }
+.screening-message[data-error='true'] { color: #ff8a70; }
+.screening-settings {
+    background: var(--card-bg, rgba(255, 255, 255, 0.05)); border-radius: 14px; padding: 12px; margin-bottom: 12px;
+}
+.screening-settings h2 { font-size: 14px; margin-bottom: 8px; }
+.screening-options, .screening-chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.screening-option, .screening-chip {
+    border: 1px solid var(--border, #3a4453); background: transparent; color: inherit;
+    border-radius: 18px; padding: 7px 14px; font-size: 14px; cursor: pointer; min-height: 38px;
+}
+.screening-option[aria-pressed='true'], .screening-chip.active {
+    background: var(--accent, #4da3ff); border-color: var(--accent, #4da3ff); color: #fff; font-weight: 700;
+}
+.screening-chip.allergen { border-color: #e0876a; }
+.screening-tabs {
+    display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px;
+}
+.screening-tab {
+    border: none; background: var(--card-bg, rgba(255, 255, 255, 0.05)); color: inherit;
+    border-radius: 18px; padding: 8px 13px; font-size: 13px; white-space: nowrap; cursor: pointer; min-height: 40px;
+}
+.screening-tab.active { background: var(--accent, #4da3ff); color: #fff; font-weight: 700; }
+.screening-card {
+    background: var(--card-bg, rgba(255, 255, 255, 0.05)); border-radius: 14px;
+    padding: 14px; margin-bottom: 12px; border: 1px solid transparent;
+}
+.screening-card.screening-alert { border-color: #e0876a; background: rgba(224, 135, 106, 0.08); }
+.screening-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.screening-card-name { font-size: 17px; }
+.screening-tag { font-size: 12px; color: var(--text-secondary, #8a94a3); }
+.screening-line { font-size: 14px; margin: 5px 0; line-height: 1.6; }
+.screening-warn { color: #ff9a80; font-weight: 600; }
+.screening-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.screening-btn {
+    border: none; border-radius: 10px; padding: 9px 14px; font-size: 14px; cursor: pointer;
+    background: var(--card-bg, rgba(255, 255, 255, 0.08)); color: inherit; min-height: 42px;
+}
+.screening-btn.primary { background: var(--accent, #4da3ff); color: #fff; font-weight: 700; }
+.screening-btn.green { background: rgba(96, 200, 130, 0.18); color: #7ed99a; font-weight: 600; }
+.screening-btn.red { background: rgba(230, 104, 76, 0.16); color: #ff9a80; font-weight: 600; }
+.screening-group-title { font-size: 13px; color: var(--text-secondary, #8a94a3); margin: 12px 0 8px; }
+.screening-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 16px; }
+.screening-stat {
+    background: var(--card-bg, rgba(255, 255, 255, 0.05)); border-radius: 12px;
+    text-align: center; padding: 12px 4px;
+}
+.screening-stat-value { font-size: 22px; display: block; }
+.screening-stat-label { font-size: 12px; color: var(--text-secondary, #8a94a3); }
+.screening-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.screening-bar-name { width: 128px; text-align: right; flex: none; }
+.screening-bar { flex: 1; height: 8px; border-radius: 5px; background: var(--border, #3a4453); overflow: hidden; }
+.screening-bar i { display: block; height: 100%; background: var(--accent, #4da3ff); }
+.screening-bar-count { width: 46px; flex: none; color: var(--text-secondary, #8a94a3); }
+.screening-elder-toggle {
+    border: 1px solid var(--accent, #4da3ff); color: var(--accent, #4da3ff); background: transparent;
+    border-radius: 10px; padding: 8px 12px; font-size: 14px; font-weight: 700; cursor: pointer; min-height: 42px;
+}
+.screening-overlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 60;
+    display: flex; align-items: flex-end; justify-content: center;
+}
+.screening-dialog {
+    background: var(--panel-bg, #1f2630); color: inherit; width: 100%; max-width: 560px;
+    border-radius: 18px 18px 0 0; padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
+    max-height: 86vh; overflow-y: auto;
+}
+.screening-dialog h2 { font-size: 17px; margin-bottom: 10px; }
+.screening-dialog-body label { display: block; font-size: 14px; margin: 12px 0 6px; }
+
+/* ===== 老年模式：正文≥20px，关键内容 22–24px，焦点≥60px，行距 1.5（BR-31） ===== */
+body.elder .screening-page { padding: 18px 14px 70px; }
+body.elder .screening-page h1 { font-size: 26px; }
+body.elder .screening-back { font-size: 17px; }
+body.elder .screening-hint { font-size: 17px; }
+body.elder .screening-links a { font-size: 19px; padding: 12px 16px; min-height: 60px; border-radius: 14px; }
+body.elder .screening-settings h2 { font-size: 20px; }
+body.elder .screening-settings { padding: 16px; }
+body.elder .screening-option, body.elder .screening-chip {
+    font-size: 20px; padding: 13px 20px; border-radius: 22px; min-height: 60px; font-weight: 600;
+}
+body.elder .screening-tab { font-size: 19px; padding: 12px 18px; min-height: 60px; }
+body.elder .screening-card { padding: 18px; }
+body.elder .screening-card-name { font-size: 24px; }
+body.elder .screening-tag { font-size: 17px; }
+body.elder .screening-line { font-size: 20px; line-height: 1.55; }
+body.elder .screening-warn { font-weight: 700; }
+body.elder .screening-btn { font-size: 20px; padding: 14px 18px; min-height: 60px; border-radius: 14px; font-weight: 700; }
+body.elder .screening-group-title { font-size: 18px; }
+body.elder .screening-stat-value { font-size: 30px; }
+body.elder .screening-stat-label { font-size: 17px; }
+body.elder .screening-bar-row { font-size: 18px; }
+body.elder .screening-bar-name { width: 168px; }
+body.elder .screening-bar { height: 12px; }
+body.elder .screening-elder-toggle { font-size: 19px; min-height: 60px; padding: 10px 16px; }
+body.elder .screening-dialog h2 { font-size: 23px; }
+body.elder .screening-dialog-body label { font-size: 20px; }
+body.elder .screening-message { font-size: 18px; }
+body.elder .form-input { font-size: 20px; }
+
+.screening-overlay[hidden] { display: none !important; }
