@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>宝宝辅食记录 · 交互稿</title>
+<style>
+:root{
+  --bg:#FAF6F1; --card:#fff; --ink:#3A3A3A; --sub:#9A928A; --line:#F0E9E1;
+  --pri:#FF8A4C; --pri-soft:#FFF1E8; --blue:#5B9BD5; --blue-soft:#EAF3FC;
+  --green:#5FB88A; --green-soft:#EAF6EF; --purple:#A97FD8; --purple-soft:#F3ECFB;
+  --red:#E5674F; --red-soft:#FDEEEA; --gray:#B9B2AA;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:#E9E4DD;font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;color:var(--ink)}
+.phone{max-width:430px;margin:0 auto;background:var(--bg);min-height:100dvh;position:relative;box-shadow:0 0 40px rgba(0,0,0,.12)}
+@media(min-width:520px){body{padding:18px 0}.phone{min-height:calc(100dvh - 36px);max-height:calc(100dvh - 36px);overflow:hidden;border-radius:36px;height:860px}}
+.demo-tip{background:#3A3A3A;color:#fff;font-size:11px;padding:5px 14px;display:flex;justify-content:space-between;align-items:center}
+.demo-tip a{color:#FFC79E;text-decoration:none;font-weight:600}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px}
+.topbar .t{display:flex;gap:10px;align-items:center}
+.logo{width:38px;height:38px;background:var(--pri-soft);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.app-title{font-size:15px;font-weight:700}
+.baby-info{font-size:11px;color:var(--sub)}
+.icon-btn{border:none;background:var(--card);width:34px;height:34px;border-radius:11px;font-size:16px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+#pages{padding:0 14px 90px;overflow-y:auto;height:calc(100dvh - 150px)}
+@media(min-width:520px){#pages{height:calc(100% - 150px)}}
+.tabbar{position:absolute;bottom:0;left:0;right:0;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);display:flex;border-top:1px solid var(--line);padding:6px 8px calc(8px + env(safe-area-inset-bottom))}
+.tabbar button{flex:1;border:none;background:none;font-size:11px;color:var(--sub);display:flex;flex-direction:column;gap:2px;align-items:center;padding:5px 0}
+.tabbar button .ico{font-size:20px;filter:grayscale(1);opacity:.55}
+.tabbar button.active{color:var(--pri);font-weight:700}
+.tabbar button.active .ico{filter:none;opacity:1}
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 1px 5px rgba(0,0,0,.04)}
+.h2{font-size:14px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.h2 .mini{font-size:11px;color:var(--sub);font-weight:400}
+/* date nav */
+.date-nav{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.date-nav .dn-btn{width:32px;height:32px;border-radius:10px;border:none;background:var(--card);font-size:16px;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.date-nav .dn-btn:disabled{opacity:.3}
+.date-main{flex:1;text-align:center}
+.date-cn{font-size:16px;font-weight:800}
+.date-sub{font-size:11px;color:var(--pri);font-weight:600}
+/* banner */
+.banner{background:linear-gradient(135deg,#FFF3EA,#FFE9DA);border:1px solid #FFD9C0;border-radius:14px;padding:10px 12px;margin-bottom:12px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.banner .warn{background:linear-gradient(135deg,#FDF0EC,#FBE3DC);border-color:#F3C4B6}
+.banner b{color:#D96A2C}
+.banner .todo-hint{color:var(--red);font-size:11px;font-weight:600}
+.banner .arrow{color:#D96A2C;font-weight:800}
+/* meals */
+.meal-card{background:var(--card);border-radius:16px;padding:12px 14px;margin-bottom:10px;box-shadow:0 1px 5px rgba(0,0,0,.04)}
+.meal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.meal-title{font-size:13px;font-weight:700}
+.add-btn{border:none;background:var(--pri-soft);color:var(--pri);font-weight:700;font-size:12px;border-radius:9px;padding:5px 12px}
+.entry{display:flex;align-items:center;gap:6px;padding:7px 8px;background:var(--bg);border-radius:10px;margin-top:6px;font-size:13px}
+.entry .nm{font-weight:600}
+.tag{font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600}
+.tag.t-screen{background:var(--blue-soft);color:var(--blue)}
+.tag.t-normal{background:var(--green-soft);color:var(--green)}
+.tag.t-warn{background:var(--red-soft);color:var(--red)}
+.entry .meta{color:var(--sub);font-size:11px;margin-left:auto}
+.empty{color:#C8C0B8;font-size:12px;padding:8px 2px}
+/* board */
+.subtabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto}
+.subtabs button{border:none;background:var(--card);border-radius:20px;padding:7px 13px;font-size:12px;color:var(--sub);white-space:nowrap;font-weight:600}
+.subtabs button.on{background:var(--ink);color:#fff}
+.food-card{border-radius:14px;padding:12px;margin-bottom:10px;background:var(--card);box-shadow:0 1px 5px rgba(0,0,0,.04)}
+.food-card.alert{background:var(--red-soft);box-shadow:none;border:1px solid #F5CFC5}
+.fc-head{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+.fc-name{font-size:15px;font-weight:800}
+.dots{letter-spacing:3px;font-size:13px}
+.fc-line{font-size:12px;color:var(--sub);margin:3px 0}
+.btn-row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.btn{border:none;border-radius:9px;padding:7px 11px;font-size:12px;font-weight:700}
+.btn.pri{background:var(--pri);color:#fff}
+.btn.ghost{background:var(--bg);color:var(--ink)}
+.btn.green{background:var(--green-soft);color:var(--green)}
+.btn.red{background:var(--red-soft);color:var(--red)}
+.chipwall .grp{margin-bottom:10px}
+.chipwall .grp .gt{font-size:12px;font-weight:700;margin-bottom:6px;color:var(--sub)}
+.chip{display:inline-block;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:5px 11px;font-size:12px;margin:0 5px 6px 0;cursor:pointer}
+.chip.ha{border-color:#F0C9BB;background:#FFF6F2}
+.timeline{border-left:2px solid var(--line);padding-left:10px;margin:8px 0}
+.timeline .tl{font-size:12px;margin-bottom:6px;position:relative}
+.timeline .tl::before{content:'';position:absolute;left:-14px;top:5px;width:6px;height:6px;border-radius:50%;background:var(--red)}
+/* plan */
+.queue-item{display:flex;align-items:center;gap:8px;background:var(--card);border-radius:12px;padding:9px 10px;margin-bottom:7px;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.q-idx{width:20px;height:20px;background:var(--pri);color:#fff;border-radius:50%;font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+.q-days{color:var(--sub);font-size:11px}
+.q-x{margin-left:auto;border:none;background:none;color:#C9C1B9;font-size:15px}
+.q-move{display:flex;gap:3px}
+.q-move button{border:none;background:var(--bg);border-radius:6px;width:22px;height:22px;font-size:11px}
+.warnbar{background:var(--red-soft);border:1px solid #F3C4B6;color:var(--red);border-radius:12px;padding:9px 12px;font-size:12px;margin-bottom:10px;display:none}
+.warnbar.show{display:block}
+.movebar{background:var(--blue-soft);border:1px solid #CBE2F5;color:#3D7FB5;border-radius:12px;padding:9px 12px;font-size:12px;margin-bottom:10px;display:none}
+.movebar.show{display:block}
+.cal-head{display:flex;justify-content:space-between;align-items:center;margin:4px 0 8px}
+.cal-head .m{font-size:15px;font-weight:800}
+.cal-head .nav{display:flex;gap:6px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal .wd{font-size:10px;color:var(--sub);text-align:center;padding:3px 0;font-weight:600}
+.cell{background:var(--card);border-radius:9px;min-height:56px;padding:3px;font-size:10px;position:relative;overflow:hidden;cursor:pointer}
+.cell.blank{background:none;cursor:default}
+.cell.today{outline:2px solid var(--pri);outline-offset:-2px}
+.cell.past{opacity:.55}
+.cell .d{font-size:10px;color:var(--sub);font-weight:700}
+.cell.today .d{color:var(--pri)}
+.seg{border-radius:5px;color:#fff;font-size:9px;padding:2px 3px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}
+.seg.s{border-radius:5px 0 0 5px}
+.seg.e{border-radius:0 5px 5px 0;margin-right:0}
+.seg.c-blue{background:var(--blue)} .seg.c-green{background:var(--green)} .seg.c-purple{background:var(--purple)}
+.cell.pause{background:repeating-linear-gradient(45deg,#F1EDE7,#F1EDE7 4px,#E7E1D8 4px,#E7E1D8 8px)}
+.cell.pause .pz{font-size:9px;color:#8B8378;font-weight:700;text-align:center;margin-top:8px}
+.nml{background:var(--bg);border:1px solid var(--line);color:var(--sub);font-size:9px;border-radius:5px;padding:1px 3px;margin-top:2px;white-space:nowrap;overflow:hidden}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:10px;color:var(--sub);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:3px;vertical-align:-1px}
+/* stats */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+.stat{background:var(--card);border-radius:13px;text-align:center;padding:10px 4px}
+.stat .v{font-size:18px;font-weight:800}
+.stat .k{font-size:10px;color:var(--sub)}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:11px}
+.bar-row .n{width:74px;color:var(--sub);text-align:right;flex:none}
+.bar{flex:1;height:8px;background:var(--line);border-radius:5px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--pri);border-radius:5px}
+.bar-row .c{width:40px;color:var(--sub);flex:none}
+/* sheets & toast */
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:.2s;z-index:50}
+.mask.show{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-width:430px;margin:0 auto;background:#fff;border-radius:22px 22px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom));transform:translateY(105%);transition:.25s;z-index:60;max-height:86dvh;overflow-y:auto}
+.sheet.show{transform:none}
+.sheet h3{font-size:15px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.sheet h3 .x{border:none;background:var(--bg);border-radius:50%;width:26px;height:26px;font-size:13px;color:var(--sub)}
+.sheet2{z-index:70}
+/* meal form */
+.fblock{border:1px solid var(--line);border-radius:14px;padding:11px;margin-bottom:10px;background:#FDFCFA}
+.fb-head{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.fb-name{font-size:15px;font-weight:800;flex:1}
+.fb-x{border:none;background:none;color:#C9C1B9;font-size:16px}
+.fb-line{font-size:12px;background:var(--blue-soft);color:#3D7FB5;border-radius:8px;padding:6px 9px;margin-bottom:8px}
+.fb-line.ask{background:var(--pri-soft);color:#C05E22;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.fb-line.ask .opt{background:#fff;border-radius:7px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid #F3D9C6}
+.fb-line.ask .opt.sel{background:var(--pri);color:#fff;border-color:var(--pri)}
+.flabel{font-size:11px;color:var(--sub);font-weight:700;margin:7px 0 5px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips .c{border:1px solid var(--line);background:#fff;border-radius:15px;padding:6px 11px;font-size:12px;cursor:pointer}
+.chips .c.sel{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:700}
+.chips .c.sug::after{content:'建议';font-size:9px;background:var(--pri);color:#fff;border-radius:4px;padding:0 3px;margin-left:4px}
+.chips .c.sug.sel{background:var(--ink)}
+.chips .c.sug.sel::after{background:var(--pri)}
+.note-input{width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;margin-top:4px}
+.save-bar{display:flex;gap:8px;margin-top:14px}
+.save-bar .btn{flex:1;padding:12px;font-size:14px}
+/* food picker */
+.cats{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:4px}
+.cats button{border:none;background:var(--bg);border-radius:14px;padding:6px 11px;font-size:12px;color:var(--sub);white-space:nowrap;font-weight:600}
+.cats button.on{background:var(--ink);color:#fff}
+.search{width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;margin-bottom:10px}
+.custom-row{display:flex;gap:8px;margin-top:10px}
+.custom-row input{flex:1;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px}
+/* toast */
+#toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%) translateY(20px);background:rgba(0,0,0,.78);color:#fff;font-size:13px;border-radius:20px;padding:9px 18px;opacity:0;transition:.25s;z-index:99;pointer-events:none;max-width:80%;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%)}
+.hint{font-size:11px;color:var(--sub);line-height:1.7;background:var(--card);border-radius:12px;padding:10px 12px;margin-bottom:12px}
+.hint b{color:var(--pri)}
+/* ===== 老年模式（body.elder）：按工信部适老化规范 + 老花300°用眼参数加大 =====
+   依据：适老版主要文字≥18dp（本档正文20-22px，可跟随系统特大字号到~30px）；
+   可点组件焦点≥60×60dp；行距≥1.3倍（取1.5）；关键文字加粗；高对比深色字 */
+body.elder{line-height:1.5}
+body.elder .demo-tip{font-size:16px;flex-wrap:wrap}
+body.elder .app-title{font-size:24px}
+body.elder .baby-info{font-size:17px}
+body.elder .logo{width:54px;height:54px;font-size:30px}
+body.elder .icon-btn{min-width:56px;height:56px;font-size:26px}
+body.elder #mode-btn{font-size:19px;font-weight:800}
+body.elder #pages{padding:0 14px 140px}
+body.elder .tabbar{padding:8px 6px calc(12px + env(safe-area-inset-bottom))}
+body.elder .tabbar button{font-size:18px;gap:4px}
+body.elder .tabbar button .ico{font-size:36px}
+body.elder .date-nav{gap:10px}
+body.elder .date-cn{font-size:28px}
+body.elder .date-sub{font-size:17px;white-space:normal}
+body.elder .dn-btn{width:52px;height:52px;font-size:24px}
+body.elder .banner{font-size:22px;padding:15px 16px;flex-wrap:wrap;gap:5px;line-height:1.5}
+body.elder .banner b{font-weight:800}
+body.elder .banner .todo-hint{font-size:17px}
+body.elder .banner .arrow{margin-left:auto;font-size:26px}
+body.elder .meal-card{padding:16px}
+body.elder .meal-title{font-size:22px}
+body.elder .add-btn{font-size:18px;padding:12px 20px}
+body.elder .entry{font-size:22px;padding:12px;flex-wrap:wrap;gap:6px}
+body.elder .entry .nm{font-weight:700}
+body.elder .entry .tag{font-size:16px;padding:3px 9px}
+body.elder .entry .meta{margin-left:0;width:100%;text-align:right;font-size:17px}
+body.elder .empty{font-size:17px}
+body.elder .card{padding:18px}
+body.elder .h2{font-size:22px}
+body.elder .h2 .mini{font-size:16px}
+body.elder .subtabs{gap:8px}
+body.elder .subtabs button{font-size:19px;padding:13px 20px;font-weight:700}
+body.elder .fc-name{font-size:24px}
+body.elder .fc-line{font-size:18px;margin:5px 0;line-height:1.5}
+body.elder .dots{font-size:20px;letter-spacing:4px}
+body.elder .btn{font-size:18px;padding:14px 18px !important;border-radius:14px;font-weight:800}
+body.elder .chip{font-size:19px;padding:12px 18px;margin:0 8px 9px 0;font-weight:600}
+body.elder .chipwall .grp .gt{font-size:17px;margin-bottom:8px}
+body.elder .timeline .tl{font-size:18px;margin-bottom:8px}
+body.elder .queue-item{font-size:20px;padding:14px}
+body.elder .q-idx{width:30px;height:30px;font-size:16px}
+body.elder .q-days{font-size:16px}
+body.elder .q-move button{width:42px;height:42px;font-size:19px}
+body.elder .q-x{font-size:24px;padding:6px}
+body.elder .warnbar,body.elder .movebar{font-size:18px;padding:14px 16px;line-height:1.5}
+body.elder .cal-head .m{font-size:24px}
+body.elder .cal .wd{font-size:15px}
+body.elder .cell{min-height:90px;border-radius:12px}
+body.elder .cell .d{font-size:16px;font-weight:800}
+body.elder .cell .pz{font-size:14px}
+body.elder .seg{font-size:14px;padding:4px 5px}
+body.elder .nml{font-size:14px;padding:3px 5px}
+body.elder .legend{font-size:15px}
+body.elder .legend i{width:14px;height:14px}
+body.elder .stat .v{font-size:30px}
+body.elder .stat .k{font-size:16px}
+body.elder .bar-row{font-size:16px;margin-bottom:11px}
+body.elder .bar-row .n{width:100px}
+body.elder .bar-row .c{width:56px}
+body.elder .bar{height:12px}
+body.elder .sheet{padding:20px 20px calc(26px + env(safe-area-inset-bottom))}
+body.elder .sheet h3{font-size:23px}
+body.elder .sheet h3 .x{width:44px;height:44px;font-size:20px}
+body.elder .fblock{padding:16px;border-width:2px}
+body.elder .fb-name{font-size:22px}
+body.elder .fb-x{font-size:24px;padding:6px}
+body.elder .fb-line{font-size:18px;padding:10px 13px;border-radius:12px;line-height:1.5}
+body.elder .fb-line.ask .opt{font-size:17px;padding:9px 15px;font-weight:800}
+body.elder .flabel{font-size:17px;margin:10px 0 7px}
+body.elder .chips .c{font-size:19px;padding:12px 17px;border-radius:20px}
+body.elder .chips .c.sug::after{font-size:13px}
+body.elder .note-input,body.elder .search,body.elder .custom-row input{font-size:19px;padding:14px;border-width:2px}
+body.elder .save-bar{gap:10px}
+body.elder .save-bar .btn{padding:19px;font-size:21px}
+body.elder .cats button{font-size:18px;padding:11px 17px;font-weight:700}
+body.elder .custom-row .btn{font-size:18px}
+body.elder #toast{font-size:19px;padding:14px 24px}
+body.elder .hint{font-size:16px;line-height:1.7}
+/* 触控焦点 ≥60×60px（工信部适老版硬性要求） */
+body.elder .add-btn{min-height:60px;padding:0 24px;display:inline-flex;align-items:center}
+body.elder .icon-btn{min-width:60px;height:60px}
+body.elder .dn-btn{width:60px;height:60px}
+body.elder .empty{font-size:19px}
+body.elder .date-sub{font-size:18px}
+body.elder .tabbar button{padding:8px 0}
+@media(min-width:520px){body.elder #pages{height:calc(100% - 192px)}}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="demo-tip"><span>🧪 交互演示稿 · 静态演示数据 · 右上「A+ 大字」切换老年/标准模式</span><a href="javascript:P.help()">交互说明</a></div>
+  <header class="topbar">
+    <div class="t"><div class="logo">🥣</div><div><div class="app-title">宝宝辅食记录</div><div class="baby-info" id="baby-info"></div></div></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" id="mode-btn" onclick="P.mode()" style="width:auto;padding:0 13px;font-weight:800;color:var(--pri);font-size:15px">A+ 大字</button>
+      <button class="icon-btn" onclick="P.settings()" title="设置">⚙️</button>
+    </div>
+  </header>
+  <main id="pages">
+    <section id="pg-today"></section>
+    <section id="pg-board"></section>
+    <section id="pg-plan"></section>
+    <section id="pg-stats"></section>
+  </main>
+  <nav class="tabbar">
+    <button data-t="today" onclick="P.tab('today')"><span class="ico">📝</span>今日</button>
+    <button data-t="board" onclick="P.tab('board')"><span class="ico">🛡️</span>排敏</button>
+    <button data-t="plan" onclick="P.tab('plan')"><span class="ico">📅</span>规划</button>
+    <button data-t="stats" onclick="P.tab('stats')"><span class="ico">📊</span>统计</button>
+  </nav>
+</div>
+<div class="mask" id="mask" onclick="P.close()"></div>
+<div class="sheet" id="sheet"></div>
+<div class="mask" id="mask2" onclick="P.close2()"></div>
+<div class="sheet sheet2" id="sheet2"></div>
+<div id="toast"></div>
+
+<script>
+/* ================= 演示数据 ================= */
+const S = {
+  baby:{name:'团团', birth:'2026-01-20', age:'7个月'},
+  today:17, // 9月17日
+  curDate:17, // 当前浏览日期（可回看/补记过去，未来禁入）
+  meals:{
+    16:{breakfast:[{food:'婴儿米粉',amount:'半碗',rating:'😋',tag:'正常'}],
+        lunch:[{food:'蛋黄',amount:'一勺尖',rating:'😋',tag:'排敏中'}],
+        dinner:[{food:'南瓜粥',amount:'半碗',rating:'😐',tag:'正常'}]},
+    17:{breakfast:[{food:'婴儿米粉',amount:'半碗',rating:'😋',tag:'正常'}],lunch:[],snack:[],dinner:[]}
+  },
+  screening:[{food:'蛋黄',cat:'蛋类',ha:true,N:3,first:'9/16',win:[16,18],eaten:[16],reactions:[]}],
+  allergic:[{food:'基围虾',cat:'鱼虾贝类',ha:true,tl:[{d:'8/27',s:'引入，第1天少量尝试'},{d:'8/28',s:'口周红疹、腹泻（第2天）'},{d:'8/29',s:'停止喂养，症状消退 → 标记过敏'}]}],
+  normal:{'谷薯类':['婴儿米粉','大米粥','小米粥','红薯'],'蔬菜类':['胡萝卜','南瓜','西兰花','菠菜'],'水果类':['苹果','香蕉','蓝莓'],'畜禽肉类':['猪里脊'],'肝类':['猪肝']},
+  untouched:{'蛋类':['全蛋','鹌鹑蛋黄'],'鱼虾贝类':['鳕鱼','鲈鱼','蛤蜊'],'豆及豆制品':['豆腐','豆浆'],'奶及奶制品':['无糖酸奶','奶酪'],'坚果种子类':['花生酱','芝麻酱'],'谷薯类':['燕麦糊','碎软面条'],'水果类':['猕猴桃','芒果']},
+  queue:[{food:'三文鱼',days:3},{food:'豆腐',days:3}],
+  blocks:[{food:'蛋黄',start:16,days:3,color:'c-blue',status:'active',pinned:false}],
+  pauses:[{start:19,end:20,reason:'出去玩'}],
+  normals:[{food:'南瓜粥',start:19,days:2},{food:'苹果',start:19,days:2}],
+  selBlock:null, conflict:false,
+};
+const MEALS=[['breakfast','早餐','🌅'],['lunch','午餐','☀️'],['snack','下午茶','🍎'],['dinner','晚餐','🌙']];
+const WD=['周一','周二','周三','周四','周五','周六','周日']; // 2026年9月1日=周二 → d%7
+function mealsOf(d){if(!S.meals[d])S.meals[d]={breakfast:[],lunch:[],snack:[],dinner:[]};return S.meals[d]}
+function eatenX(f,d){return f.eaten.filter(x=>x<=d).length}
+function posP(f,d){return eatenX(f,d)+((d>=f.win[0]&&d<=f.win[1]&&!f.eaten.includes(d)&&d<=S.today)?1:0)}
+const AMOUNTS=['一勺尖','一勺','两勺','三勺','半碗','一碗'];
+const SUGG={1:'一勺尖',2:'一勺',3:'两勺'};
+const SYMPTOMS=['口周红疹','荨麻疹','呕吐','腹泻','便秘','湿疹加重','其他'];
+const $=id=>document.getElementById(id);
+
+/* ================= 工具 ================= */
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1900)}
+function openSheet(html){$('sheet').innerHTML=html;$('mask').classList.add('show');$('sheet').classList.add('show')}
+function openSheet2(html){$('sheet2').innerHTML=html;$('mask2').classList.add('show');$('sheet2').classList.add('show')}
+P={};
+P.close=()=>{$('mask').classList.remove('show');$('sheet').classList.remove('show')};
+P.close2=()=>{$('mask2').classList.remove('show');$('sheet2').classList.remove('show')};
+P.tab=t=>{document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('active',b.dataset.t===t));['today','board','plan','stats'].forEach(p=>$('pg-'+p).style.display=p===t?'block':'none');render()};
+P.shiftDate=n=>{const t=S.curDate+n;if(t<1||t>S.today)return;S.curDate=t;renderToday()};
+P.goToday=()=>{S.curDate=S.today;renderToday()};
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function render(){
+  $('baby-info').textContent=S.baby.name+' · '+S.baby.age+' · 观察期默认3天';
+  renderToday();renderBoard();renderPlan();renderStats();
+}
+
+/* ================= 今日 ================= */
+function renderToday(){
+  const d=S.curDate, diff=S.today-d;
+  const rel=diff===0?'今天':(diff===1?'昨天':diff+'天前');
+  const f=S.screening[0];
+  let banner='';
+  if(f&&d>=f.win[0]&&d<=f.win[1]){
+    const p=posP(f,d);
+    banner='<div class="banner" onclick="P.tab(\'plan\')">📋 '+(d===S.today?'今日计划':'当日计划')+'：<b>'+esc(f.food)+'（第'+p+'天/'+f.N+'天）</b>'+(d===S.today&&!f.eaten.includes(d)?'<span class="todo-hint">· 今天还没吃</span>':'')+'<span class="arrow">›</span></div>';
+  }
+  const done=(d===S.today)?S.screening.filter(x=>x.eaten.length>=x.N):[];
+  let ask='';
+  done.forEach(x=>{ask+='<div class="banner warn">🔔 '+esc(x.food)+' 已吃满 '+x.N+' 个进食日且无反应，可以标记结果了 <span class="arrow" onclick="P.tab(\'board\')">去标记 ›</span></div>'});
+  const cards=MEALS.map(([k,label,ico])=>{
+    const list=mealsOf(d)[k]||[];
+    const es=list.map(e=>'<div class="entry" onclick="P.mealForm(\''+k+'\')"><span class="nm">'+ico+' '+esc(e.food)+'</span><span class="tag '+(e.tag==='排敏中'?'t-screen':e.tag==='过敏'?'t-warn':'t-normal')+'">'+e.tag+'</span><span class="meta">'+esc(e.amount)+' '+(e.rating||'')+'</span></div>').join('');
+    return '<div class="meal-card"><div class="meal-head"><span class="meal-title">'+ico+' '+label+'</span><button class="add-btn" onclick="P.mealForm(\''+k+'\')">'+(list.length?'编辑':'＋')+'</button></div>'+(es||'<div class="empty">还没有记录</div>')+'</div>';
+  }).join('');
+  $('pg-today').innerHTML=
+    '<div class="date-nav"><button class="dn-btn" '+(d<=1?'disabled':'')+' onclick="P.shiftDate(-1)">‹</button><div class="date-main"><div class="date-cn">9月'+d+'日 '+WD[d%7]+'</div><div class="date-sub">'+rel+'</div></div><button class="dn-btn" '+(d>=S.today?'disabled':'')+' onclick="P.shiftDate(1)">›</button><button class="dn-btn" onclick="P.goToday()">今天</button></div>'
+    +banner+ask+cards;
+}
+
+/* ================= 一餐一表单 ================= */
+let FB=[]; // form blocks
+function planPrefill(){
+  const d=S.curDate,m=mealsOf(d);
+  const arr=[];
+  S.blocks.forEach(b=>{if(b.status==='active'&&d>=b.start&&d<=b.start+b.days-1){
+    const f=S.screening.find(x=>x.food===b.food);
+    if(f&&!f.eaten.includes(d)&&!MEALS.some(([mm])=>m[mm].some(e=>e.food===b.food))){
+      const p=posP(f,d);arr.push({food:b.food,tag:'排敏中',amount:SUGG[p]||'三勺',rating:'',note:'',line:'排敏 · 第'+p+'天/'+f.N+'天 · 建议量：'+(SUGG[p]||'三勺')});}}});
+  return arr;
+}
+P.mealForm=k=>{
+  const label=MEALS.find(m=>m[0]===k)[1];
+  const m=mealsOf(S.curDate);
+  FB=m[k].length?m[k].map(e=>({food:e.food,tag:e.tag,amount:e.amount,rating:e.rating,note:e.note||'',line:e.tag==='排敏中'?'排敏 · 继续观察中':''})):planPrefill();
+  P._meal=k;
+  openSheet('<div id="mf"></div>');
+  drawMF(label);
+};
+function drawMF(label){$('mf').parentElement.innerHTML='<div id="mf">'+mfHTML(label)+'</div>';window._mfl=label}
+function mfHTML(label){
+  const blocks=FB.map((b,i)=>{
+    let line='';
+    if(b.line&&b.line.indexOf('建议')>-1)line='<div class="fb-line">'+esc(b.line)+'</div>';
+    else if(b.line==='未排敏')line='<div class="fb-line ask">❓ 首次引入「'+esc(b.food)+'」？<span class="opt sel" onclick="P.ask('+i+',0,this)">开始排敏</span><span class="opt" onclick="P.ask('+i+',1,this)">已耐受</span></div>';
+    else if(b.line==='过敏')line='<div class="fb-line ask">⚠️「'+esc(b.food)+'」为过敏食物 <span class="opt" onclick="P.ask('+i+',2,this)">按新一轮排敏</span><span class="opt sel" onclick="P.ask('+i+',3,this)">仅记录</span></div>';
+    else if(b.line)line='<div class="fb-line">'+esc(b.line)+'</div>';
+    return '<div class="fblock"><div class="fb-head"><span class="fb-name" onclick="P.pickFood('+i+')">'+esc(b.food)+' ✎</span><span class="tag '+(b.tag==='排敏中'?'t-screen':b.tag==='过敏'?'t-warn':'t-normal')+'">'+b.tag+'</span><button class="fb-x" onclick="P.delBlock('+i+')">✕</button></div>'
+      +line
+      +'<div class="flabel">进食量（勺阶）</div><div class="chips">'+AMOUNTS.map(a=>'<span class="c'+(b.amount===a?' sel':'')+(b.line&&b.line.indexOf('建议量：'+a)>-1?' sug':'')+'" onclick="P.amt('+i+',\''+a+'\',this)">'+a+'</span>').join('')+'</div>'
+      +'<div class="flabel">接受度</div><div class="chips">'+['😋','😐','🥴','－'].map(r=>'<span class="c'+(b.rating===r?' sel':'')+'" onclick="P.rat('+i+',\''+r+'\',this)">'+r+'</span>').join('')+'</div>'
+      +'<input class="note-input" placeholder="备注（可选）" value="'+esc(b.note)+'" oninput="FB['+i+'].note=this.value">'
+      +'</div>';
+  }).join('');
+  return '<h3>9月'+S.curDate+'日 · '+label+'<button class="x" onclick="P.close()">✕</button></h3>'
+    +'<div class="hint">计划中的食物已自动成块（状态感知：排敏中显示进度与建议量；未排敏/过敏会追问）</div>'
+    +(blocks||'<div class="empty" style="padding:20px;text-align:center">本餐还没有食物，点下面添加</div>')
+    +'<button class="btn ghost" style="width:100%;padding:11px;margin-top:4px" onclick="P.pickFood(-1)">＋ 新增食物</button>'
+    +'<div class="save-bar"><button class="btn pri" onclick="P.saveMeal()">保存本餐</button></div>';
+}
+P.ask=(i,mode,el)=>{el.parentElement.querySelectorAll('.opt').forEach(o=>o.classList.remove('sel'));el.classList.add('sel');
+  const b=FB[i];if(mode===0){b.tag='排敏中';b.line='排敏 · 第1天（保存后进入观察期）'}
+  if(mode===1){b.tag='正常';b.line='已耐受，直接记正常'}
+  if(mode===2){b.tag='排敏中';b.line='新一轮排敏 · 第1天'}
+  if(mode===3){b.tag='过敏';b.line='仅记录，排敏状态不变'}
+  toast('已选择（演示）')};
+P.amt=(i,a,el)=>{FB[i].amount=a;el.parentElement.querySelectorAll('.c').forEach(c=>c.classList.remove('sel'));el.classList.add('sel')};
+P.rat=(i,r,el)=>{FB[i].rating=FB[i].rating===r?'':r;el.parentElement.querySelectorAll('.c').forEach(c=>c.classList.remove('sel'));if(FB[i].rating)el.classList.add('sel')};
+P.delBlock=i=>{FB.splice(i,1);drawMF(window._mfl)};
+P.pickFood=i=>{P._replace=i;drawPicker()};
+function drawPicker(){
+  const cats=['全部'].concat(Object.keys(S.normal)).filter((v,idx,arr)=>arr.indexOf(v)===idx).concat(['蛋类','鱼虾贝类','豆及豆制品','坚果种子类']);
+  const all={...S.normal,...S.untouched};
+  let cur='全部';
+  window.pickCat=c=>{
+    cur=c;const list=c==='全部'?Object.entries(all):[[c,all[c]||[]]];
+    $('pk-grid').innerHTML=list.map(([g,fs])=>'<div style="font-size:11px;color:var(--sub);margin:8px 0 4px;font-weight:700">'+esc(g)+(g.indexOf('蛋')>-1||g.indexOf('鱼')>-1||g.indexOf('豆')>-1||g.indexOf('奶')>-1||g.indexOf('坚果')>-1?' ⚠️':'')+'</div>'+fs.map(f=>'<span class="chip'+(g.indexOf('蛋')>-1||g.indexOf('鱼')>-1||g.indexOf('豆')>-1||g.indexOf('奶')>-1||g.indexOf('坚果')>-1?' ha':'')+'" onclick="P.addFood(\''+esc(f)+'\')">'+esc(f)+'</span>').join('')).join('')||'<div class="empty">该品类下没有未记录食物</div>';
+    document.querySelectorAll('.cats button').forEach(b=>b.classList.toggle('on',b.textContent===c));
+  };
+  openSheet2('<h3>选择食物<button class="x" onclick="P.close2()">✕</button></h3>'
+    +'<input class="search" placeholder="搜索食物…" oninput="toast(\'演示稿：搜索已省略\')">'
+    +'<div class="cats">'+cats.map(c=>'<button onclick="pickCat(\''+c+'\')">'+c+'</button>').join('')+'</div>'
+    +'<div id="pk-grid"></div>'
+    +'<div class="custom-row"><input placeholder="自定义食物名称"><button class="btn pri" onclick="toast(\'演示：将新建到当前品类\')">添加</button></div>'
+    +'<div class="hint">⚠️ = 高致敏品类；演示池只放了部分食物</div>');
+  pickCat('全部');
+}
+P.addFood=f=>{
+  const isN=Object.values(S.normal).some(a=>a.includes(f));
+  const isA=S.allergic.some(a=>a.food===f);
+  const b={food:f,tag:isN?'正常':isA?'过敏':'未排敏',amount:isN?'半碗':'一勺尖',rating:'',note:'',line:isN?'':isA?'过敏':'未排敏'};
+  if(P._replace>=0){FB[P._replace]=b;P._replace=-1;drawMF(window._mfl);P.close2()}
+  else{FB.push(b);drawMF(window._mfl);P.close2()}
+  toast('已添加「'+f+'」');
+};
+P.saveMeal=()=>{
+  const k=P._meal,d=S.curDate,m=mealsOf(d);
+  m[k]=FB.map(b=>({food:b.food,tag:b.tag,amount:b.amount,rating:b.rating,note:b.note}));
+  FB.forEach(b=>{if(b.tag==='排敏中'||b.line.indexOf('排敏')>-1){const f=S.screening.find(x=>x.food===b.food);if(f&&!f.eaten.includes(d)){f.eaten.push(d)}}});
+  P.close();render();toast('已保存 9/'+d+' 本餐 '+m[k].length+' 条记录');
+};
+
+/* ================= 看板 ================= */
+let boardTab='ing';
+P.board=t=>{boardTab=t;renderBoard();document.querySelectorAll('.subtabs button').forEach(b=>b.classList.toggle('on',b.dataset.b===t))};
+function renderBoard(){
+  const el=$('pg-board');
+  const cnt={ing:S.screening.length,alg:S.allergic.length,nor:Object.values(S.normal).flat().length,unt:Object.values(S.untouched).flat().length+S.queue.length};
+  let body='';
+  if(boardTab==='ing'){
+    body=S.screening.map(f=>{const Xv=f.eaten.length;
+      const hint=(f.win[0]<=S.today&&f.win[1]>=S.today&&!f.eaten.includes(S.today))?' · <b style="color:var(--red)">今天还没吃</b>':'';
+      return '<div class="food-card'+(f.reactions.length?' alert':'')+'">'
+      +'<div class="fc-head"><span class="fc-name">'+esc(f.food)+'</span><span class="tag t-warn">'+esc(f.cat)+' ⚠️</span><span style="margin-left:auto" class="dots">'+'●'.repeat(Xv)+'○'.repeat(Math.max(0,f.N-Xv))+' 第'+Xv+'/'+f.N+'天</span></div>'
+      +'<div class="fc-line">首次 '+f.first+' · 进食日累计（补记/删除自动重算）'+hint+'</div>'
+      +(f.reactions.length?'<div class="fc-line" style="color:var(--red)">⚠️ '+f.reactions.join('、')+'</div>':'')
+      +'<div class="btn-row"><button class="btn pri" onclick="P.reaction(\''+esc(f.food)+'\')">记录反应</button><button class="btn green" onclick="P.markNormal(\''+esc(f.food)+'\')">✅标记正常</button><button class="btn red" onclick="P.markAllergic(\''+esc(f.food)+'\')">⚠️标记过敏</button><button class="btn ghost" onclick="P.tab(\'plan\')">查看排期</button></div></div>';}).join('')
+      ||'<div class="empty card" style="text-align:center;padding:30px">当前没有排敏中的食物<br><br><button class="btn pri" onclick="P.tab(\'plan\')">去规划页排队列</button></div>';
+  }
+  if(boardTab==='alg'){
+    body=S.allergic.map(a=>'<div class="food-card"><div class="fc-head"><span class="fc-name">'+esc(a.food)+'</span><span class="tag t-warn">'+esc(a.cat)+' ⚠️</span><span style="margin-left:auto;font-size:11px;color:var(--sub)">就诊档案</span></div>'
+      +'<div class="timeline">'+a.tl.map(t=>'<div class="tl"><b>'+t.d+'</b> '+esc(t.s)+'</div>').join('')+'</div>'
+      +'<div class="btn-row"><button class="btn pri" onclick="P.rechallenge(\''+esc(a.food)+'\')">重新尝试</button><button class="btn green" onclick="toast(\'演示：改判正常并保留档案\')">改判正常</button></div></div>').join('')
+      ||'<div class="empty card" style="text-align:center;padding:30px">没有过敏食物 🎉</div>';
+  }
+  if(boardTab==='nor'||boardTab==='unt'){
+    const src=boardTab==='nor'?S.normal:S.untouched;
+    body='<input class="search" placeholder="搜索…" oninput="toast(\'演示稿：搜索已省略\')">'
+      +'<div class="card chipwall">'+Object.entries(src).map(([g,fs])=>'<div class="grp"><div class="gt">'+esc(g)+((boardTab==='unt'&&['蛋类','鱼虾贝类','豆及豆制品','奶及奶制品','坚果种子类'].includes(g))?' ⚠️':'')+'</div>'
+        +fs.map(f=>'<span class="chip'+((boardTab==='unt'&&['蛋类','鱼虾贝类','豆及豆制品','奶及奶制品','坚果种子类'].includes(g))?' ha':'')+'" onclick="'+(boardTab==='nor'?'toast(\'首次尝试：演示数据\')':'P.enlist(\''+esc(f)+'\',\''+esc(g)+'\')')+'">'+esc(f)+'</span>').join('')+'</div>').join('')
+      +(boardTab==='unt'?'<div style="text-align:center;margin-top:8px"><button class="btn ghost" onclick="P.library()">管理辅食库（品类/食物增删改）</button></div>':'')+'</div>';
+  }
+  el.innerHTML='<div class="subtabs">'
+    +'<button data-b="ing" class="'+(boardTab==='ing'?'on':'')+'" onclick="P.board(\'ing\')">排敏中 '+cnt.ing+'</button>'
+    +'<button data-b="alg" class="'+(boardTab==='alg'?'on':'')+'" onclick="P.board(\'alg\')">过敏 '+cnt.alg+'</button>'
+    +'<button data-b="nor" class="'+(boardTab==='nor'?'on':'')+'" onclick="P.board(\'nor\')">正常 '+cnt.nor+'</button>'
+    +'<button data-b="unt" class="'+(boardTab==='unt'?'on':'')+'" onclick="P.board(\'unt\')">未排敏 '+cnt.unt+'</button></div>'+body;
+}
+P.enlist=(f,g)=>{
+  openSheet('<h3>'+esc(f)+'<button class="x" onclick="P.close()">✕</button></h3><div class="hint">未排敏食物点按后：加入排敏队列（与规划页队列同源）</div>'
+    +'<div class="save-bar"><button class="btn pri" onclick="P.doEnlist(\''+esc(f)+'\',\''+esc(g)+'\')">加入排敏队列</button></div>');
+};
+P.doEnlist=(f,g)=>{S.queue.push({food:f,days:3});S.untouched[g]=S.untouched[g].filter(x=>x!==f);P.close();render();toast('已加入队列：'+f)};
+P.reaction=f=>{
+  const sel=[];
+  openSheet('<h3>记录反应 · '+esc(f)+'<button class="x" onclick="P.close()">✕</button></h3>'
+    +'<div class="flabel">日期</div><div class="chips"><span class="c sel">今天 9/17</span><span class="c" onclick="toast(\'演示：可选本轮内日期\')">选其他日期</span></div>'
+    +'<div class="flabel">症状（多选，只记异常——无反应不打卡）</div><div class="chips" id="sym">'+SYMPTOMS.map(s=>'<span class="c" onclick="this.classList.toggle(\'sel\')">'+s+'</span>').join('')+'</div>'
+    +'<input class="note-input" placeholder="备注（如：进食后2小时出现）" style="margin-top:10px">'
+    +'<div class="save-bar"><button class="btn ghost" onclick="P.close()">取消</button><button class="btn red" onclick="P.saveReaction(\''+esc(f)+'\')">保存反应</button></div>');
+};
+P.saveReaction=f=>{
+  const sy=[...document.querySelectorAll('#sym .c.sel')].map(c=>c.textContent);
+  const fo=S.screening.find(x=>x.food===f);if(fo)fo.reactions.push(...sy);
+  P.close();render();toast('已记录反应'+(sy.length?'：'+sy.join('、'):''));
+};
+P.markNormal=f=>{
+  const fo=S.screening.find(x=>x.food===f);if(!fo)return;
+  S.screening=S.screening.filter(x=>x.food!==f);
+  (S.normal[fo.cat]=S.normal[fo.cat]||[]).push(f);
+  const b=S.blocks.find(x=>x.food===f);if(b)b.status='done';
+  render();toast(f+' 已标记正常 🎉');
+};
+P.markAllergic=f=>{
+  openSheet('<h3>标记过敏 · '+esc(f)+'<button class="x" onclick="P.close()">✕</button></h3>'
+    +'<div class="flabel">出现的症状（多选）</div><div class="chips" id="asy">'+SYMPTOMS.map(s=>'<span class="c" onclick="this.classList.toggle(\'sel\')">'+s+'</span>').join('')+'</div>'
+    +'<input class="note-input" placeholder="补充说明（处理方式、消退时间等）" style="margin-top:10px">'
+    +'<div class="flabel" style="margin-top:10px">后续排敏安排</div><div class="chips"><span class="c sel">顺延3天（生成暂停段，等症状消退）</span><span class="c" onclick="toast(\'按原计划继续\')">不顺延</span></div>'
+    +'<div class="save-bar"><button class="btn ghost" onclick="P.close()">取消</button><button class="btn red" onclick="P.doAllergic(\''+esc(f)+'\')">确认标记过敏</button></div>');
+};
+P.doAllergic=f=>{
+  const sy=[...document.querySelectorAll('#asy .c.sel')].map(c=>c.textContent);
+  const fo=S.screening.find(x=>x.food===f);if(fo){S.allergic.push({food:f,cat:fo.cat,tl:[{d:'9/16',s:'引入'},{d:'9/17',s:sy.join('、')+' → 标记过敏'}]});S.screening=S.screening.filter(x=>x.food!==f)}
+  const b=S.blocks.find(x=>x.food===f);if(b)b.status='done';
+  S.pauses.push({start:19,end:21,reason:'等过敏消退（自动生成）'});
+  repack();
+  P.close();render();toast('已标记过敏并生成暂停段，后续排期已顺延');
+};
+P.rechallenge=f=>{
+  const a=S.allergic.find(x=>x.food===f);
+  const start=maxEnd()+1;
+  S.screening.push({food:f,cat:a.cat,ha:true,N:3,first:'待记录',win:[start,start+2],eaten:[],reactions:[]});
+  S.blocks.push({food:f,start,days:3,color:'c-purple',status:'scheduled',pinned:false});
+  S.allergic=S.allergic.filter(x=>x.food!==f);
+  render();P.tab('plan');toast(f+' 重新尝试：已排入 9/'+start+' 起，新一轮排敏');
+};
+
+/* ================= 规划 ================= */
+function maxEnd(){let m=S.today;S.blocks.forEach(b=>{if(b.status!=='done')m=Math.max(m,b.start+b.days-1)});S.pauses.forEach(p=>m=Math.max(m,p.end));return m}
+function repack(){ // 未固定的 scheduled 区块首尾相接重排
+  const fixed=S.blocks.filter(b=>b.pinned||b.status==='active');
+  let m=S.today;fixed.forEach(b=>m=Math.max(m,b.start+b.days-1));S.pauses.forEach(p=>m=Math.max(m,p.end));
+  const rest=S.blocks.filter(b=>!b.pinned&&b.status==='scheduled');
+  rest.forEach(b=>{b.start=m+1;m+=b.days});
+  checkConflict();
+}
+function checkConflict(){
+  S.conflict=false;
+  const bs=S.blocks.filter(b=>b.status!=='done');
+  for(let i=0;i<bs.length;i++)for(let j=i+1;j<bs.length;j++){
+    const a=bs[i],c=bs[j];if(a.food===c.food)continue;
+    if(a.start<=c.start+c.days-1&&c.start<=a.start+a.days-1){S.conflict=true}
+  }
+}
+P.autoGen=()=>{
+  if(!S.queue.length){toast('队列为空');return}
+  let m=maxEnd();
+  const colors=['c-green','c-purple','c-blue'];
+  S.queue.forEach((q,i)=>{S.blocks.push({food:q.food,start:m+1,days:q.days,color:colors[i%3],status:'scheduled',pinned:false});m+=q.days});
+  S.queue=[];checkConflict();renderPlan();toast('已按队列自动生成排期（首尾相接，绕开暂停段）');
+};
+P.qUp=i=>{if(i<=0)return;const q=S.queue;[q[i-1],q[i]]=[q[i],q[i-1]];renderPlan()};
+P.qDel=i=>{S.queue.splice(i,1);renderPlan()};
+P.qDays=(i,d)=>{S.queue[i].days=d;renderPlan()};
+function renderPlan(){
+  const el=$('pg-plan');
+  const q=S.queue.map((q,i)=>'<div class="queue-item"><span class="q-idx">'+(i+1)+'</span><b>'+esc(q.food)+'</b><span class="tag t-warn">未排敏</span><span class="q-days">观察 '+q.days+' 天</span><span class="q-move"><button onclick="P.qUp('+i+')">↑</button><button onclick="P.qUp('+(i+1)+')">↓</button></span><span class="q-days" onclick="P.qDays('+i+','+(q.days>=14?q.days:q.days+1)+')" style="cursor:pointer">天数+</span><button class="q-x" onclick="P.qDel('+i+')">✕</button></div>').join('');
+  const conflict=S.conflict?'<div class="warnbar show">⚠️ 存在观察窗重叠冲突（允许保留）<button class="btn pri" style="float:right;padding:3px 9px;font-size:11px" onclick="P.repackAll()">一键重排未来项</button></div>':'';
+  const move=S.selBlock!==null?'<div class="movebar show">已选中「'+esc(S.blocks[S.selBlock].food)+'」· 点击其他日期移动 / <a href="javascript:P.cancelMove()" style="color:inherit;font-weight:700">取消</a></div>':'';
+  // 日历
+  let cells='';
+  for(let i=0;i<1;i++)cells+='<div class="cell blank"></div>'; // 9/1 是周二
+  for(let d=1;d<=30;d++){
+    let inner='<div class="d">'+d+'</div>',cls='';
+    if(d===S.today)cls=' today';else if(d<S.today)cls=' past';
+    const pz=S.pauses.find(p=>d>=p.start&&d<=p.end);
+    if(pz){cls+=' pause';inner+='<div class="pz">'+(d===pz.start?'歇·'+esc(pz.reason.slice(0,4)):'')+'</div>'}
+    S.blocks.forEach((b,bi)=>{
+      if(d>=b.start&&d<=b.start+b.days-1&&b.status!=='cancelled'){
+        const seg=d===b.start?'s':(d===b.start+b.days-1?'e':'m');
+        const lbl=d===b.start?(b.pinned?'📌':'')+b.food:(b.status==='active'?'第'+(b.X_guess||'')+'天':'·');
+        inner+='<div class="seg '+seg+' '+b.color+(S.selBlock===bi?' sug':'')+'" onclick="event.stopPropagation();P.tblock('+bi+')">'+lbl+'</div>';
+      }});
+    S.normals.forEach(n=>{if(d>=n.start&&d<=n.start+n.days-1&&d===n.start)inner+='<div class="nml">'+esc(n.food)+(n.days>1?' ×'+n.days+'天':'')+'</div>'});
+    cells+='<div class="cell'+cls+'" onclick="P.tday('+d+')">'+inner+'</div>';
+  }
+  // active 区块的第X天文案
+  S.blocks.forEach(b=>{if(b.status==='active'){const f=S.screening.find(x=>x.food===b.food);b.X_guess=f?posP(f,S.today):''}});
+  el.innerHTML='<div class="card"><div class="h2">排敏队列 <span class="mini">拖动排序（演示用↑↓）· 只放新食物</span></div>'
+    +q+'<div style="display:flex;gap:8px;margin-top:6px"><button class="btn ghost" style="flex:1" onclick="toast(\'演示：从食物池选未排敏食物入队\')">＋ 从食物池添加</button><button class="btn pri" style="flex:1" onclick="P.autoGen()">⚡ 自动生成排期</button></div>'
+    +'<div class="hint" style="margin:10px 0 0">队列是源头、日历是投影：未手动拖过的区块按队列顺序自动首尾相接，绕开暂停段与进行中的窗口</div></div>'
+    +conflict+move
+    +'<div class="card"><div class="cal-head"><span class="m">2026年9月</span><span class="nav"><button class="dn-btn">‹</button><button class="dn-btn">›</button></span></div>'
+    +'<div class="cal">'+['一','二','三','四','五','六','日'].map(w=>'<div class="wd">'+w+'</div>').join('')+cells+'</div>'
+    +'<div class="legend"><span><i style="background:var(--blue)"></i>进行中·蛋黄</span><span><i style="background:var(--green)"></i>已排期</span><span><i style="background:repeating-linear-gradient(45deg,#E7E1D8,#E7E1D8 3px,#F1EDE7 3px,#F1EDE7 6px)"></i>暂停段</span><span><i style="background:var(--line)"></i>常规计划</span><span>📌=手动固定</span></div>'
+    +'<div class="hint">交互演示：点未来色块选中→点目标日期移动（移动后📌固定）；点空白未来日期可加常规计划/划暂停段；进行中(16-18)与过去锁定</div></div>';
+}
+P.repackAll=()=>{repack();renderPlan();toast('已按队列顺序重排未来项')};
+P.cancelMove=()=>{S.selBlock=null;renderPlan()};
+P.tblock=bi=>{
+  const b=S.blocks[bi];
+  if(b.status!=='scheduled'){toast('进行中/已完成区块锁定，不可拖动');return}
+  S.selBlock=S.selBlock===bi?null:bi;renderPlan();
+};
+P.tday=d=>{
+  if(S.selBlock!==null){
+    const b=S.blocks[S.selBlock];
+    if(d<=S.today){toast('不能移动到今天及之前');return}
+    b.start=d;b.pinned=true;S.selBlock=null;checkConflict();renderPlan();
+    toast('已移动并固定 📌'+(S.conflict?'（⚠️ 出现重叠冲突）':''));return;
+  }
+  if(d<=S.today){toast('过去/今天：请在「今日」页记录');return}
+  openSheet('<h3>9月'+d+'日<button class="x" onclick="P.close()">✕</button></h3>'
+    +'<div class="save-bar" style="flex-direction:column">'
+    +'<button class="btn ghost" onclick="P.addNormal('+d+')">🥣 添加常规计划（只能选「正常」食物）</button>'
+    +'<button class="btn ghost" onclick="P.addPause('+d+')">⏸ 划暂停段（出行/疫苗/生病…）</button>'
+    +'<button class="btn ghost" onclick="P.close()">取消</button></div>');
+};
+P.addNormal=d=>{
+  const flat=Object.values(S.normal).flat();
+  openSheet2('<h3>常规计划 · 9月'+d+'日<button class="x" onclick="P.close2()">✕</button></h3>'
+    +'<div class="hint">只展示「正常」状态的食物；未排敏的请去排敏队列</div>'
+    +flat.map(f=>'<span class="chip" onclick="P.doNormal(\''+esc(f)+'\','+d+')">'+esc(f)+'</span>').join('')
+    +'<div class="flabel" style="margin-top:10px">连续天数</div><div class="chips"><span class="c sel">1天</span><span class="c" onclick="toast(\'演示：可选多天\')">2天</span><span class="c" onclick="toast(\'演示：可选多天\')">3天</span></div>');
+};
+P.doNormal=(f,d)=>{S.normals.push({food:f,start:d,days:1});P.close();P.close2();renderPlan();toast('已添加常规计划：'+f)};
+P.addPause=d=>{S.pauses.push({start:d,end:d,reason:'（手动）'});P.close();renderPlan();toast('已划暂停段，排期将自动绕开')};
+
+/* ================= 统计 ================= */
+function renderStats(){
+  const n=Object.values(S.normal).flat().length,s=S.screening.length,a=S.allergic.length,u=Object.values(S.untouched).flat().length+S.queue.length;
+  const rows=[['谷薯类',4,8],['蔬菜类',4,16],['水果类',3,18],['蛋类',1,3],['鱼虾贝类',0,20],['畜禽肉类',1,6],['肝类',1,2],['豆及豆制品',0,2],['奶及奶制品',0,3],['坚果种子',0,4],['油脂类',0,6]]
+    .map(r=>'<div class="bar-row"><span class="n">'+r[0]+(r[0].match(/蛋|鱼|豆|奶|坚果/)?' ⚠️':'')+'</span><div class="bar"><i style="width:'+Math.round(r[1]/r[2]*100)+'%"></i></div><span class="c">'+r[1]+'/'+r[2]+'</span></div>').join('');
+  $('pg-stats').innerHTML='<div class="stat-grid">'
+    +'<div class="stat"><div class="v">'+(n+s+a)+'</div><div class="k">已尝试</div></div>'
+    +'<div class="stat"><div class="v" style="color:var(--blue)">'+s+'</div><div class="k">排敏中</div></div>'
+    +'<div class="stat"><div class="v" style="color:var(--red)">'+a+'</div><div class="k">过敏</div></div>'
+    +'<div class="stat"><div class="v" style="color:var(--sub)">'+u+'</div><div class="k">未排敏</div></div></div>'
+    +'<div class="card"><div class="h2">品类覆盖 <span class="mini">已尝试 / 该类总数 · ⚠️高致敏</span></div>'+rows+'</div>'
+    +'<div class="card"><div class="h2">口味偏好 <span class="mini">来自接受度记录</span></div><div style="font-size:13px;line-height:2">😋 最爱：南瓜（5次）、婴儿米粉（4次）、香蕉（3次）<br>🥴 拒绝：冬瓜（1次）</div></div>'
+    +'<div class="card"><div class="h2">本月新增</div><div style="font-size:13px;line-height:2">9/16 蛋黄 · 9/10 猪肝 · 9/05 蓝莓</div></div>'
+    +'<div class="card" style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px">过敏 '+a+' 种（基围虾）</span><button class="btn red" onclick="P.board(\'alg\');P.tab(\'board\')">查看档案</button></div>'
+    +'<div class="hint">设计红线：不做与「标准/别家宝宝」的对比，只呈现自家事实</div>';
+}
+
+/* ================= 辅食库 / 设置 / 说明 ================= */
+P.library=()=>{
+  const all={...S.normal,...S.untouched};all['蛋类']=(all['蛋类']||[]).concat(['蛋黄']);
+  openSheet('<h3>辅食库管理<button class="x" onclick="P.close()">✕</button></h3>'
+    +'<div class="hint">食物只有「名称+品类」两个字段；排敏标签由系统维护、只在库外展示。品类可增删改（非空需先清空）。</div>'
+    +Object.entries(all).map(([g,fs])=>'<div class="grp" style="margin-bottom:12px"><div class="gt" style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;margin-bottom:6px"><span>🌾 '+esc(g)+' <span style="color:var(--sub);font-weight:400;font-size:11px">'+fs.length+' 种</span></span><span style="font-size:11px;color:var(--sub)">改名 · 图标 · 排序 · 删</span></div>'
+      +fs.map(f=>'<span class="chip" onclick="toast(\'演示：删除食物（历史记录保留为快照）\')">'+esc(f)+' <span style="color:#C9C1B9">✕</span></span>').join('')+'</div>').join('')
+    +'<div class="save-bar"><button class="btn ghost" onclick="toast(\'演示：新增品类（名称+emoji+排序）\')">＋ 新增品类</button><button class="btn pri" onclick="toast(\'演示：在当前品类下新增食物\')">＋ 新增食物</button></div>');
+};
+P.settings=()=>{
+  openSheet('<h3>设置<button class="x" onclick="P.close()">✕</button></h3>'
+    +'<div class="flabel">界面模式（按设备记忆，不影响其他设备）</div><div class="chips"><span class="c'+(document.body.classList.contains('elder')?'':' sel')+'" onclick="P.setMode(0,this)">标准</span><span class="c'+(document.body.classList.contains('elder')?' sel':'')+'" onclick="P.setMode(1,this)">老年（大字大按钮）</span></div>'
+    +'<div class="flabel">宝宝昵称</div><input class="note-input" value="团团">'
+    +'<div class="flabel">出生日期（顶栏显示月龄）</div><input class="note-input" type="date" value="2026-01-20">'
+    +'<div class="flabel">全局观察天数默认（食物级可覆盖 1–14）</div><div class="chips">'+[1,2,3,4,5,6,7].map(d=>'<span class="c'+(d===3?' sel':'')+'">'+d+'天</span>').join('')+'</div>'
+    +'<div class="flabel" style="margin-top:12px">数据（服务端 SQLite，全设备共享）</div>'
+    +'<div class="btn-row"><button class="btn ghost" onclick="toast(\'演示：导出 JSON 备份\')">导出</button><button class="btn ghost" onclick="toast(\'演示：导入并覆盖\')">导入</button><button class="btn red" onclick="toast(\'演示：两次确认后清空\')">清空</button></div>'
+    +'<div style="margin-top:12px"><button class="btn ghost" onclick="P.library()" style="width:100%">辅食库管理 ›</button></div>');
+};
+P.help=()=>{
+  openSheet('<h3>交互说明<button class="x" onclick="P.close()">✕</button></h3><div class="hint" style="line-height:2">'
+    +'<b>双模式</b>：右上「A+ 大字」在 标准/老年模式 间切换（老年=大字大图标，按设备记忆）<br>'
+    +'<b>今日页</b>：点午餐「＋」看一餐一表单（计划预填、建议量、状态追问）；保存后横幅/看板联动<br>'
+    +'<b>排敏看板</b>：四个 Tab 可切换；排敏中卡片可记录反应/标记结果；未排敏 Tab 点气泡可入队；「管理辅食库」在未排敏 Tab<br>'
+    +'<b>规划页</b>：队列 ↑↓ 排序 →「⚡自动生成排期」；点未来色块选中→点目标日期移动（📌固定，重叠出⚠️）；点空白未来日期加常规计划/暂停段<br>'
+    +'<b>统计/设置</b>：口径展示；⚙️ 设置含宝宝信息与数据管理</div>');
+};
+
+/* ================= 模式切换（标准/老年，按设备记忆） ================= */
+P.mode=()=>{
+  const on=document.body.classList.toggle('elder');
+  try{localStorage.setItem('bft-elder',on?'1':'0')}catch(e){}
+  const b=$('mode-btn');if(b)b.textContent=on?'A- 标准':'A+ 大字';
+  toast(on?'已切换：老年模式（大字大按钮）':'已切换：标准模式');
+};
+P.setMode=(v,el)=>{
+  const cur=document.body.classList.contains('elder');
+  if(cur!==!!v)P.mode();
+  if(el){el.parentElement.querySelectorAll('.c').forEach(c=>c.classList.remove('sel'));el.classList.add('sel')}
+};
+function applyMode(){
+  let on=false;try{on=localStorage.getItem('bft-elder')==='1'}catch(e){}
+  if(on)document.body.classList.add('elder');
+  const b=$('mode-btn');if(b)b.textContent=on?'A- 标准':'A+ 大字';
+}
+
+/* ================= 启动 ================= */
+applyMode();P.tab('today');render();
+</script>
+</body>
+</html>

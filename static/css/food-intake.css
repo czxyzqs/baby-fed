@@ -1,0 +1,181 @@
+.food-intake {
+    --modal-color: var(--accent-feed);
+    max-width: 680px;
+}
+
+.food-intake [hidden] {
+    display: none !important;
+}
+
+.food-intake fieldset {
+    border: 0;
+    min-width: 0;
+}
+
+.food-intake label {
+    display: block;
+    font-size: 18px;
+    margin-bottom: 12px;
+}
+
+.food-intake .form-input {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    margin-top: 6px;
+    font-size: 18px;
+}
+
+.food-intake button:not(.modal-close),
+.food-intake-history button {
+    min-height: 48px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 18px;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.food-intake .modal-close {
+    min-width: 48px;
+    min-height: 48px;
+}
+
+.food-intake button[aria-pressed="true"],
+.food-intake button.food-intake-primary {
+    background: var(--accent-feed);
+    color: #10251b;
+    border-color: var(--accent-feed);
+    font-weight: 600;
+}
+
+.food-intake button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.food-intake button:focus-visible,
+.food-intake input:focus-visible,
+.food-intake select:focus-visible,
+.food-intake-history button:focus-visible {
+    outline: 2px solid var(--accent-feed);
+    outline-offset: 3px;
+}
+
+.food-intake-hint,
+.food-intake-history p {
+    font-size: 18px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    overflow-wrap: anywhere;
+}
+
+.food-intake a {
+    color: var(--accent-feed);
+}
+
+.food-intake-message {
+    padding: 12px;
+    margin-bottom: 16px;
+    border: 1px solid var(--accent-feed);
+    border-radius: 12px;
+    font-size: 18px;
+}
+
+.food-intake-message[data-error="true"] {
+    border-color: var(--accent-health);
+}
+
+.food-intake-date-meal {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+}
+
+.food-intake-block,
+#food-intake-picker,
+.food-intake-meal-card {
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg-card);
+}
+
+.food-intake-block-header,
+.food-intake-options,
+.food-intake-footer,
+.food-intake-history-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.food-intake-block-header,
+.food-intake-history-header {
+    justify-content: space-between;
+}
+
+.food-intake-options button {
+    flex: 1 0 auto;
+}
+
+.food-intake-block h3,
+#food-intake-picker h3 {
+    font-size: 20px;
+    margin-bottom: 12px;
+}
+
+#food-intake-picker {
+    margin-top: 16px;
+}
+
+.food-intake-footer {
+    margin-top: 20px;
+}
+
+.food-intake-footer button {
+    flex: 1;
+}
+
+.food-intake-history {
+    margin-bottom: 32px;
+}
+
+.food-intake-history input {
+    min-height: 48px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    font-size: 18px;
+}
+
+.food-intake-meal-card h3 {
+    font-size: 20px;
+    margin-bottom: 8px;
+}
+
+@media (max-width: 480px) {
+    #food-intake-modal {
+        padding: 10px;
+        align-items: flex-end;
+    }
+
+    .food-intake .modal-body,
+    .food-intake .modal-header {
+        padding: 16px;
+    }
+
+    .food-intake-date-meal {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

@@ -1,0 +1,40 @@
+<div class="modal-overlay" id="food-intake-modal" data-close-on-backdrop="false">
+    <div class="modal food-intake" role="dialog" aria-modal="true" aria-labelledby="food-intake-title">
+        <div class="modal-header">
+            <h2 id="food-intake-title">添加辅食记录</h2>
+            <button type="button" class="modal-close" id="food-intake-close" aria-label="关闭辅食记录">×</button>
+        </div>
+        <form id="food-intake-form" class="modal-body">
+            <p class="food-intake-hint">一餐一次保存，可添加多种食物。点击空白处不会关闭，未保存的修改会在离开前提醒。</p>
+            <p id="food-intake-message" class="food-intake-message" role="status" aria-live="polite" hidden></p>
+            <fieldset id="food-intake-fields">
+                <div class="food-intake-date-meal">
+                    <label>日期<input type="date" id="food-intake-date" class="form-input" required></label>
+                    <label>餐次<select id="food-intake-meal" class="form-input" required>
+                        <option value="">请选择餐次</option>
+                        <option value="breakfast">早餐</option>
+                        <option value="lunch">午餐</option>
+                        <option value="snack">下午茶</option>
+                        <option value="dinner">晚餐</option>
+                    </select></label>
+                </div>
+                <p id="food-intake-empty" class="food-intake-hint"></p>
+                <div id="food-intake-blocks"></div>
+                <button type="button" id="food-intake-add">＋ 新增食物</button>
+                <section id="food-intake-picker" aria-labelledby="food-intake-picker-title" hidden>
+                    <h3 id="food-intake-picker-title">选择食物</h3>
+                    <label>搜索食物或品类<input type="search" id="food-intake-search" class="form-input" placeholder="输入食物或品类名称"></label>
+                    <label>按品类筛选<select id="food-intake-category" class="form-input"></select></label>
+                    <div id="food-intake-picker-list"></div>
+                    <button type="button" id="food-intake-picker-cancel">收起选择器</button>
+                </section>
+                <div class="food-intake-footer">
+                    <button type="submit" id="food-intake-save" class="food-intake-primary">保存本餐</button>
+                    <button type="button" id="food-intake-cancel">取消</button>
+                </div>
+                <button type="button" id="food-intake-reload">重新载入本餐</button>
+                <p class="food-intake-hint">找不到食物？<a href="{{ url_for('food_library_page') }}" id="food-intake-library">管理辅食库</a></p>
+            </fieldset>
+        </form>
+    </div>
+</div>

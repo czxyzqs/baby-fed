@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>宝宝喂养记录 - PAD</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pad.css') }}">
+</head>
+<body>
+    <div class="bg-animation">
+        <div class="bg-gradient"></div>
+        <div class="floating-orbs">
+            <div class="orb"></div>
+            <div class="orb"></div>
+            <div class="orb"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        
+        <div class="quick-actions">
+            <button class="action-btn diaper" onclick="openModal('diaper')">
+                <div class="icon-wrapper">
+                    <span class="icon">🧷</span>
+                </div>
+                <span>尿不湿</span>
+            </button>
+            <button class="action-btn feed" onclick="openModal('feed')">
+                <div class="icon-wrapper">
+                    <span class="icon">🍼</span>
+                </div>
+                <span>喂奶</span>
+            </button>
+            <button class="action-btn vitamin" onclick="openModal('vitamin')">
+                <div class="icon-wrapper">
+                    <span class="icon">💊</span>
+                </div>
+                <span>维生素</span>
+            </button>
+            <button class="action-btn probiotic" onclick="openModal('probiotic')">
+                <div class="icon-wrapper">
+                    <span class="icon">🫙</span>
+                </div>
+                <span>益生菌</span>
+            </button>
+            <button class="action-btn bath" onclick="openModal('bath')">
+                <div class="icon-wrapper">
+                    <span class="icon">🛁</span>
+                </div>
+                <span>洗澡</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast">
+        <span class="toast-icon">✅</span>
+        <span class="toast-text">记录已保存</span>
+    </div>
+
+    <div class="build-badge">BUILD 2026-05-27 23:03 +0800</div>
+
+    <!-- Diaper Modal -->
+    <div class="modal-overlay" id="diaper-modal">
+        <div class="modal diaper">
+            <div class="modal-header">
+                <h2>🧷 尿不湿</h2>
+                <button class="modal-close" onclick="closeModal('diaper')">&times;</button>
+            </div>
+            <form id="diaper-form" onsubmit="event.preventDefault(); submitForm('diaper');">
+                <div class="form-group">
+                    <label>类型</label>
+                    <div class="form-options" id="diaper-type-options">
+                        <div class="form-option selected" data-value="wet" onclick="selectOption(this, 'diaper-type')">
+                            <div class="icon">💧</div>
+                            <div class="label">尿</div>
+                        </div>
+                        <div class="form-option" data-value="dirty" onclick="selectOption(this, 'diaper-type')">
+                            <div class="icon">🟤</div>
+                            <div class="label">粑粑</div>
+                        </div>
+                        <div class="form-option" data-value="both" onclick="selectOption(this, 'diaper-type')">
+                            <div class="icon">💫</div>
+                            <div class="label">两者</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>备注（可选）</label>
+                    <input type="text" class="form-input" name="note" placeholder="添加备注...">
+                </div>
+                <button type="submit" class="btn-submit">保存记录</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Feed Modal -->
+    <div class="modal-overlay" id="feed-modal">
+        <div class="modal feed">
+            <div class="modal-header">
+                <h2>🍼 喂奶</h2>
+                <button class="modal-close" onclick="closeModal('feed')">&times;</button>
+            </div>
+            <form id="feed-form" onsubmit="event.preventDefault(); submitForm('feed');">
+                <div class="form-group">
+                    <label>奶量 (ml)</label>
+                    <div class="amount-control">
+                        <button type="button" class="amount-btn" onclick="adjustAmount(-10)">−</button>
+                        <input type="number" class="form-input amount-input" name="amount" id="feed-amount-input" value="80" min="0" step="10">
+                        <button type="button" class="amount-btn" onclick="adjustAmount(10)">+</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="feed-is-new-milk">
+                        <span>新泡奶</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>备注（可选）</label>
+                    <input type="text" class="form-input" name="note" placeholder="添加备注...">
+                </div>
+                <button type="submit" class="btn-submit">保存记录</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Vitamin Modal -->
+    <div class="modal-overlay" id="vitamin-modal">
+        <div class="modal vitamin">
+            <div class="modal-header">
+                <h2>💊 维生素</h2>
+                <button class="modal-close" onclick="closeModal('vitamin')">&times;</button>
+            </div>
+            <form id="vitamin-form" onsubmit="event.preventDefault(); submitForm('vitamin');">
+                <div class="form-group">
+                    <label>类型</label>
+                    <div class="form-options" id="vitamin-type-options">
+                        <div class="form-option selected" data-value="D3" onclick="selectOption(this, 'vitamin-type')">
+                            <div class="icon">☀️</div>
+                            <div class="label">D3</div>
+                        </div>
+                        <div class="form-option" data-value="AD" onclick="selectOption(this, 'vitamin-type')">
+                            <div class="icon">🌟</div>
+                            <div class="label">AD</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>备注（可选）</label>
+                    <input type="text" class="form-input" name="note" placeholder="添加备注...">
+                </div>
+                <button type="submit" class="btn-submit">保存记录</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Probiotic Modal -->
+    <div class="modal-overlay" id="probiotic-modal">
+        <div class="modal probiotic">
+            <div class="modal-header">
+                <h2>🫙 益生菌</h2>
+                <button class="modal-close" onclick="closeModal('probiotic')">&times;</button>
+            </div>
+            <form id="probiotic-form" onsubmit="event.preventDefault(); submitForm('probiotic');">
+                <div class="form-group">
+                    <label>类型</label>
+                    <div class="form-options" id="probiotic-type-options">
+                        <div class="form-option selected" data-value="probiotic" onclick="selectOption(this, 'probiotic-type')">
+                            <div class="icon">🫙</div>
+                            <div class="label">益生菌</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>备注（可选）</label>
+                    <input type="text" class="form-input" name="note" placeholder="添加备注...">
+                </div>
+                <button type="submit" class="btn-submit">保存记录</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bath Modal -->
+    <div class="modal-overlay" id="bath-modal">
+        <div class="modal bath">
+            <div class="modal-header">
+                <h2>🛁 洗澡</h2>
+                <button class="modal-close" onclick="closeModal('bath')">&times;</button>
+            </div>
+            <form id="bath-form" onsubmit="event.preventDefault(); submitForm('bath');">
+                <div class="form-group">
+                    <label>类型</label>
+                    <div class="form-options" id="bath-type-options">
+                        <div class="form-option selected" data-value="bath" onclick="selectOption(this, 'bath-type')">
+                            <div class="icon">🛁</div>
+                            <div class="label">洗澡</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>备注（可选）</label>
+                    <input type="text" class="form-input" name="note" placeholder="添加备注...">
+                </div>
+                <button type="submit" class="btn-submit">保存记录</button>
+            </form>
+        </div>
+    </div>
+
+    <script defer src="{{ url_for('static', filename='js/pad.js') }}"></script>
+</body>
+</html>

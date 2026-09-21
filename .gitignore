@@ -1,0 +1,14 @@
+# 敏感信息与证书
+.env
+*.pem
+
+# 运行数据（含宝宝喂养真实记录，隐私）
+data/
+
+# Python
+__pycache__/
+*.pyc
+
+# 工具产物
+.gitnexus/
+.superpowers/

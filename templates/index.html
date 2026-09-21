@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>宝宝喂养记录 V2</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-intake.css') }}">
+
+</head>
+<body>
+    <div class="bg-animation">
+        <div class="bg-gradient"></div>
+        <div class="floating-orbs">
+            <div class="orb"></div>
+            <div class="orb"></div>
+            <div class="orb"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <header class="header">
+            <div style="display:flex;align-items:center;justify-content:center;gap:8px">
+                <h1>🌸 豚豚喂养记录</h1>
+                <button onclick="location.reload()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:8px 12px;color:var(--text-secondary);cursor:pointer;font-size:36px;">🔄</button>
+            </div>
+            <div class="subtitle" id="today-date"></div>
+            <div class="header-actions">
+                <button class="stats-btn" onclick="openStatsModal()" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;">📊 喂养分析</button>
+                <button class="stats-btn" onclick="openSleepAnalysisModal()" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;">🛏️ 睡眠分析</button>
+                <button type="button" class="stats-btn health-management-btn" onclick="openModal('health-management')">⚙️ 更多设置</button>
+                <button class="stats-btn" id="fever-analysis-btn" onclick="openFeverAnalysisModal()" style="background:linear-gradient(135deg,#ef4444,#f97316);color:white;border:none;{% if not has_recent_health_records %}display:none;{% endif %}">🤒 发烧分析</button>
+            </div>
+        </header>
+
+        <section class="fever-panel" id="fever-panel" aria-labelledby="fever-panel-title" {% if not fever_mode.enabled %}hidden{% endif %}>
+            <div class="fever-panel-header">
+                <div>
+                    <h2 id="fever-panel-title">🌡️ 发烧模式</h2>
+                    <p>体温和用药，随手记录</p>
+                </div>
+                <button type="button" class="fever-text-btn" data-fever-mode-control onclick="setFeverMode(false)">结束模式</button>
+            </div>
+            <div class="fever-summary">
+                <div class="fever-summary-card">
+                    <span>最近体温</span>
+                    <strong id="fever-latest-temperature">暂无记录</strong>
+                    <small id="fever-temperature-time">近 72 小时未记录</small>
+                </div>
+                <div class="fever-summary-card">
+                    <span>上次用药</span>
+                    <strong id="fever-latest-medicine">暂无记录</strong>
+                    <small id="fever-medicine-dose"></small>
+                    <small id="fever-medicine-time">近 72 小时未记录</small>
+                </div>
+            </div>
+            <div class="fever-quick-actions">
+                <button type="button" onclick="openQuickHealthRecord('temperature')">🌡️ 记录体温</button>
+                <button type="button" onclick="openQuickHealthRecord('medicine')">💊 记录用药</button>
+            </div>
+            <div class="fever-records-header">
+                <span>近 72 小时 · 最近 4 条</span>
+                <button type="button" class="fever-text-btn" id="fever-view-all" onclick="openFeverAnalysisModal()" hidden>查看全部</button>
+            </div>
+            <ol class="fever-recent-records" id="fever-recent-records"></ol>
+            <p class="fever-empty" id="fever-empty">还没有近期记录，点击上方按钮开始记录。</p>
+            <p class="fever-panel-hint">点按记录可修改；结束模式不会删除历史记录。</p>
+        </section>
+
+        <!-- Supplement Reminder -->
+        {% if show_supplement_reminder %}
+        <div class="vitamin-reminder show" id="supplement-reminder" onclick="openModal('supplement')">
+            <div class="vitamin-reminder-icon">💊</div>
+            <div class="vitamin-reminder-text">
+                <div class="vitamin-reminder-title">今日待吃：{{ '、'.join(supplement_reminder_items) }}</div>
+            </div>
+            <div class="vitamin-reminder-arrow">›</div>
+        </div>
+        {% endif %}
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+            <div class="stats-row" style="flex-direction: column; gap: 12px;">
+                <div class="stat-card time" onclick="openSleepModalFromStatusCard()" style="display: flex; align-items: center; gap: 16px; cursor:pointer;" title="添加睡眠状态">
+                    <div id="sleep-position-badge" class="sleep-position-badge"></div>
+                    <div class="stat-icon" id="awake-icon" style="font-size: 36px; margin-bottom: 0;">👀</div>
+                    <div id="time-since-awake"><span class="time-num">--</span></div>
+                </div>
+                <div class="stat-card time" onclick="openModal('feed')" style="display: flex; align-items: center; gap: 16px; cursor:pointer;" title="添加喂奶记录">
+                    <div class="stat-icon" style="font-size: 36px; margin-bottom: 0;">🍼</div>
+                    <div id="time-since-feed"><span class="time-num">--</span></div>
+                </div>
+                <div class="stat-card time" onclick="openModal('diaper')" style="display: flex; align-items: center; gap: 16px; cursor:pointer;" title="添加尿不湿记录">
+                    <div class="stat-icon" style="font-size: 36px; margin-bottom: 0;">🚽</div>
+                    <div id="time-since-diaper"><span class="time-num">--</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <section class="quick-actions">
+            <div class="section-title">快速添加</div>
+            <div class="action-buttons">
+                <button class="action-btn feed" onclick="openModal('feed')">
+                    <span>喂奶</span>
+                </button>
+                <button class="action-btn diaper" onclick="openModal('diaper')">
+                    <span>尿布</span>
+                </button>
+                <button class="action-btn sleep" onclick="openModal('sleep')">
+                    <span>睡眠</span>
+                </button>
+                <button type="button" class="action-btn food" onclick="foodIntake.open()" title="添加辅食记录">
+                    <span>辅食</span>
+                </button>
+                <button class="action-btn tummy" onclick="openModal('tummy')">
+                    <span>练趴</span>
+                </button>
+                <button class="action-btn supplement" onclick="openModal('supplement')">
+                    <span>补剂</span>
+                </button>
+                <button class="action-btn bath" onclick="openModal('bath')">
+                    <span>洗澡</span>
+                </button>
+                <button class="action-btn health" onclick="openModal('health')" title="记录体温或服药">
+                    <span>发烧</span>
+                </button>
+            </div>
+        </section>
+
+        <section class="food-intake-history" aria-labelledby="food-intake-history-title">
+            <div class="food-intake-history-header">
+                <h2 class="section-title" id="food-intake-history-title">辅食记录</h2>
+                <label>查看日期 <input type="date" id="food-intake-history-date" aria-label="辅食记录日期"></label>
+            </div>
+            <p id="food-intake-history-message" role="status"></p>
+            <div id="food-intake-history-list"></div>
+        </section>
+
+        <!-- Records List -->
+        <section class="records-section">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <div class="section-title" style="margin-bottom:0">最近记录</div>
+                <a href="/records" style="color:var(--accent-primary);font-size:13px;text-decoration:none;">查看全部 →</a>
+            </div>
+            <div class="record-filter-bar">
+                <button class="record-filter-btn active" data-filter="feed" onclick="setRecordFilter('feed')">🍼 喂奶</button>
+                <button class="record-filter-btn" data-filter="diaper" onclick="setRecordFilter('diaper')">🚽 尿布</button>
+                <button class="record-filter-btn" data-filter="supplement" onclick="setRecordFilter('supplement')">💊 补剂</button>
+                <button class="record-filter-btn" data-filter="bath" onclick="setRecordFilter('bath')">🛁 洗澡</button>
+                <button class="record-filter-btn" data-filter="health" onclick="setRecordFilter('health')">🌡️ 健康</button>
+                <button class="record-filter-btn" data-filter="sleep" onclick="setRecordFilter('sleep')">🛏️ 睡眠</button>
+                <button class="record-filter-btn" data-filter="tummy" onclick="setRecordFilter('tummy')">🧸 练趴</button>
+            </div>
+            <div class="records-list" id="records-list">
+                <div class="loading-skeleton">
+                    <div class="skeleton-row">
+                        <div class="skeleton skeleton-icon"></div>
+                        <div class="skeleton-content">
+                            <div class="skeleton skeleton-line"></div>
+                            <div class="skeleton skeleton-line"></div>
+                        </div>
+                    </div>
+                    <div class="skeleton-row">
+                        <div class="skeleton skeleton-icon"></div>
+                        <div class="skeleton-content">
+                            <div class="skeleton skeleton-line"></div>
+                            <div class="skeleton skeleton-line"></div>
+                        </div>
+                    </div>
+                    <div class="skeleton-row">
+                        <div class="skeleton skeleton-icon"></div>
+                        <div class="skeleton-content">
+                            <div class="skeleton skeleton-line"></div>
+                            <div class="skeleton skeleton-line"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    {% include 'food-intake.html' %}
+
+    <!-- Toast -->
+    <div class="toast" id="toast">
+        <span class="toast-icon">✅</span>
+        <span class="toast-text">记录已保存</span>
+    </div>
+
+    <div class="build-badge">BUILD 2026-05-27 23:03 +0800</div>
+
+    <div class="modal-overlay" id="health-management-modal">
+        <div class="modal health" role="dialog" aria-modal="true" aria-labelledby="health-management-title">
+            <div class="modal-header">
+                <h2 id="health-management-title">⚙️ 更多设置</h2>
+                <button type="button" class="modal-close" onclick="closeModal('health-management')" aria-label="关闭更多设置">&times;</button>
+            </div>
+            <div class="modal-body health-management-menu">
+                <button type="button" class="health-management-item" id="fever-mode-toggle" data-fever-mode-control role="switch" aria-checked="{{ 'true' if fever_mode.enabled else 'false' }}" onclick="setFeverMode(!feverModeEnabled)">
+                    <span class="health-management-icon" aria-hidden="true">🌡️</span>
+                    <span class="health-management-copy"><strong>发烧模式</strong><span>开启后在首页快速查看和记录体温、用药</span></span>
+                    <span class="fever-mode-state" id="fever-mode-state">{{ '已开启' if fever_mode.enabled else '已关闭' }}</span>
+                </button>
+                <button type="button" class="health-management-item" onclick="closeModal('health-management');openSupplementSettings()">
+                    <span class="health-management-icon" aria-hidden="true">💊</span>
+                    <span class="health-management-copy"><strong>补剂设置</strong><span>管理补剂、服用频率和提醒</span></span>
+                    <span aria-hidden="true">›</span>
+                </button>
+                <button type="button" class="health-management-item" onclick="closeModal('health-management');openMedicineSettings()">
+                    <span class="health-management-icon" aria-hidden="true">⚙️</span>
+                    <span class="health-management-copy"><strong>药品配置</strong><span>管理发烧记录中的可选药品</span></span>
+                    <span aria-hidden="true">›</span>
+                </button>
+                <a class="health-management-item" href="{{ url_for('food_library_page') }}" onclick="closeModal('health-management')">
+                    <span class="health-management-icon" aria-hidden="true">🥣</span>
+                    <span class="health-management-copy"><strong>辅食设置（辅食库）</strong><span>查看食物池，管理食物和品类</span></span>
+                    <span aria-hidden="true">›</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diaper Modal -->
+    <div class="modal-overlay" id="diaper-modal">
+        <div class="modal diaper">
+            <div class="modal-header">
+                <h2>添加尿布记录</h2>
+                <button class="modal-close" onclick="closeModal('diaper')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="diaper-form" onsubmit="event.preventDefault(); submitForm(event, 'diaper');">
+                    <div class="form-group">
+                        <label>类型</label>
+                        <div class="form-options" id="diaper-type-options">
+                            <div class="form-option selected" data-value="wet" onclick="selectOption(this, 'diaper-type')">
+                                <div class="icon">💧</div>
+                                <div class="label">尿</div>
+                            </div>
+                            <div class="form-option" data-value="dirty" onclick="selectOption(this, 'diaper-type')">
+                                <div class="icon">💩</div>
+                                <div class="label">粑粑</div>
+                            </div>
+                            <div class="form-option" data-value="both" onclick="selectOption(this, 'diaper-type')">
+                                <div class="icon">💫</div>
+                                <div class="label">两者</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <input type="text" class="form-input" name="note" placeholder="添加备注...">
+                    </div>
+                    <button type="submit" class="btn-submit">保存记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feed Modal -->
+    <div class="modal-overlay" id="feed-modal">
+        <div class="modal feed">
+            <div class="modal-header">
+                <h2>添加喂奶记录</h2>
+                <button class="modal-close" onclick="closeModal('feed')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="feed-form" onsubmit="event.preventDefault(); submitForm(event, 'feed');">
+                    <div class="form-group">
+                        <label>奶量 (ml)</label>
+                        <div class="amount-control">
+                            <button type="button" class="amount-btn" onclick="adjustAmount(-10)">−</button>
+                            <input type="number" class="form-input amount-input" name="amount" id="feed-amount-input" value="120" min="0" step="10">
+                            <button type="button" class="amount-btn" onclick="adjustAmount(10)">+</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="feed-is-new-milk">
+                            <span style="font-size: 36px;">新泡奶</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <input type="text" class="form-input" name="note" placeholder="添加备注...">
+                    </div>
+                    <button type="submit" class="btn-submit">保存记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vitamin Modal -->
+    <div class="modal-overlay" id="supplement-modal">
+        <div class="modal supplement">
+            <div class="modal-header">
+                <h2>添加补剂记录</h2>
+                <button class="modal-close" onclick="closeModal('supplement')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="supplement-form" onsubmit="event.preventDefault(); submitForm(event, 'supplement');">
+                    <div class="form-group">
+                        <label>类型</label>
+                        <div class="form-options" id="supplement-type-options" style="grid-template-columns: repeat(2, 1fr);">
+                            {% for supplement in supplement_options %}
+                            <div class="form-option {% if loop.first %}selected{% endif %}" data-value="{{ supplement.id }}" data-legacy-type="{{ supplement.legacyRecordType }}" onclick="selectSupplementOption(this)">
+                                <div class="label" style="font-size: 32px;">{{ supplement.name }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <input type="text" class="form-input" name="note" placeholder="添加备注...">
+                    </div>
+                    <button type="submit" class="btn-submit">保存记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tummy Time Modal -->
+    <div class="modal-overlay" id="tummy-modal">
+        <div class="modal tummy">
+            <div class="modal-header">
+                <h2>添加练趴记录</h2>
+                <button class="modal-close" onclick="closeModal('tummy')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="tummy-form" onsubmit="event.preventDefault(); submitForm(event, 'tummy');">
+                    <div class="form-group">
+                        <label>时长 (分钟)</label>
+                        <div class="amount-control">
+                            <button type="button" class="amount-btn" onclick="adjustTummyDuration(-1)">−</button>
+                            <input type="number" class="form-input amount-input" name="duration" id="tummy-duration-input" value="1" min="1" step="1">
+                            <button type="button" class="amount-btn" onclick="adjustTummyDuration(1)">+</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <input type="text" class="form-input" name="note" placeholder="添加备注...">
+                    </div>
+                    <button type="submit" class="btn-submit">保存记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supplement Status Modal -->
+    <div class="modal-overlay" id="supplement-status-modal">
+        <div class="modal vitamin supplement-status-modal">
+            <div class="modal-header">
+                <h2>今日补剂</h2>
+                <button class="modal-close" onclick="closeModal('supplement-status')">&times;</button>
+            </div>
+            <div class="modal-body" id="supplement-status-body">
+            </div>
+        </div>
+    </div>
+
+    <!-- Bath Modal -->
+    <div class="modal-overlay" id="bath-modal">
+        <div class="modal bath">
+            <div class="modal-header">
+                <h2>添加洗澡记录</h2>
+                <button class="modal-close" onclick="closeModal('bath')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="bath-form" onsubmit="event.preventDefault(); submitForm(event, 'bath');">
+                    <div class="form-group">
+                        <label>类型</label>
+                        <div class="form-options" id="bath-type-options">
+                            <div class="form-option selected" data-value="bath" onclick="selectOption(this, 'bath-type')">
+                                <div class="icon">🛁</div>
+                                <div class="label">洗澡</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <input type="text" class="form-input" name="note" placeholder="添加备注...">
+                    </div>
+                    <button type="submit" class="btn-submit">保存记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Health Modal -->
+    <div class="modal-overlay" id="health-modal">
+        <div class="modal health">
+            <div class="modal-header">
+                <h2>🌡️ 发烧记录</h2>
+                <button class="modal-close" onclick="closeModal('health')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="health-form" onsubmit="event.preventDefault(); submitForm(event, 'health');">
+                    <div class="form-group">
+                        <label>记录类型</label>
+                        <div class="form-options" id="health-type-options">
+                            <div class="form-option selected" data-value="temperature" onclick="selectOption(this, 'health-type');toggleHealthFields('health', 'temperature')">
+                                <div class="icon">🌡️</div><div class="label">体温</div>
+                            </div>
+                            <div class="form-option" data-value="medicine" onclick="selectOption(this, 'health-type');toggleHealthFields('health', 'medicine')">
+                                <div class="icon">💊</div><div class="label">服药</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group" id="health-temperature-group">
+                        <label>体温（°C）</label>
+                        <input type="number" class="form-input" name="temperature" min="30" max="45" step="0.1" inputmode="decimal" placeholder="例如 38.5">
+                    </div>
+                    <div id="health-medicine-group" style="display:none;">
+                        <div class="form-group"><label>药品</label><select class="form-input" name="medicineName" id="health-medicine-name"><option value="">请先选择药品</option></select></div>
+                        <div class="form-group"><label>剂量（可选）</label><input type="text" class="form-input" name="medicineDose" placeholder="例如 2.5ml"></div>
+                    </div>
+                    <div class="form-group"><label>备注（可选）</label><input type="text" class="form-input" name="note" placeholder="添加备注..."></div>
+                    <button type="submit" class="btn-submit">保存记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sleep Modal -->
+    <div class="modal-overlay" id="sleep-modal">
+        <div class="modal sleep">
+            <div class="modal-header">
+                <h2>添加睡眠记录</h2>
+                <button class="modal-close" onclick="closeModal('sleep')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="sleep-form" onsubmit="event.preventDefault(); submitForm(event, 'sleep');">
+                    <div class="form-group">
+                        <label>状态</label>
+                        <div class="form-options" id="sleep-type-options">
+                            <div class="form-option selected" data-value="awake" onclick="selectOption(this, 'sleep-type');toggleSleepPositionFields('sleep', 'awake')">
+                                <div class="icon">👀</div>
+                                <div class="label">宝宝醒了</div>
+                            </div>
+                            <div class="form-option" data-value="sleep" onclick="selectOption(this, 'sleep-type');toggleSleepPositionFields('sleep', 'sleep')">
+                                <div class="icon">🛏️</div>
+                                <div class="label">宝宝睡了</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group" id="sleep-position-group" style="display:none;">
+                        <label>睡姿</label>
+                        <div class="form-options" id="sleep-position-options">
+                            <div class="form-option" data-value="left" onclick="selectOption(this, 'sleep-position')">
+                                <div class="icon">↩️</div>
+                                <div class="label">左侧睡</div>
+                            </div>
+                            <div class="form-option" data-value="right" onclick="selectOption(this, 'sleep-position')">
+                                <div class="icon">↪️</div>
+                                <div class="label">右侧睡</div>
+                            </div>
+                            <div class="form-option" data-value="back" onclick="selectOption(this, 'sleep-position')">
+                                <div class="icon">⬆️</div>
+                                <div class="label">平躺</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <input type="text" class="form-input" name="note" placeholder="添加备注...">
+                    </div>
+                    <button type="submit" class="btn-submit">保存记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Feed Modal -->
+    <div class="modal-overlay" id="edit-feed-modal">
+        <div class="modal feed">
+            <div class="modal-header">
+                <h2>修改喂奶记录</h2>
+                <button class="modal-close" onclick="closeModal('edit-feed')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-feed-form" onsubmit="event.preventDefault(); submitEditForm('feed');">
+                    <input type="hidden" id="edit-feed-id">
+                    <input type="hidden" id="edit-feed-original-time">
+                    <div class="form-group">
+                        <label>奶量 (ml)</label>
+                        <div class="amount-control">
+                            <button type="button" class="amount-btn" onclick="adjustEditAmount(-10)">−</button>
+                            <input type="number" class="form-input amount-input" name="amount" id="edit-feed-amount-input" value="70" min="0" step="10">
+                            <button type="button" class="amount-btn" onclick="adjustEditAmount(10)">+</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>时间</label>
+                        <input type="datetime-local" class="form-input" id="edit-feed-time">
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="edit-feed-is-new-milk">
+                            <span style="font-size: 36px;">新泡奶</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <input type="text" class="form-input" name="note" id="edit-feed-note" placeholder="添加备注...">
+                    </div>
+                    <button type="submit" class="btn-submit">保存修改</button>
+                    <button type="button" class="btn-delete" onclick="deleteRecord('feed')">删除记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Diaper Modal -->
+    <div class="modal-overlay" id="edit-diaper-modal">
+        <div class="modal diaper">
+            <div class="modal-header">
+                <h2>修改尿布记录</h2>
+                <button class="modal-close" onclick="closeModal('edit-diaper')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-diaper-form" onsubmit="event.preventDefault(); submitEditForm('diaper');">
+                    <input type="hidden" id="edit-diaper-id">
+                    <input type="hidden" id="edit-diaper-original-time">
+                    <div class="form-group">
+                        <label>类型</label>
+                        <div class="form-options" id="edit-diaper-type-options">
+                            <div class="form-option" data-value="wet" onclick="selectOption(this, 'edit-diaper-type')">
+                                <div class="icon">💧</div>
+                                <div class="label">尿</div>
+                            </div>
+                            <div class="form-option" data-value="dirty" onclick="selectOption(this, 'edit-diaper-type')">
+                                <div class="icon">🟤</div>
+                                <div class="label">粑粑</div>
+                            </div>
+                            <div class="form-option" data-value="both" onclick="selectOption(this, 'edit-diaper-type')">
+                                <div class="icon">💫</div>
+                                <div class="label">两者</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>时间</label>
+                        <input type="datetime-local" class="form-input" id="edit-diaper-time">
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <input type="text" class="form-input" name="note" id="edit-diaper-note" placeholder="添加备注...">
+                    </div>
+                    <button type="submit" class="btn-submit">保存修改</button>
+                    <button type="button" class="btn-delete" onclick="deleteRecord('diaper')">删除记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Sleep Modal -->
+    <div class="modal-overlay" id="edit-sleep-modal">
+        <div class="modal sleep">
+            <div class="modal-header">
+                <h2>修改睡眠记录</h2>
+                <button class="modal-close" onclick="closeModal('edit-sleep')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-sleep-form" onsubmit="event.preventDefault(); submitEditForm('sleep');">
+                    <input type="hidden" id="edit-sleep-id">
+                    <input type="hidden" id="edit-sleep-original-time">
+                    <div class="form-group">
+                        <label>状态</label>
+                        <div class="form-options" id="edit-sleep-type-options">
+                            <div class="form-option" data-value="awake" onclick="selectOption(this, 'edit-sleep-type');toggleSleepPositionFields('edit-sleep', 'awake')">
+                                <div class="icon">👀</div>
+                                <div class="label">宝宝醒了</div>
+                            </div>
+                            <div class="form-option" data-value="sleep" onclick="selectOption(this, 'edit-sleep-type');toggleSleepPositionFields('edit-sleep', 'sleep')">
+                                <div class="icon">🛏️</div>
+                                <div class="label">宝宝睡了</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group" id="edit-sleep-position-group" style="display:none;">
+                        <label>睡姿</label>
+                        <div class="form-options" id="edit-sleep-position-options">
+                            <div class="form-option" data-value="left" onclick="selectOption(this, 'edit-sleep-position')">
+                                <div class="icon">↩️</div>
+                                <div class="label">左侧睡</div>
+                            </div>
+                            <div class="form-option" data-value="right" onclick="selectOption(this, 'edit-sleep-position')">
+                                <div class="icon">↪️</div>
+                                <div class="label">右侧睡</div>
+                            </div>
+                            <div class="form-option" data-value="back" onclick="selectOption(this, 'edit-sleep-position')">
+                                <div class="icon">⬆️</div>
+                                <div class="label">平躺</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>时间</label>
+                        <input type="datetime-local" class="form-input" id="edit-sleep-time">
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <input type="text" class="form-input" name="note" id="edit-sleep-note" placeholder="添加备注...">
+                    </div>
+                    <button type="submit" class="btn-submit">保存修改</button>
+                    <button type="button" class="btn-delete" onclick="deleteRecord('sleep')">删除记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Supplement Modal -->
+    <div class="modal-overlay" id="edit-supplement-modal">
+        <div class="modal supplement">
+            <div class="modal-header">
+                <h2>修改补剂记录</h2>
+                <button class="modal-close" onclick="closeModal('edit-supplement')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-supplement-form" onsubmit="event.preventDefault(); submitEditForm('supplement');">
+                    <input type="hidden" id="edit-supplement-id">
+                    <input type="hidden" id="edit-supplement-original-time">
+                    <div class="form-group">
+                        <label>类型</label>
+                        <div class="form-options" id="edit-supplement-type-options" style="grid-template-columns: repeat(2, 1fr);">
+                            {% for supplement in supplement_options %}
+                            <div class="form-option" data-value="{{ supplement.id }}" data-legacy-type="{{ supplement.legacyRecordType }}" onclick="selectOption(this, 'edit-supplement-type')">
+                                <div class="label" style="font-size: 32px;">{{ supplement.name }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>时间</label>
+                        <input type="datetime-local" class="form-input" id="edit-supplement-time">
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <input type="text" class="form-input" name="note" id="edit-supplement-note" placeholder="添加备注...">
+                    </div>
+                    <button type="submit" class="btn-submit">保存修改</button>
+                    <button type="button" class="btn-delete" onclick="deleteRecord('supplement')">删除记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Tummy Time Modal -->
+    <div class="modal-overlay" id="edit-tummy-modal">
+        <div class="modal tummy">
+            <div class="modal-header">
+                <h2>修改练趴记录</h2>
+                <button class="modal-close" onclick="closeModal('edit-tummy')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-tummy-form" onsubmit="event.preventDefault(); submitEditForm('tummy');">
+                    <input type="hidden" id="edit-tummy-id">
+                    <input type="hidden" id="edit-tummy-original-time">
+                    <div class="form-group">
+                        <label>时长 (分钟)</label>
+                        <div class="amount-control">
+                            <button type="button" class="amount-btn" onclick="adjustEditTummyDuration(-1)">−</button>
+                            <input type="number" class="form-input amount-input" name="duration" id="edit-tummy-duration-input" value="1" min="1" step="1">
+                            <button type="button" class="amount-btn" onclick="adjustEditTummyDuration(1)">+</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>时间</label>
+                        <input type="datetime-local" class="form-input" id="edit-tummy-time">
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <input type="text" class="form-input" name="note" id="edit-tummy-note" placeholder="添加备注...">
+                    </div>
+                    <button type="submit" class="btn-submit">保存修改</button>
+                    <button type="button" class="btn-delete" onclick="deleteRecord('tummy')">删除记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Health Modal -->
+    <div class="modal-overlay" id="edit-health-modal">
+        <div class="modal health">
+            <div class="modal-header"><h2>修改发烧记录</h2><button class="modal-close" onclick="closeModal('edit-health')">&times;</button></div>
+            <div class="modal-body">
+                <form id="edit-health-form" onsubmit="event.preventDefault(); submitEditForm('health');">
+                    <input type="hidden" id="edit-health-id"><input type="hidden" id="edit-health-original-time">
+                    <div class="form-group"><label>记录类型</label><div class="form-options" id="edit-health-type-options">
+                        <div class="form-option" data-value="temperature" onclick="selectOption(this, 'edit-health-type');toggleHealthFields('edit-health', 'temperature')"><div class="icon">🌡️</div><div class="label">体温</div></div>
+                        <div class="form-option" data-value="medicine" onclick="selectOption(this, 'edit-health-type');toggleHealthFields('edit-health', 'medicine')"><div class="icon">💊</div><div class="label">服药</div></div>
+                    </div></div>
+                    <div class="form-group" id="edit-health-temperature-group"><label>体温（°C）</label><input type="number" class="form-input" id="edit-health-temperature" min="30" max="45" step="0.1" inputmode="decimal"></div>
+                    <div id="edit-health-medicine-group" style="display:none;"><div class="form-group"><label>药品</label><select class="form-input" id="edit-health-medicine-name"><option value="">请先选择药品</option></select></div><div class="form-group"><label>剂量（可选）</label><input type="text" class="form-input" id="edit-health-medicine-dose"></div></div>
+                    <div class="form-group"><label>时间</label><input type="datetime-local" class="form-input" id="edit-health-time"></div>
+                    <div class="form-group"><label>备注（可选）</label><input type="text" class="form-input" id="edit-health-note" placeholder="添加备注..."></div>
+                    <button type="submit" class="btn-submit">保存修改</button><button type="button" class="btn-delete" onclick="deleteRecord('health')">删除记录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Modal -->
+    <div class="modal-overlay" id="stats-modal">
+        <div class="modal stats">
+            <div class="modal-header">
+                <h2>📊 喂养分析</h2>
+                <button class="modal-close" onclick="closeModal('stats')">&times;</button>
+            </div>
+            <div class="modal-body" id="stats-body">
+                <div style="text-align:center;padding:20px">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="feeding-trend-modal">
+        <div class="modal stats">
+            <div class="modal-header">
+                <h2>🍼 奶量趋势</h2>
+                <button class="modal-close" onclick="closeModal('feeding-trend')">&times;</button>
+            </div>
+            <div class="modal-body" id="feeding-trend-body">
+                <div style="text-align:center;padding:20px">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sleep Analysis Modal -->
+    <div class="modal-overlay" id="sleep-analysis-modal">
+        <div class="modal sleep">
+            <div class="modal-header">
+                <h2>🛏️ 睡眠分析</h2>
+                <button class="modal-close" onclick="closeModal('sleep-analysis')">&times;</button>
+            </div>
+            <div class="modal-body" id="sleep-analysis-body">
+                <div id="sleep-date-picker">
+                    <div class="date-picker-trigger" onclick="toggleSleepDatePicker()" style="display:flex;align-items:center;gap:8px;padding:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;cursor:pointer;">
+                        <span style="font-size:18px;">📅</span>
+                        <span id="sleep-current-date-text" style="flex:1;color:var(--text-primary);font-size:14px;font-weight:500;">加载中...</span>
+                        <span class="date-picker-arrow" style="color:var(--text-muted);transition:transform 0.2s;">▼</span>
+                    </div>
+                    <div id="sleep-date-calendar" class="sleep-calendar" style="display:none;margin-top:8px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <button onclick="sleepCalPrevMonth()" style="background:none;border:none;color:var(--text-primary);font-size:18px;cursor:pointer;padding:4px;">◀</button>
+                            <span id="sleep-cal-title" style="font-weight:600;color:var(--text-primary);">2026年5月</span>
+                            <button onclick="sleepCalNextMonth()" style="background:none;border:none;color:var(--text-primary);font-size:18px;cursor:pointer;padding:4px;">▶</button>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+                            <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+                        </div>
+                        <div id="sleep-cal-days" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;"></div>
+                        <button onclick="goToSleepToday()" style="width:100%;margin-top:12px;padding:8px;background:var(--accent-sleep,#7c3aed);color:white;border:none;border-radius:6px;font-size:13px;cursor:pointer;">今天</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fever Analysis Modal -->
+    <div class="modal-overlay" id="fever-analysis-modal">
+        <div class="modal health">
+            <div class="modal-header">
+                <h2>🤒 发烧分析</h2>
+                <button class="modal-close" onclick="closeModal('fever-analysis')">&times;</button>
+            </div>
+            <div class="modal-body" id="fever-analysis-body"><div style="text-align:center;padding:30px">加载中...</div></div>
+        </div>
+    </div>
+
+    <script>
+        // 服务器端传递的初始化数据
+        window.INIT_RECORDS = {{ init_records | safe }};
+        window.INIT_DIAPER_COUNT = {{ diaper_count }};
+        window.INIT_FEED_COUNT = {{ feed_count }};
+        window.INIT_TUMMY_MINUTES = {{ tummy_minutes }};
+        window.INIT_SUPPLEMENT_TAKEN = {{ supplement_taken }};
+        window.INIT_SUPPLEMENT_NEEDED = {{ supplement_needed }};
+        window.INIT_DUE_SUPPLEMENTS = {{ init_due_supplements | safe }};
+        window.INIT_RECOMMENDED_SLEEP_POSITION = {{ init_recommended_sleep_position | tojson }};
+        window.INIT_FEVER_MODE = {{ fever_mode | tojson }};
+    </script>
+
+    <script defer src="{{ url_for('static', filename='js/index.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
+<!-- 药品配置弹窗 -->
+<div id="medicine-settings-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1002;justify-content:center;align-items:center;">
+  <div style="background:white;border-radius:16px;width:90%;max-width:420px;padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h3 style="margin:0;color:#222;">药品配置</h3><button onclick="closeMedicineSettings()" style="background:none;border:none;font-size:24px;cursor:pointer;">&times;</button></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;"><input id="medicine-name-input" type="text" placeholder="例如：布洛芬" style="flex:1;padding:12px;border:1px solid #d0d7de;border-radius:10px;font-size:15px;"><button type="button" onclick="addMedicine()" style="padding:0 16px;border:none;border-radius:10px;background:#ef4444;color:white;cursor:pointer;">添加</button></div>
+    <div id="medicine-list" style="max-height:280px;overflow-y:auto;"></div>
+    <div style="display:flex;gap:12px;margin-top:20px;"><button onclick="saveMedicineSettings()" style="flex:1;padding:12px;background:#ef4444;color:white;border:none;border-radius:8px;font-size:15px;cursor:pointer;">保存</button><button onclick="closeMedicineSettings()" style="flex:1;padding:12px;background:#f5f5f5;color:#333;border:none;border-radius:8px;font-size:15px;cursor:pointer;">取消</button></div>
+  </div>
+</div>
+<!-- 补剂设置弹窗 -->
+<div id="supplement-settings-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;">
+  <div style="background:white;border-radius:16px;width:90%;max-width:480px;max-height:80vh;overflow-y:auto;padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h3 style="margin:0;color:#222;">补剂设置</h3>
+      <button onclick="closeSupplementSettings()" style="background:none;border:none;font-size:24px;cursor:pointer;">&times;</button>
+    </div>
+    <p style="margin:0 0 16px;color:#666;font-size:13px;line-height:1.6;">暂时不吃可关闭开关，配置和历史记录会保留；重新开启后沿用原计划。交替组可分别暂停成员，不改变轮换日期。修改后点击“保存”生效。</p>
+    <div id="supplement-list"></div>
+    <button onclick="addSupplement()" style="width:100%;padding:14px;border:2px dashed #999;border-radius:12px;background:white;color:#000;font-size:15px;font-weight:500;cursor:pointer;margin-top:12px;">+ 添加补剂</button>
+    <div style="margin-top:20px;display:flex;gap:12px;">
+      <button id="supplement-settings-save" onclick="saveSupplementSettings()" style="flex:1;padding:12px;background:#4A90D9;color:white;border:none;border-radius:8px;font-size:15px;font-weight:500;cursor:pointer;">保存</button>
+      <button onclick="closeSupplementSettings()" style="flex:1;padding:12px;background:#f5f5f5;color:#333;border:none;border-radius:8px;font-size:15px;font-weight:500;cursor:pointer;">取消</button>
+    </div>
+  </div>
+</div>
+
+<div id="supplement-editor-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1001;justify-content:center;align-items:center;">
+  <div style="background:white;border-radius:16px;width:90%;max-width:460px;max-height:80vh;overflow-y:auto;padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h3 id="supplement-editor-title" style="margin:0;">添加补剂</h3>
+      <button onclick="closeSupplementEditor()" style="background:none;border:none;font-size:24px;cursor:pointer;">&times;</button>
+    </div>
+    <form id="supplement-editor-form" onsubmit="submitSupplementEditor(event)">
+      <div id="supplement-name-field" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+        <label style="font-size:14px;font-weight:600;color:#333;">补剂名称</label>
+        <input id="supplement-name-input" type="text" style="padding:12px 14px;border:1px solid #d0d7de;border-radius:10px;font-size:15px;">
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+        <label style="font-size:14px;font-weight:600;color:#333;">频率</label>
+        <select id="supplement-frequency-type" onchange="updateSupplementFrequencyFields()" style="padding:12px 14px;border:1px solid #d0d7de;border-radius:10px;font-size:15px;background:white;">
+          <option value="everyNDays">每 X 天一次</option>
+          <option value="weeklyTimes">每周 X 次</option>
+          <option value="alternating">多种补剂交替食用</option>
+        </select>
+      </div>
+
+      <div id="supplement-frequency-every-n-days" style="display:none;margin-bottom:16px;">
+        <label style="font-size:14px;font-weight:600;color:#333;display:block;margin-bottom:8px;">每隔几天</label>
+        <input id="supplement-interval-days" type="number" min="1" step="1" value="1" style="width:100%;padding:12px 14px;border:1px solid #d0d7de;border-radius:10px;font-size:15px;">
+      </div>
+
+      <div id="supplement-frequency-weekly-times" style="display:none;margin-bottom:16px;">
+        <label style="font-size:14px;font-weight:600;color:#333;display:block;margin-bottom:8px;">选择周几</label>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#333;"><input class="supplement-weekday-cb" type="checkbox" value="0">周一</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#333;"><input class="supplement-weekday-cb" type="checkbox" value="1">周二</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#333;"><input class="supplement-weekday-cb" type="checkbox" value="2">周三</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#333;"><input class="supplement-weekday-cb" type="checkbox" value="3">周四</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#333;"><input class="supplement-weekday-cb" type="checkbox" value="4">周五</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#333;"><input class="supplement-weekday-cb" type="checkbox" value="5">周六</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#333;"><input class="supplement-weekday-cb" type="checkbox" value="6">周日</label>
+        </div>
+      </div>
+
+      <div id="supplement-frequency-alternating" style="display:none;">
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <label style="font-size:14px;font-weight:600;color:#333;">补剂名称</label>
+            <button type="button" onclick="addAlternatingSupplementRow()" style="width:32px;height:32px;border:none;border-radius:999px;background:#4A90D9;color:white;font-size:20px;line-height:1;cursor:pointer;">+</button>
+          </div>
+          <div id="supplement-alternating-list"></div>
+        </div>
+      </div>
+
+      <div style="padding:14px;margin-bottom:16px;background:#f6f8fa;border-radius:12px;">
+        <label style="font-size:14px;font-weight:600;color:#333;display:block;margin-bottom:8px;">每日服用</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <input id="supplement-daily-count" type="number" min="1" max="4" step="1" value="1" onchange="updateSupplementIntakePlanFields()" style="width:76px;padding:10px 12px;border:1px solid #d0d7de;border-radius:8px;font-size:15px;">
+          <span style="font-size:14px;color:#333;">次（最多 4 次）</span>
+        </div>
+        <label style="font-size:14px;font-weight:600;color:#333;display:block;margin-bottom:8px;">提醒方式</label>
+        <select id="supplement-reminder-mode" onchange="updateSupplementIntakePlanFields()" style="width:100%;padding:10px 12px;border:1px solid #d0d7de;border-radius:8px;font-size:15px;background:white;">
+          <option value="checklist">首页待办</option>
+          <option value="timed">按时提醒</option>
+          <option value="none">不提醒</option>
+        </select>
+        <div id="supplement-timed-fields" style="display:none;margin-top:12px;">
+          <div style="font-size:13px;color:#666;margin-bottom:8px;">每次服用的名称和提醒时间</div>
+          <div id="supplement-timed-slots"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+        <label style="font-size:14px;font-weight:600;color:#333;">开始日期</label>
+        <input id="supplement-start-date" type="date" style="padding:12px 14px;border:1px solid #d0d7de;border-radius:10px;font-size:15px;">
+      </div>
+
+      <div style="display:flex;gap:12px;">
+        <button id="supplement-editor-submit" type="submit" style="flex:1;padding:12px;background:#4A90D9;color:white;border:none;border-radius:8px;font-size:15px;font-weight:500;cursor:pointer;">添加补剂</button>
+        <button type="button" onclick="closeSupplementEditor()" style="flex:1;padding:12px;background:#f5f5f5;color:#333;border:none;border-radius:8px;font-size:15px;font-weight:500;cursor:pointer;">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+</body>
+</html>

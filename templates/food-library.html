@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>辅食库 · 豚豚喂养记录</title>
+    <script>
+        try {
+            if (localStorage.getItem('theme') === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        } catch (error) {}
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-library.css') }}">
+    <script defer src="{{ url_for('static', filename='js/food-library.js') }}"></script>
+</head>
+<body>
+    <main class="food-library food-library-page" id="food-library-page" aria-labelledby="food-library-title">
+        <header class="food-library-page-header">
+            <a class="food-library-back" href="{{ url_for('index') }}">← 返回首页</a>
+            <h1 id="food-library-title">🥣 辅食库</h1>
+            <p class="food-library-hint">按品类管理宝宝的食物池</p>
+        </header>
+        <p class="food-library-hint">食物池只管理名称和所属品类，不代表宝宝已经吃过或已耐受。</p>
+        <noscript><p class="food-library-message">请启用浏览器 JavaScript 后使用食物池。</p></noscript>
+        <p id="food-library-message" class="food-library-message" role="status" aria-live="polite" hidden></p>
+        <div id="food-library-pool">
+            <div class="food-library-toolbar">
+                <label for="food-library-search">搜索食物或品类</label>
+                <input id="food-library-search" class="form-input" type="search" placeholder="输入食物或品类名称" autocomplete="off">
+                <label for="food-library-filter">按品类查看</label>
+                <select id="food-library-filter" class="form-input"><option value="">全部品类</option></select>
+                <div class="food-library-actions">
+                    <button type="button" class="food-library-primary" id="food-library-add-food">＋ 新增食物</button>
+                    <button type="button" id="food-library-add-category">＋ 新增品类</button>
+                    <button type="button" id="food-library-refresh">刷新</button>
+                </div>
+            </div>
+            <p id="food-library-count" class="food-library-hint"></p>
+            <div id="food-library-list"></div>
+        </div>
+        <form id="food-library-editor" hidden>
+            <h2 id="food-library-editor-title"></h2>
+            <div class="form-group">
+                <label for="food-library-name">名称</label>
+                <input id="food-library-name" class="form-input" required autocomplete="off">
+            </div>
+            <div id="food-library-food-fields" class="form-group">
+                <label for="food-library-category">所属品类</label>
+                <select id="food-library-category" class="form-input"></select>
+            </div>
+            <div id="food-library-category-fields" hidden>
+                <div class="form-group">
+                    <label for="food-library-emoji">品类图标（可输入 emoji）</label>
+                    <input id="food-library-emoji" class="form-input" maxlength="16" placeholder="例如：🥦">
+                </div>
+                <label class="food-library-checkbox"><input type="checkbox" id="food-library-allergen"> 标记为高致敏品类</label>
+            </div>
+            <div class="food-library-actions">
+                <button type="submit" class="food-library-primary" id="food-library-save">保存</button>
+                <button type="button" id="food-library-cancel">返回食物池</button>
+            </div>
+        </form>
+    </main>
+</body>
+</html>
