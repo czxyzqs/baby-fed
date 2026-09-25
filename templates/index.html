@@ -65,9 +65,8 @@
         <!-- Supplement Reminder -->
         {% if show_supplement_reminder %}
         <div class="vitamin-reminder show" id="supplement-reminder" onclick="openModal('supplement')">
-            <div class="vitamin-reminder-icon">💊</div>
             <div class="vitamin-reminder-text">
-                <div class="vitamin-reminder-title">今日待吃：{{ '、'.join(supplement_reminder_items) }}</div>
+                <div class="vitamin-reminder-title">{{ '、'.join(supplement_reminder_items) }}还没吃</div>
             </div>
             <div class="vitamin-reminder-arrow">›</div>
         </div>
