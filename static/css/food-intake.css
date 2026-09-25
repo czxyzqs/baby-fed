@@ -271,3 +271,11 @@ body.elder #food-intake-history-message { font-size: 18px; }
 }
 .banner-dialog-primary { background: var(--accent, #4da3ff); color: #fff; }
 .banner-dialog-danger { background: rgba(230, 104, 76, 0.16); color: #ff9a80; margin-top: 4px; }
+
+.banner-search {
+    display: block; width: 100%; min-height: 48px; font-size: 16px;
+    border: 1px solid var(--border, #3a4453); border-radius: 12px;
+    background: var(--card-bg, rgba(255, 255, 255, 0.06)); color: inherit;
+    padding: 10px 14px; margin-bottom: 4px;
+}
+.banner-picker-list { max-height: 52vh; overflow-y: auto; }

@@ -97,6 +97,89 @@
         document.body.style.overflow = '';
     }
 
+    // ---------- 快速添加：先选食物，再进同一个记录界面 ----------
+
+    const STATUS_LABELS = { untouched: '未排敏', screening: '排敏中', normal: '正常', allergic: '过敏' };
+
+    async function openQuickAdd() {
+        let context;
+        try {
+            context = await api(`entries?date=${today()}`);
+        } catch (error) {
+            toast(`加载食物失败：${error.message}`);
+            return;
+        }
+        closeDialog();
+        overlay = node('div', '', 'banner-dialog-overlay');
+        overlay.addEventListener('click', event => {
+            if (event.target === overlay) closeDialog();
+        });
+        const dialog = node('div', '', 'banner-dialog');
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        const head = node('div', '', 'banner-dialog-head');
+        head.append(node('h2', '添加辅食记录', 'banner-dialog-title'));
+        const close = node('button', '✕', 'banner-dialog-close');
+        close.type = 'button';
+        close.setAttribute('aria-label', '关闭');
+        close.addEventListener('click', closeDialog);
+        head.append(close);
+        dialog.append(head);
+
+        const search = node('input', '', 'banner-search');
+        search.type = 'search';
+        search.placeholder = '搜索食物';
+        search.addEventListener('input', () => renderPickerList(list, search, context));
+        dialog.append(search);
+        const list = node('div', '', 'banner-picker-list');
+        dialog.append(list);
+        renderPickerList(list, search, context);
+
+        overlay.append(dialog);
+        document.body.append(overlay);
+        document.body.style.overflow = 'hidden';
+        search.focus();
+    }
+
+    function renderPickerList(list, search, context) {
+        const query = (search.value || '').trim().toLocaleLowerCase();
+        list.replaceChildren();
+        context.categories.forEach(category => {
+            const foods = context.foods.filter(food =>
+                food.category_id === category.id &&
+                (!query || food.name.toLocaleLowerCase().includes(query)));
+            if (!foods.length) return;
+            const title = node('h3',
+                `${category.emoji} ${category.name}${category.is_high_allergen ? ' ⚠️' : ''}`,
+                'banner-dialog-section');
+            list.append(title);
+            const group = node('div', '', 'banner-chip-group');
+            foods.forEach(food => {
+                const eaten = context.entries.some(entry => entry.food_id === food.id);
+                group.append(chip(
+                    `${food.name} · ${STATUS_LABELS[food.status]}${eaten ? ' · 今天已吃' : ''}`,
+                    () => openFoodDialogForFood(food)
+                ));
+            });
+            list.append(group);
+        });
+        if (!list.children.length) list.append(node('p', '没有匹配的食物，可到辅食库添加。', 'banner-dialog-section'));
+    }
+
+    function openFoodDialogForFood(food) {
+        const kindMap = { untouched: 'planned', screening: 'screening', normal: 'normal', allergic: 'allergic' };
+        const item = {
+            food_id: food.id,
+            food: food.name,
+            kind: kindMap[food.status] || 'normal',
+            position: food.position || 1
+        };
+        item.text = food.status === 'screening'
+            ? `第${food.position}/${food.observe_days}天`
+            : STATUS_LABELS[food.status];
+        openFoodDialog(item);
+    }
+
     function openFoodDialog(item) {
         closeDialog();
         const state = {
@@ -121,6 +204,22 @@
         close.addEventListener('click', closeDialog);
         head.append(title, close);
         dialog.append(head);
+
+        // 过敏食物需确认记录方式（服务端状态机要求）
+        if (item.kind === 'allergic') {
+            state.modeOverride = 'retry';
+            dialog.append(node('h3', `⚠️ ${item.food} 已标记过敏，这次怎么记？`, 'banner-dialog-section'));
+            const modeGroup = node('div', '', 'banner-chip-group');
+            [['retry', '按新一轮排敏'], ['only', '仅记录（误食等）']].forEach(([value, label], index) => {
+                const option = chip(label, () => {
+                    state.modeOverride = value;
+                    [...modeGroup.children].forEach(child => child.classList.remove('active'));
+                    option.classList.add('active');
+                }, index === 0);
+                modeGroup.append(option);
+            });
+            dialog.append(modeGroup);
+        }
 
         // 记录进食
         dialog.append(node('h3', '今天吃了吗？', 'banner-dialog-section'));
@@ -206,10 +305,10 @@
                 id: row.id, food_id: row.food_id, amount: row.amount,
                 rating: row.rating, note: row.note, mode: 'keep'
             }));
-            // 计划中的新食物首次记录用 start（开启排敏轮次），已排敏中的用 keep
+            // 新食物首次记录用 start（开启排敏轮次），过敏食物用确认的记录方式，其余 keep
             entries.push({
                 food_id: item.food_id, amount: state.amount, rating: state.rating,
-                note: '', mode: item.kind === 'planned' ? 'start' : 'keep'
+                note: '', mode: state.modeOverride || (item.kind === 'planned' ? 'start' : 'keep')
             });
             await api('meals', 'POST', {
                 date: dateValue, meal: state.meal,
@@ -245,6 +344,7 @@
         if (event.key === 'Escape' && overlay) closeDialog();
     });
 
+    window.foodQuickRecord = { open: openQuickAdd };
     window.addEventListener('pageshow', event => { if (event.persisted) load(); });
     load();
 })();
