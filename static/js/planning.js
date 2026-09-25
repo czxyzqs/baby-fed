@@ -289,7 +289,7 @@
                         await api('queue', 'POST', { food_id: food.id });
                         await reload();
                         toast(`已加入队列：${food.name}`);
-                        render();
+                        renderQueuePicker(search, list);
                     } catch (error) {
                         message(`添加失败：${error.message}`, true);
                     }
