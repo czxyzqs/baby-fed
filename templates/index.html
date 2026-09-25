@@ -23,6 +23,7 @@
             <div class="header-actions">
                 <button class="stats-btn" onclick="openModal('data-dashboard')" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;">📊 数据看板</button>
                 <button type="button" class="stats-btn health-management-btn" onclick="openModal('health-management')">⚙️ 更多设置</button>
+                <button class="stats-btn" onclick="location.href='/food-history'">🥣 辅食记录</button>
                 <button class="stats-btn" id="fever-analysis-btn" onclick="openFeverAnalysisModal()" style="background:linear-gradient(135deg,#ef4444,#f97316);color:white;border:none;{% if not has_recent_health_records %}display:none;{% endif %}">🤒 发烧分析</button>
                 <button onclick="location.reload()" title="刷新页面" style="margin-left:auto;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:8px 12px;color:var(--text-secondary);cursor:pointer;font-size:36px;">🔄</button>
             </div>
@@ -204,11 +205,6 @@
                 <a class="health-management-item" href="{{ url_for('food_library_page') }}" onclick="closeModal('health-management')">
                     <span class="health-management-icon" aria-hidden="true">🥣</span>
                     <span class="health-management-copy"><strong>辅食设置（辅食库）</strong><span>查看食物池，管理食物和品类</span></span>
-                    <span aria-hidden="true">›</span>
-                </a>
-                <a class="health-management-item" href="{{ url_for('food_history_page') }}" onclick="closeModal('health-management')">
-                    <span class="health-management-icon" aria-hidden="true">📝</span>
-                    <span class="health-management-copy"><strong>辅食记录</strong><span>按日期查看和编辑每餐辅食</span></span>
                     <span aria-hidden="true">›</span>
                 </a>
                 <a class="health-management-item" href="{{ url_for('screening_page') }}" onclick="closeModal('health-management')">
