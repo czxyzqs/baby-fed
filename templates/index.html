@@ -20,12 +20,8 @@
 
     <div class="container">
         <header class="header">
-            <div style="display:flex;align-items:center;justify-content:center;gap:8px">
-                <h1>🌸 豚豚喂养记录</h1>
-                <button onclick="location.reload()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:8px 12px;color:var(--text-secondary);cursor:pointer;font-size:36px;">🔄</button>
-            </div>
-            <div class="subtitle" id="today-date"></div>
             <div class="header-actions">
+                <button onclick="location.reload()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:8px 12px;color:var(--text-secondary);cursor:pointer;font-size:36px;">🔄</button>
                 <button class="stats-btn" onclick="openStatsModal()" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;">📊 喂养分析</button>
                 <button class="stats-btn" onclick="openSleepAnalysisModal()" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;">🛏️ 睡眠分析</button>
                 <button type="button" class="stats-btn health-management-btn" onclick="openModal('health-management')">⚙️ 更多设置</button>

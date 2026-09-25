@@ -33,8 +33,10 @@
     });
 
     function updateTodayDate() {
+        const dateElement = document.getElementById('today-date');
+        if (!dateElement) return;
         const options = { weekday: 'long', month: 'long', day: 'numeric' };
-        document.getElementById('today-date').textContent =
+        dateElement.textContent =
             new Date().toLocaleDateString('zh-CN', options);
     }
 
