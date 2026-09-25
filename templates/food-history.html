@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>辅食记录 · 豚豚喂养记录</title>
+    <script>
+        try {
+            if (localStorage.getItem('theme') === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+            if (localStorage.getItem('elder-mode') === '1') {
+                document.addEventListener('DOMContentLoaded', () => document.body.classList.add('elder'));
+            }
+        } catch (error) {}
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-intake.css') }}">
+    <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
+</head>
+<body>
+    <main class="food-history-page" id="food-history-page" aria-labelledby="food-history-title">
+        <header class="food-history-header">
+            <a class="food-history-back" href="{{ url_for('index') }}">← 返回首页</a>
+            <div class="food-history-header-row">
+                <h1 id="food-history-title">📝 辅食记录</h1>
+            </div>
+            <p class="food-history-hint">按日期查看每餐辅食，点餐次可直接编辑或补记</p>
+            <div class="food-history-toolbar">
+                <label for="food-intake-history-date">查看日期</label>
+                <input type="date" id="food-intake-history-date" class="form-input" aria-label="辅食记录日期">
+            </div>
+        </header>
+        <p id="food-intake-history-message" role="status" aria-live="polite"></p>
+        <div id="food-intake-history-list"></div>
+    </main>
+    {% include 'food-intake.html' %}
+</body>
+</html>

@@ -759,6 +759,11 @@ def food_library_page():
     return render_template('food-library.html')
 
 
+@app.route('/food-history')
+def food_history_page():
+    return render_template('food-history.html')
+
+
 @app.route('/screening')
 def screening_page():
     return render_template('screening.html')

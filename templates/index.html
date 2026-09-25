@@ -78,6 +78,11 @@
         </div>
         {% endif %}
 
+        <section class="food-screening-banner" id="food-screening-banner" aria-labelledby="food-screening-banner-title" hidden>
+            <h2 class="section-title" id="food-screening-banner-title">🛡️ 排敏动态</h2>
+            <div id="food-screening-banner-body"></div>
+        </section>
+
         <!-- Stats Bar -->
         <div class="stats-bar">
             <div class="stats-row" style="flex-direction: column; gap: 12px;">
@@ -126,20 +131,6 @@
                     <span>发烧</span>
                 </button>
             </div>
-        </section>
-
-        <section class="food-screening-banner" id="food-screening-banner" aria-labelledby="food-screening-banner-title" hidden>
-            <h2 class="section-title" id="food-screening-banner-title">🛡️ 排敏动态</h2>
-            <div id="food-screening-banner-body"></div>
-        </section>
-
-        <section class="food-intake-history" aria-labelledby="food-intake-history-title">
-            <div class="food-intake-history-header">
-                <h2 class="section-title" id="food-intake-history-title">辅食记录</h2>
-                <label>查看日期 <input type="date" id="food-intake-history-date" aria-label="辅食记录日期"></label>
-            </div>
-            <p id="food-intake-history-message" role="status"></p>
-            <div id="food-intake-history-list"></div>
         </section>
 
         <!-- Records List -->
@@ -220,6 +211,11 @@
                 <a class="health-management-item" href="{{ url_for('food_library_page') }}" onclick="closeModal('health-management')">
                     <span class="health-management-icon" aria-hidden="true">🥣</span>
                     <span class="health-management-copy"><strong>辅食设置（辅食库）</strong><span>查看食物池，管理食物和品类</span></span>
+                    <span aria-hidden="true">›</span>
+                </a>
+                <a class="health-management-item" href="{{ url_for('food_history_page') }}" onclick="closeModal('health-management')">
+                    <span class="health-management-icon" aria-hidden="true">📝</span>
+                    <span class="health-management-copy"><strong>辅食记录</strong><span>按日期查看和编辑每餐辅食</span></span>
                     <span aria-hidden="true">›</span>
                 </a>
                 <a class="health-management-item" href="{{ url_for('screening_page') }}" onclick="closeModal('health-management')">

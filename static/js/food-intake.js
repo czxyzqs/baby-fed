@@ -355,8 +355,10 @@
                 }))
             });
             dirty = false;
-            element('history-date').value = selectedDate;
-            await loadHistory();
+            if (element('history-date')) {
+                element('history-date').value = selectedDate;
+                await loadHistory();
+            }
             setBusy(false);
             close();
             showToast(`已保存${meals[selectedMeal]}辅食记录`);
@@ -368,6 +370,7 @@
     }
 
     async function loadHistory() {
+        if (!element('history-date') || !element('history-list')) return;
         const version = ++historyVersion;
         const dateValue = element('history-date').value;
         element('history-message').textContent = '正在加载辅食记录…';
@@ -450,9 +453,11 @@
         event.returnValue = '';
     });
     window.addEventListener('pageshow', event => { if (event.persisted) loadHistory(); });
-    element('history-date').value = today();
-    element('history-date').max = today();
-    element('history-date').addEventListener('change', loadHistory);
+    if (element('history-date')) {
+        element('history-date').value = today();
+        element('history-date').max = today();
+        element('history-date').addEventListener('change', loadHistory);
+        loadHistory();
+    }
     window.foodIntake = { open, close };
-    loadHistory();
 })();
