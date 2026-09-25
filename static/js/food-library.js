@@ -4,6 +4,7 @@
     let busy = false;
     let editor = null;
     let requestVersion = 0;
+    let activeCategory = '';
     const element = id => document.getElementById(`food-library-${id}`);
 
     function message(text = '', error = false) {
@@ -56,11 +57,32 @@
         return button;
     }
 
+    function renderTabs() {
+        if (activeCategory && !library.categories.some(category => String(category.id) === activeCategory)) {
+            activeCategory = '';
+        }
+        const nav = element('tabs');
+        nav.replaceChildren();
+        const tabs = [['', `全部 · ${library.foods.length} 种`]].concat(library.categories.map(
+            category => [String(category.id), `${category.emoji} ${category.name}${category.is_high_allergen ? ' ⚠️' : ''}`]
+        ));
+        tabs.forEach(([value, label]) => {
+            const tab = action(label, () => {
+                if (busy) return;
+                activeCategory = value;
+                render();
+            }, 'food-library-tab');
+            tab.setAttribute('role', 'tab');
+            tab.setAttribute('aria-selected', String(activeCategory === value));
+            if (activeCategory === value) tab.classList.add('active');
+            nav.append(tab);
+        });
+    }
+
     function render() {
-        const filter = element('filter').value;
-        fillCategories(element('filter'), filter, true);
+        renderTabs();
         const query = element('search').value.trim().toLocaleLowerCase();
-        const selected = element('filter').value;
+        const selected = activeCategory;
         const list = element('list');
         list.replaceChildren();
         let visibleCount = 0;
@@ -162,7 +184,7 @@
         element('category-fields').hidden = kind !== 'category';
         element('category').required = kind === 'food';
         element('emoji').required = kind === 'category';
-        fillCategories(element('category'), item?.category_id ?? categoryId ?? element('filter').value);
+        fillCategories(element('category'), item?.category_id ?? categoryId ?? (Number(activeCategory) || undefined));
         element('emoji').value = item?.emoji || '🥣';
         element('allergen').checked = item?.is_high_allergen === true;
         window.scrollTo(0, 0);
@@ -209,7 +231,7 @@
         await mutate(`/${collection}${id === null ? '' : `/${id}`}`, id === null ? 'POST' : 'PUT', data,
             `已保存${kind === 'food' ? '食物' : '品类'}「${data.name}」`, () => {
             element('search').value = '';
-            element('filter').value = kind === 'food' ? String(data.category_id) : '';
+            if (kind === 'food') activeCategory = String(data.category_id);
             showPool();
         });
     }
@@ -227,7 +249,6 @@
     }
 
     element('search').addEventListener('input', render);
-    element('filter').addEventListener('change', render);
     element('refresh').addEventListener('click', load);
     element('add-food').addEventListener('click', () => openEditor('food'));
     element('add-category').addEventListener('click', () => openEditor('category'));
