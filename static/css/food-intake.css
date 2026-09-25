@@ -192,7 +192,7 @@
     background: var(--card-bg, rgba(255, 255, 255, 0.06));
     border: 1px solid rgba(77, 163, 255, 0.35);
     border-radius: 14px;
-    padding: 12px 14px;
+    padding: 16px;
     margin-bottom: 8px;
 }
 .food-banner-due {
@@ -200,16 +200,16 @@
     background: rgba(230, 104, 76, 0.1);
 }
 .food-banner-text {
-    font-size: 15px;
+    font-size: 35px;
     font-weight: 600;
-    line-height: 1.5;
+    line-height: 1.4;
 }
 .food-banner-due .food-banner-text {
     color: #ff9a80;
 }
 .food-banner-link {
     color: var(--accent, #4da3ff);
-    font-size: 14px;
+    font-size: 22px;
     font-weight: 700;
     text-decoration: none;
     white-space: nowrap;
