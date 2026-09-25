@@ -331,16 +331,26 @@
     async function saveIntake(item, state) {
         try {
             const dateValue = today();
+            const mode = state.modeOverride || (item.kind === 'planned' ? 'start' : 'keep');
+            // 引入新食物（start/retry）时提醒：同时排敏多种食物会让反应难以归因
+            if (mode === 'start' || mode === 'retry') {
+                const board = await api('screening/board');
+                const other = board.foods.find(food =>
+                    food.status === 'screening' && food.id !== item.food_id);
+                if (other && !window.confirm(
+                    `「${other.food}」正在排敏观察中。同时引入「${item.food}」会让过敏反应难以归因，建议等观察期结束。确定仍要记录吗？`)) {
+                    return;
+                }
+            }
             const result = await api(`entries?date=${dateValue}`);
             const others = result.entries.filter(row => row.meal === state.meal && row.food_id !== item.food_id);
             const entries = others.map(row => ({
                 id: row.id, food_id: row.food_id, amount: row.amount,
                 rating: row.rating, note: row.note, mode: 'keep'
             }));
-            // 新食物首次记录用 start（开启排敏轮次），过敏食物用确认的记录方式，其余 keep
             entries.push({
                 food_id: item.food_id, amount: state.amount, rating: state.rating,
-                note: '', mode: state.modeOverride || (item.kind === 'planned' ? 'start' : 'keep')
+                note: '', mode
             });
             await api('meals', 'POST', {
                 date: dateValue, meal: state.meal,
