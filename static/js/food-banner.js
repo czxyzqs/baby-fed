@@ -94,6 +94,7 @@
     function closeDialog() {
         overlay?.remove();
         overlay = null;
+        document.body.style.overflow = '';
     }
 
     function openFoodDialog(item) {
@@ -216,7 +217,6 @@
                 entries
             });
             closeDialog();
-            document.body.style.overflow = '';
             toast(`已记录${MEALS[state.meal]}：${item.food} ${state.amount}`);
             load();
         } catch (error) {
@@ -235,7 +235,6 @@
                 symptoms: [...state.symptoms], note: ''
             });
             closeDialog();
-            document.body.style.overflow = '';
             toast(`已记录「${item.food}」的反应`);
         } catch (error) {
             toast(`保存失败：${error.message}`);
