@@ -51,7 +51,7 @@
                 `${item.food}${item.text ? `（${item.text}）` : ''}`
             ).join('、');
             const card = node('div', '', 'food-banner-item');
-            card.append(node('span', `今日计划：${text}`, 'food-banner-text'));
+            card.append(node('span', text, 'food-banner-text'));
             body.append(card);
         }
     }
