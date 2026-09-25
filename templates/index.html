@@ -21,11 +21,10 @@
     <div class="container">
         <header class="header">
             <div class="header-actions">
-                <button onclick="location.reload()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:8px 12px;color:var(--text-secondary);cursor:pointer;font-size:36px;">🔄</button>
-                <button class="stats-btn" onclick="openStatsModal()" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;">📊 喂养分析</button>
-                <button class="stats-btn" onclick="openSleepAnalysisModal()" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;">🛏️ 睡眠分析</button>
+                <button class="stats-btn" onclick="openModal('data-dashboard')" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;">📊 数据看板</button>
                 <button type="button" class="stats-btn health-management-btn" onclick="openModal('health-management')">⚙️ 更多设置</button>
                 <button class="stats-btn" id="fever-analysis-btn" onclick="openFeverAnalysisModal()" style="background:linear-gradient(135deg,#ef4444,#f97316);color:white;border:none;{% if not has_recent_health_records %}display:none;{% endif %}">🤒 发烧分析</button>
+                <button onclick="location.reload()" title="刷新页面" style="margin-left:auto;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:8px 12px;color:var(--text-secondary);cursor:pointer;font-size:36px;">🔄</button>
             </div>
         </header>
 
@@ -702,6 +701,30 @@
                     <div class="form-group"><label>备注（可选）</label><input type="text" class="form-input" id="edit-health-note" placeholder="添加备注..."></div>
                     <button type="submit" class="btn-submit">保存修改</button><button type="button" class="btn-delete" onclick="deleteRecord('health')">删除记录</button>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Dashboard Modal -->
+    <div class="modal-overlay" id="data-dashboard-modal">
+        <div class="modal stats">
+            <div class="modal-header">
+                <h2>📊 数据看板</h2>
+                <button class="modal-close" onclick="closeModal('data-dashboard')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="data-dashboard-menu">
+                    <button type="button" class="health-management-item" onclick="closeModal('data-dashboard');openStatsModal()">
+                        <span class="health-management-icon" aria-hidden="true">📊</span>
+                        <span class="health-management-copy"><strong>喂养分析</strong><span>奶量、辅食、换尿布等每日汇总</span></span>
+                        <span aria-hidden="true">›</span>
+                    </button>
+                    <button type="button" class="health-management-item" onclick="closeModal('data-dashboard');openSleepAnalysisModal()">
+                        <span class="health-management-icon" aria-hidden="true">🛏️</span>
+                        <span class="health-management-copy"><strong>睡眠分析</strong><span>睡眠时长、作息与趋势</span></span>
+                        <span aria-hidden="true">›</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
