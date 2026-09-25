@@ -57,6 +57,19 @@
         return button;
     }
 
+    // 食物名模糊匹配：包含子串，或输入字符按顺序出现（允许间隔），如「三鱼」匹配「三文鱼」
+    function fuzzyMatch(name, query) {
+        const lower = name.toLocaleLowerCase();
+        if (lower.includes(query)) return true;
+        let index = 0;
+        for (const character of query) {
+            index = lower.indexOf(character, index);
+            if (index === -1) return false;
+            index += 1;
+        }
+        return true;
+    }
+
     function renderTabs() {
         if (activeCategory && !library.categories.some(category => String(category.id) === activeCategory)) {
             activeCategory = '';
@@ -89,9 +102,8 @@
         library.categories.forEach(category => {
             if (selected && String(category.id) !== selected) return;
             const foods = library.foods.filter(food => food.category_id === category.id);
-            const matchesCategory = category.name.toLocaleLowerCase().includes(query);
-            const matches = foods.filter(food => matchesCategory || food.name.toLocaleLowerCase().includes(query));
-            if (query && !matches.length && !matchesCategory) return;
+            const matches = query ? foods.filter(food => fuzzyMatch(food.name, query)) : foods;
+            if (query && !matches.length) return;
             visibleCount += matches.length;
             const group = document.createElement('section');
             group.className = 'food-library-group';
@@ -140,7 +152,7 @@
         if (!list.children.length) {
             const empty = document.createElement('p');
             empty.className = 'food-library-hint';
-            empty.textContent = library.categories.length ? '没有匹配的食物或品类，请更换搜索词或筛选条件。' : '食物池为空，请先新增品类，再添加食物。';
+            empty.textContent = library.categories.length ? '没有匹配的食物，请更换搜索词。' : '食物池为空，请先新增品类，再添加食物。';
             list.append(empty);
         }
     }
