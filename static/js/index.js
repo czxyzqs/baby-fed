@@ -2112,7 +2112,7 @@
             if (el) {
                 el.style.display = '';
                 const title = el.querySelector('.vitamin-reminder-title');
-                if (title) title.textContent = '今日待吃：' + pending.join('、');
+                if (title) title.textContent = pending.join('、') + '还没吃';
             }
         }
     }
