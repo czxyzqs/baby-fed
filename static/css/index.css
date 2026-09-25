@@ -1643,3 +1643,39 @@
 #shared-toast .toast-icon { font-size: 17px; }
 #shared-toast .toast-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-theme="light"] #shared-toast { background: rgba(250, 250, 252, 0.97); color: #23292f; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16); }
+
+/* 共享日期选择器（date-picker.js，样式对齐睡眠分析日期组件） */
+.sdp { position: relative; }
+.sdp-trigger {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 12px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; cursor: pointer; color: var(--text-primary); font-size: 15px; font-weight: 500;
+}
+.sdp-label { flex: 1; text-align: left; }
+.sdp-arrow { color: var(--text-muted); transition: transform 0.2s; font-size: 12px; }
+.sdp-panel {
+    margin-top: 8px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; position: absolute; left: 0; right: 0; z-index: 40;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+}
+.sdp-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.sdp-nav-btn { background: none; border: none; color: var(--text-primary); font-size: 18px; cursor: pointer; padding: 4px 10px; }
+.sdp-title { font-weight: 600; color: var(--text-primary); }
+.sdp-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.sdp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.sdp-day {
+    padding: 8px 0; border: none; background: none; color: var(--text-primary);
+    border-radius: 8px; cursor: pointer; font-size: 14px;
+}
+.sdp-day:hover:not(.disabled) { background: var(--bg-secondary); }
+.sdp-day.selected { background: var(--accent, #4da3ff); color: #fff; font-weight: 700; }
+.sdp-day.today:not(.selected) { outline: 2px solid var(--accent, #4da3ff); }
+.sdp-day.disabled { color: var(--text-muted); opacity: 0.35; cursor: default; }
+.sdp-today {
+    width: 100%; margin-top: 12px; padding: 9px; background: var(--accent, #4da3ff);
+    color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;
+}
+.sdp-today.disabled { opacity: 0.4; cursor: default; }
+body.elder .sdp-trigger { font-size: 19px; padding: 14px; }
+body.elder .sdp-day { font-size: 17px; padding: 11px 0; }
+body.elder .sdp-today { font-size: 17px; }

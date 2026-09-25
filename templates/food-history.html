@@ -17,7 +17,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-intake.css') }}">
     <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/date-picker.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/food-history.js') }}"></script>
 </head>
 <body>
     <main class="food-history-page" id="food-history-page" aria-labelledby="food-history-title">
@@ -26,10 +28,8 @@
             <div class="food-history-header-row">
                 <h1 id="food-history-title">📝 辅食记录</h1>
             </div>
-            <div class="food-history-toolbar">
-                <label for="food-intake-history-date">查看日期</label>
-                <input type="date" id="food-intake-history-date" class="form-input" aria-label="辅食记录日期">
-            </div>
+            <input type="hidden" id="food-intake-history-date">
+            <div id="food-history-date-picker"></div>
         </header>
         <p id="food-intake-history-message" role="status" aria-live="polite"></p>
         <div id="food-intake-history-list"></div>
