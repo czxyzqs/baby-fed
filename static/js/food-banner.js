@@ -64,7 +64,16 @@
         }
     }
 
+    let lastItems = [];
+    let todayContext = null;
+
+    async function getContext() {
+        if (!todayContext) todayContext = await api(`entries?date=${today()}`);
+        return todayContext;
+    }
+
     function render(items) {
+        lastItems = items;
         body.replaceChildren();
         if (!items.length) {
             banner.hidden = true;
@@ -97,18 +106,27 @@
         document.body.style.overflow = '';
     }
 
-    // ---------- 快速添加：先选食物，再进同一个记录界面 ----------
+    // ---------- 快速添加：有规划直接进记录界面（预选规划食物），否则选食物 ----------
 
     const STATUS_LABELS = { untouched: '未排敏', screening: '排敏中', normal: '正常', allergic: '过敏' };
 
     async function openQuickAdd() {
         let context;
         try {
-            context = await api(`entries?date=${today()}`);
+            context = await getContext();
         } catch (error) {
             toast(`加载食物失败：${error.message}`);
             return;
         }
+        const preferred = lastItems.find(item => item.kind !== 'due');
+        if (preferred) {
+            openFoodDialog(preferred);
+            return;
+        }
+        openPickerDialog(context);
+    }
+
+    function openPickerDialog(context) {
         closeDialog();
         overlay = node('div', '', 'banner-dialog-overlay');
         overlay.addEventListener('click', event => {
@@ -118,7 +136,7 @@
         dialog.setAttribute('role', 'dialog');
         dialog.setAttribute('aria-modal', 'true');
         const head = node('div', '', 'banner-dialog-head');
-        head.append(node('h2', '添加辅食记录', 'banner-dialog-title'));
+        head.append(node('h2', '选择食物', 'banner-dialog-title'));
         const close = node('button', '✕', 'banner-dialog-close');
         close.type = 'button';
         close.setAttribute('aria-label', '关闭');
@@ -204,6 +222,20 @@
         close.addEventListener('click', closeDialog);
         head.append(title, close);
         dialog.append(head);
+
+        // 换食物：回到选择器
+        const switchRow = node('div', '', 'banner-switch-row');
+        const switchBtn = node('button', '⟳ 换个食物', 'banner-switch');
+        switchBtn.type = 'button';
+        switchBtn.addEventListener('click', async () => {
+            try {
+                openPickerDialog(await getContext());
+            } catch (error) {
+                toast(`加载食物失败：${error.message}`);
+            }
+        });
+        switchRow.append(switchBtn);
+        dialog.append(switchRow);
 
         // 过敏食物需确认记录方式（服务端状态机要求）
         if (item.kind === 'allergic') {
@@ -315,6 +347,7 @@
                 revision: result.revisions[state.meal],
                 entries
             });
+            todayContext = null;
             closeDialog();
             toast(`已记录${MEALS[state.meal]}：${item.food} ${state.amount}`);
             load();
