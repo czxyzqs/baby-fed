@@ -23,7 +23,7 @@
             <div class="header-actions">
                 <button class="stats-btn" onclick="openModal('data-dashboard')" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;">📊 数据看板</button>
                 <button type="button" class="stats-btn health-management-btn" onclick="openModal('health-management')">⚙️ 更多设置</button>
-                <button class="stats-btn" onclick="location.href='/food-history'">🥣 辅食记录</button>
+                <button class="stats-btn" onclick="location.href='/food-history'" style="background:linear-gradient(135deg,#00b894,#00d9a5);color:white;border:none;">🥣 辅食记录</button>
                 <button class="stats-btn" id="fever-analysis-btn" onclick="openFeverAnalysisModal()" style="background:linear-gradient(135deg,#ef4444,#f97316);color:white;border:none;{% if not has_recent_health_records %}display:none;{% endif %}">🤒 发烧分析</button>
                 <button onclick="location.reload()" title="刷新页面" style="margin-left:auto;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:8px 12px;color:var(--text-secondary);cursor:pointer;font-size:36px;">🔄</button>
             </div>
