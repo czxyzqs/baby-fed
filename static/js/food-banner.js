@@ -81,11 +81,18 @@
         }
         banner.hidden = false;
         items.forEach(item => {
-            const card = node('div', '', 'food-banner-item' + (item.kind === 'due' ? ' food-banner-due' : ''));
+            const card = node('div', '', 'food-banner-item'
+                + (item.kind === 'due' ? ' food-banner-due' : '')
+                + (item.kind === 'upcoming' ? ' food-banner-upcoming' : ''));
             if (item.kind === 'due') {
                 card.append(node('span', `🔔 ${item.food} ${item.text}`, 'food-banner-text'));
                 const jump = node('a', '去标记 ›', 'food-banner-link');
                 jump.href = '/screening';
+                card.append(jump);
+            } else if (item.kind === 'upcoming') {
+                card.append(node('span', `⏭ ${item.food}（${item.text}）`, 'food-banner-text'));
+                const jump = node('a', '排期 ›', 'food-banner-link');
+                jump.href = '/planning';
                 card.append(jump);
             } else {
                 const check = node('span', item.eaten_today ? '✓' : '', 'banner-check' + (item.eaten_today ? ' checked' : ''));
@@ -121,7 +128,7 @@
             toast(`加载食物失败：${error.message}`);
             return;
         }
-        const preferred = lastItems.find(item => item.kind !== 'due');
+        const preferred = lastItems.find(item => item.kind !== 'due' && item.kind !== 'upcoming');
         if (preferred) {
             openFoodDialog(preferred);
             return;

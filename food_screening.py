@@ -649,6 +649,16 @@ class FoodScreeningStore(FoodLibraryStore):
                     'kind': 'normal', 'food_id': row['food_id'], 'food': row['food_name'],
                     'eaten_today': row['food_id'] in eaten_today_ids, 'text': '',
                 })
+            tomorrow = add_days(date.fromisoformat(today), 1)
+            for row in connection.execute(
+                "SELECT p.*, foods.name AS food_name FROM food_plan_blocks p JOIN foods ON foods.id = p.food_id "
+                "WHERE p.status = 'scheduled' AND p.start_date = ? ORDER BY p.id", (tomorrow,)
+            ):
+                items.append({
+                    'kind': 'upcoming', 'food_id': row['food_id'], 'food': row['food_name'],
+                    'observe_days': row['days'],
+                    'text': f'明天开始排敏 · 观察{row["days"]}天',
+                })
             return {'date': today, 'items': items}
 
     def plans_for_date(self, value):

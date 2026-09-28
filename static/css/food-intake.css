@@ -216,6 +216,14 @@
     border-color: rgba(230, 104, 76, 0.5);
     background: rgba(230, 104, 76, 0.1);
 }
+.food-banner-upcoming {
+    border-style: dashed;
+    border-color: rgba(255, 255, 255, 0.22);
+    background: transparent;
+}
+.food-banner-upcoming .food-banner-text {
+    color: var(--text-muted, rgba(255, 255, 255, 0.6));
+}
 .food-banner-text {
     font-size: 35px;
     font-weight: 600;
