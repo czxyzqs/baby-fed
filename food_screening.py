@@ -554,7 +554,42 @@ class FoodScreeningStore(FoodLibraryStore):
                 'INSERT INTO food_pauses (start_date, end_date, reason, source, created_at) VALUES (?, ?, ?, ?, ?)',
                 (start.isoformat(), end.isoformat(), reason.strip(), 'manual', datetime.now(CN_TZ).isoformat()),
             )
+            # 暂停生效后，与暂停段冲突的未固定排期自动顺延到暂停段之后（📌和更早的排期不动）
+            self.shift_blocks_after_pauses(connection)
             return self.schedule_in(connection)
+
+    def shift_blocks_after_pauses(self, connection):
+        pauses = [
+            (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
+            for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
+        ]
+        blocks = [dict(row) for row in connection.execute(
+            "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' AND pinned = 0 ORDER BY start_date, id"
+        )]
+        now = datetime.now(CN_TZ).isoformat()
+        chain_end = None
+        for block in blocks:
+            original = date.fromisoformat(block['start_date'])
+            start = original
+            if chain_end is not None and start <= chain_end:
+                start = chain_end + timedelta(days=1)
+            end = start + timedelta(days=block['days'] - 1)
+            moved = start != original
+            overlap = True
+            while overlap:
+                overlap = False
+                for pause_start, pause_end in pauses:
+                    if start <= pause_end and end >= pause_start:
+                        start = pause_end + timedelta(days=1)
+                        end = start + timedelta(days=block['days'] - 1)
+                        overlap = True
+                        moved = True
+            if moved:
+                connection.execute(
+                    'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
+                    (start.isoformat(), now, block['id']),
+                )
+            chain_end = end
 
     def delete_pause(self, identifier):
         with self.connect() as connection:

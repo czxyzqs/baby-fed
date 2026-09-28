@@ -644,7 +644,7 @@
                 });
                 applySchedule(result);
                 closeDialog();
-                toast('已添加暂停段');
+                toast('已添加暂停段，之后的排期自动延后');
             } catch (error) {
                 message(`保存失败：${error.message}`, true);
             }
