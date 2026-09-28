@@ -568,6 +568,10 @@ class FoodScreeningStore(FoodLibraryStore):
         )]
         now = datetime.now(CN_TZ).isoformat()
         chain_end = None
+        settled = None        # 最后一个未移动的排期（含其结束日）
+        settled_end = None
+        extended_for = None   # 已补过位的排期，避免重复延长
+        extensions = []       # (排期, 需补到的空档末尾)
         for block in blocks:
             original = date.fromisoformat(block['start_date'])
             start = original
@@ -575,11 +579,14 @@ class FoodScreeningStore(FoodLibraryStore):
                 start = chain_end + timedelta(days=1)
             end = start + timedelta(days=block['days'] - 1)
             moved = start != original
+            first_pause = None
             overlap = True
             while overlap:
                 overlap = False
                 for pause_start, pause_end in pauses:
                     if start <= pause_end and end >= pause_start:
+                        if first_pause is None:
+                            first_pause = pause_start
                         start = pause_end + timedelta(days=1)
                         end = start + timedelta(days=block['days'] - 1)
                         overlap = True
@@ -589,7 +596,36 @@ class FoodScreeningStore(FoodLibraryStore):
                     'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
                     (start.isoformat(), now, block['id']),
                 )
+                # 首个因暂停挪走的排期：把它空出的暂停前日子补给前一个未移动的排期
+                next_pauses = [p[0] for p in pauses if p[0] > settled_end] if settled_end else []
+                if (first_pause is not None and settled is not None
+                        and settled is not extended_for
+                        and next_pauses and min(next_pauses) == first_pause):
+                    extensions.append((settled, first_pause - timedelta(days=1)))
+                    extended_for = settled
+            else:
+                settled = block
+                settled_end = end
             chain_end = end
+        for block, gap_end in extensions:
+            latest = connection.execute(
+                'SELECT * FROM food_rounds WHERE food_id = ? ORDER BY id DESC LIMIT 1', (block['food_id'],)
+            ).fetchone()
+            if latest is None or latest['status'] == 'active':
+                add_days_count = (gap_end - (date.fromisoformat(block['start_date']) + timedelta(days=block['days'] - 1))).days
+                if add_days_count > 0:
+                    new_days = min(block['days'] + add_days_count, 14)
+                    connection.execute(
+                        'UPDATE food_plan_blocks SET days = ?, updated_at = ? WHERE id = ?',
+                        (new_days, now, block['id']),
+                    )
+                    if latest is not None and latest['status'] == 'active':
+                        # 进行中的观察同步拉长轮次，判定顺延
+                        cover = (gap_end - date.fromisoformat(latest['start_date'])).days + 1
+                        connection.execute(
+                            'UPDATE food_rounds SET observe_days = ? WHERE id = ?',
+                            (min(max(latest['observe_days'], cover), 14), latest['id']),
+                        )
 
     def delete_pause(self, identifier):
         with self.connect() as connection:
