@@ -111,7 +111,16 @@
 .planning-dialog {
     background: var(--panel-bg, #1f2630); color: inherit; width: 100%; max-width: 560px;
     border-radius: 18px 18px 0 0; padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
-    max-height: 86vh; overflow-y: auto;
+    max-height: 86vh;
+    max-height: 86dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+/* iOS 原生 date 控件不受宽度约束会把文字顶出圆角框，改为普通外观 */
+.planning-dialog input[type='date'] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 48px;
 }
 .planning-dialog h2 { font-size: 17px; margin-bottom: 10px; }
 .planning-dialog-body label { display: block; font-size: 14px; margin: 12px 0 6px; }

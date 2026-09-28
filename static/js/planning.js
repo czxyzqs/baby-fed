@@ -759,10 +759,12 @@
         element('dialog-title').textContent = title;
         element('dialog-body').replaceChildren(body);
         element('overlay').hidden = false;
+        document.body.style.overflow = 'hidden';
     }
 
     function closeDialog() {
         element('overlay').hidden = true;
+        document.body.style.overflow = '';
     }
 
     element('auto').addEventListener('click', () => run('按队列顺序自动生成排期？将接在现有排期之后，绕开暂停段。', () => api('schedule/auto', 'POST')));
