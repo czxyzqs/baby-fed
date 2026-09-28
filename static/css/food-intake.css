@@ -224,6 +224,15 @@
 .food-banner-upcoming .food-banner-text {
     color: var(--text-muted, rgba(255, 255, 255, 0.6));
 }
+.banner-ack {
+    margin-left: auto; flex: none;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: transparent; color: var(--text-muted, rgba(255, 255, 255, 0.6));
+    border-radius: 20px; padding: 8px 18px;
+    font-size: 16px; font-weight: 600; cursor: pointer;
+}
+.banner-ack:active { background: rgba(255, 255, 255, 0.1); }
+.banner-ack:disabled { opacity: 0.45; cursor: default; }
 .food-banner-text {
     font-size: 35px;
     font-weight: 600;

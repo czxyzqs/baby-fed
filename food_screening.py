@@ -650,15 +650,39 @@ class FoodScreeningStore(FoodLibraryStore):
                     'eaten_today': row['food_id'] in eaten_today_ids, 'text': '',
                 })
             tomorrow = add_days(date.fromisoformat(today), 1)
+            acked = {
+                row['key'][len('banner_ack_'):] for row in connection.execute(
+                    "SELECT key FROM food_settings WHERE key LIKE 'banner_ack_%'")
+            }
             for row in connection.execute(
                 "SELECT p.*, foods.name AS food_name FROM food_plan_blocks p JOIN foods ON foods.id = p.food_id "
                 "WHERE p.status = 'scheduled' AND p.start_date = ? ORDER BY p.id", (tomorrow,)
             ):
+                if str(row['id']) in acked:
+                    continue
                 items.append({
-                    'kind': 'upcoming', 'food_id': row['food_id'], 'food': row['food_name'],
-                    'observe_days': row['days'],
+                    'kind': 'upcoming', 'block_id': row['id'], 'food_id': row['food_id'],
+                    'food': row['food_name'], 'observe_days': row['days'],
                 })
             return {'date': today, 'items': items}
+
+    def ack_banner(self, data):
+        block_id = data.get('block_id')
+        if type(block_id) is not int:
+            raise FoodLibraryError('请提供有效的排期')
+        with self.connect() as connection:
+            if connection.execute('SELECT 1 FROM food_plan_blocks WHERE id = ?', (block_id,)).fetchone() is None:
+                raise FoodLibraryError('排期已不存在，请刷新后重试', 404)
+            existing = {f"banner_ack_{row['id']}" for row in connection.execute('SELECT id FROM food_plan_blocks')}
+            stale = [row['key'] for row in connection.execute(
+                "SELECT key FROM food_settings WHERE key LIKE 'banner_ack_%'") if row['key'] not in existing]
+            for key in stale:
+                connection.execute('DELETE FROM food_settings WHERE key = ?', (key,))
+            connection.execute(
+                'INSERT OR REPLACE INTO food_settings (key, value) VALUES (?, ?)',
+                (f'banner_ack_{block_id}', today_cn().isoformat()),
+            )
+            return {'success': True}
 
     def plans_for_date(self, value):
         selected = parse_date(value)
@@ -864,6 +888,10 @@ def register_food_screening(app, data_dir):
     @blueprint.get('/banner')
     def get_banner():
         return jsonify(store.banner())
+
+    @blueprint.post('/banner/ack')
+    def ack_banner():
+        return jsonify(store.ack_banner(payload()))
 
     @blueprint.get('/plans')
     def get_plans():

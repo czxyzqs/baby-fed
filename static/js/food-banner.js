@@ -91,9 +91,20 @@
                 card.append(jump);
             } else if (item.kind === 'upcoming') {
                 card.append(node('span', `明天吃${item.food}`, 'food-banner-text'));
-                const jump = node('a', '排期 ›', 'food-banner-link');
-                jump.href = '/planning';
-                card.append(jump);
+                const ack = node('button', '已备好', 'banner-ack');
+                ack.type = 'button';
+                ack.addEventListener('click', async event => {
+                    event.stopPropagation();
+                    ack.disabled = true;
+                    try {
+                        await api('screening/banner/ack', 'POST', { block_id: item.block_id });
+                        load();
+                    } catch (error) {
+                        ack.disabled = false;
+                        toast(`操作失败：${error.message}`);
+                    }
+                });
+                card.append(ack);
             } else {
                 const check = node('span', item.eaten_today ? '✓' : '', 'banner-check' + (item.eaten_today ? ' checked' : ''));
                 check.setAttribute('aria-hidden', 'true');
