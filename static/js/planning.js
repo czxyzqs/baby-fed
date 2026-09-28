@@ -535,15 +535,27 @@
             rows.push({
                 sort: block.start_date,
                 color: paletteMap[block.food_id] || 'seg-0',
-                text: `${dateRange(block.start_date, block.days)} ${foodName(block.food_id)} · 观察${block.days}天${block.pinned ? ' · 已固定📌' : ''}${block.stale ? ' · 已失效' : ''}`
+                text: `${dateRange(block.start_date, block.days)} ${foodName(block.food_id)} · 观察${block.days}天${block.pinned ? ' · 已固定📌' : ''}${block.stale ? ' · 已失效' : ''}`,
+                del: block.live ? null : {
+                    path: `blocks/${block.id}`,
+                    confirm: `删除「${foodName(block.food_id)}」的计划？食物将回到排敏队列末尾。`
+                }
             });
         });
         schedule.pauses.forEach(pause => {
             const days = Math.round((new Date(pause.end_date) - new Date(pause.start_date)) / 86400000) + 1;
-            rows.push({ sort: pause.start_date, color: 'pause', text: `${dateRange(pause.start_date, days)} ⏸ 暂停排敏${pause.reason ? ` · ${pause.reason}` : ''}` });
+            rows.push({
+                sort: pause.start_date, color: 'pause',
+                text: `${dateRange(pause.start_date, days)} ⏸ 暂停排敏${pause.reason ? ` · ${pause.reason}` : ''}`,
+                del: { path: `pauses/${pause.id}`, confirm: '删除这个暂停段？' }
+            });
         });
         schedule.normals.forEach(plan => {
-            rows.push({ sort: plan.start_date, color: 'normal', text: `${dateRange(plan.start_date, plan.days)} ${foodName(plan.food_id)} · 常规计划` });
+            rows.push({
+                sort: plan.start_date, color: 'normal',
+                text: `${dateRange(plan.start_date, plan.days)} ${foodName(plan.food_id)} · 常规计划`,
+                del: { path: `normals/${plan.id}`, confirm: `删除「${foodName(plan.food_id)}」的常规计划？` }
+            });
         });
         rows.sort((first, second) => first.sort.localeCompare(second.sort));
         if (!rows.length) {
@@ -554,6 +566,13 @@
             const line = node('div', '', 'planning-agenda-row');
             line.append(node('span', '', 'planning-agenda-dot ' + row.color));
             line.append(node('span', row.text, 'planning-agenda-text'));
+            if (row.del) {
+                const del = node('button', '✕', 'planning-agenda-del');
+                del.type = 'button';
+                del.setAttribute('aria-label', `删除：${row.text}`);
+                del.addEventListener('click', () => run(row.del.confirm, () => api(row.del.path, 'DELETE')));
+                line.append(del);
+            }
             container.append(line);
         });
     }
