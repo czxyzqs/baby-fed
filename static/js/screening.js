@@ -49,19 +49,25 @@
     function renderDaysOptions() {
         const container = element('days-options');
         container.replaceChildren();
-        for (let days = 1; days <= 7; days += 1) {
-            const choice = button(`${days} 天`, async () => {
-                try {
-                    await api('settings', 'PUT', { observe_days_default: days });
-                    board.settings.observe_days_default = days;
-                    renderDaysOptions();
-                    toast(`默认观察天数已设为 ${days} 天`);
-                } catch (error) {
-                    message(`保存失败：${error.message}`, true);
-                }
-            }, 'screening-option');
-            choice.setAttribute('aria-pressed', String(board.settings.observe_days_default === days));
-            container.append(choice);
+        const value = board.settings.observe_days_default ?? 3;
+        const minus = button('−', () => changeDays(value - 1), 'screening-stepper-btn');
+        const plus = button('+', () => changeDays(value + 1), 'screening-stepper-btn');
+        minus.setAttribute('aria-label', '减少一天');
+        plus.setAttribute('aria-label', '增加一天');
+        minus.disabled = value <= 1;
+        plus.disabled = value >= 14;
+        container.append(minus, node('span', `${value} 天`, 'screening-stepper-value'), plus);
+    }
+
+    async function changeDays(days) {
+        days = Math.min(14, Math.max(1, days));
+        if (days === board.settings.observe_days_default) return;
+        try {
+            await api('settings', 'PUT', { observe_days_default: days });
+            board.settings.observe_days_default = days;
+            renderDaysOptions();
+        } catch (error) {
+            message(`保存失败：${error.message}`, true);
         }
     }
 

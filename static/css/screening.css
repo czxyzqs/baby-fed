@@ -24,6 +24,20 @@
     background: var(--card-bg, rgba(255, 255, 255, 0.05)); border-radius: 14px; padding: 12px; margin-bottom: 12px;
 }
 .screening-settings h2 { font-size: 14px; margin-bottom: 8px; }
+.screening-stepper-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.screening-stepper-row h2 { margin-bottom: 0; }
+.screening-stepper {
+    display: flex; align-items: center;
+    border: 1px solid var(--border, #3a4453); border-radius: 10px; overflow: hidden;
+}
+.screening-stepper-btn {
+    width: 44px; height: 38px; border: none; background: transparent; color: inherit;
+    font-size: 20px; line-height: 1; cursor: pointer;
+}
+.screening-stepper-btn:first-child { border-right: 1px solid var(--border, #3a4453); }
+.screening-stepper-btn:last-child { border-left: 1px solid var(--border, #3a4453); }
+.screening-stepper-btn:disabled { opacity: 0.35; cursor: default; }
+.screening-stepper-value { min-width: 56px; text-align: center; font-size: 15px; font-weight: 700; }
 .screening-options, .screening-chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
 .screening-option, .screening-chip {
     border: 1px solid var(--border, #3a4453); background: transparent; color: inherit;
@@ -96,6 +110,8 @@ body.elder .screening-hint { font-size: 17px; }
 body.elder .screening-links a { font-size: 19px; padding: 12px 16px; min-height: 60px; border-radius: 14px; }
 body.elder .screening-settings h2 { font-size: 20px; }
 body.elder .screening-settings { padding: 16px; }
+body.elder .screening-stepper-btn { width: 56px; height: 56px; font-size: 26px; }
+body.elder .screening-stepper-value { min-width: 72px; font-size: 20px; }
 body.elder .screening-option, body.elder .screening-chip {
     font-size: 20px; padding: 13px 20px; border-radius: 22px; min-height: 60px; font-weight: 600;
 }
