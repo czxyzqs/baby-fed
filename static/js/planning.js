@@ -357,7 +357,7 @@
 
     function itemsForDate(day) {
         const blocks = schedule.blocks
-            .filter(block => day >= block.start_date && day <= addDays(block.start_date, block.days - 1))
+            .filter(block => !block.live && day >= block.start_date && day <= addDays(block.start_date, block.days - 1))
             .map(block => ({
                 kind: 'block', block,
                 offset: Math.round((new Date(day + 'T00:00:00') - new Date(block.start_date + 'T00:00:00')) / 86400000)
@@ -525,18 +525,23 @@
         if (!container) return;
         container.replaceChildren();
         const rows = [];
+        const dayDiff = (first, second) =>
+            Math.round((new Date(first + 'T00:00:00') - new Date(second + 'T00:00:00')) / 86400000);
         (schedule.rounds || []).forEach(item => {
+            // 已开始的排敏由观察行代表，不再重复画排期块；实际晚于计划时标注
+            const block = schedule.blocks.find(entry => entry.live && entry.food_id === item.food_id);
+            const delay = block ? dayDiff(item.start_date, block.start_date) : 0;
             rows.push({
                 sort: item.start_date, color: 'round',
-                text: `${dateRange(item.start_date, item.observe_days)} ${item.food_name} · 排敏观察中`
+                text: `${dateRange(item.start_date, item.observe_days)} ${item.food_name} · 排敏观察中${delay > 0 ? ` · 比计划晚${delay}天` : ''}`
             });
         });
-        schedule.blocks.forEach(block => {
+        schedule.blocks.filter(block => !block.live).forEach(block => {
             rows.push({
                 sort: block.start_date,
                 color: paletteMap[block.food_id] || 'seg-0',
                 text: `${dateRange(block.start_date, block.days)} ${foodName(block.food_id)} · 观察${block.days}天${block.pinned ? ' · 已固定📌' : ''}${block.stale ? ' · 已失效' : ''}`,
-                del: block.live ? null : {
+                del: {
                     path: `blocks/${block.id}`,
                     confirm: `删除「${foodName(block.food_id)}」的计划？食物将回到排敏队列末尾。`
                 }
