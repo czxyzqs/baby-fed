@@ -175,9 +175,16 @@
         element('add').disabled = true;
         element('save').disabled = true;
         element('empty').textContent = '';
+        // 从记录页的餐次卡片进入时日期餐次已知，隐藏选择器，标题直接说明
+        const contextKnown = Boolean(mealValue);
+        element('date-meal').hidden = contextKnown;
         element('modal').classList.add('active');
         document.body.style.overflow = 'hidden';
         await loadEditor(selectedDate, selectedMeal);
+        if (contextKnown) {
+            const [month, day] = selectedDate.slice(5).split('-');
+            element('title').textContent = `${meals[mealValue]} · ${Number(month)}月${Number(day)}日`;
+        }
         element('date').focus();
     }
 
