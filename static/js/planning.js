@@ -595,6 +595,17 @@
 
     function pauseDialog(dateStr) {
         const body = node('div', '', 'planning-dialog-body');
+        // 疫苗日：自动暂停所选日期的前后各 3 天
+        let vaccine = false;
+        const toggle = button('', () => {
+            vaccine = !vaccine;
+            toggle.classList.toggle('active', vaccine);
+            toggle.setAttribute('aria-pressed', String(vaccine));
+            applyVaccine();
+        }, 'planning-toggle');
+        toggle.setAttribute('aria-pressed', 'false');
+        toggle.append(node('span', '💉 疫苗日', 'planning-toggle-label'));
+        toggle.append(node('span', '前后3天自动暂停', 'planning-toggle-note'));
         const startLabel = node('label', '开始日期');
         const start = node('input', '', 'form-input');
         start.type = 'date';
@@ -608,9 +619,21 @@
         const reasonLabel = node('label', '原因（选填）');
         const reason = node('input', '', 'form-input');
         reason.maxLength = 50;
-        reason.placeholder = '例如：出去玩 / 打疫苗';
+        reason.placeholder = '出去玩 / 生病等';
         reasonLabel.append(reason);
-        body.append(startLabel, endLabel, reasonLabel);
+        function applyVaccine() {
+            if (vaccine) {
+                start.value = addDays(dateStr, -3);
+                end.value = addDays(dateStr, 3);
+                start.disabled = end.disabled = true;
+                if (!reason.value) reason.value = '疫苗日';
+            } else {
+                start.value = end.value = dateStr;
+                start.disabled = end.disabled = false;
+                if (reason.value === '疫苗日') reason.value = '';
+            }
+        }
+        body.append(toggle, startLabel, endLabel, reasonLabel);
         body.append(node('p', '暂停期间不安排新食物排敏，排期自动绕开。', 'planning-hint'));
         const actions = node('div', '', 'planning-actions');
         actions.append(button('取消', closeDialog));

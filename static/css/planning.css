@@ -115,6 +115,16 @@
 }
 .planning-dialog h2 { font-size: 17px; margin-bottom: 10px; }
 .planning-dialog-body label { display: block; font-size: 14px; margin: 12px 0 6px; }
+.planning-toggle {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    width: 100%; border: 1px solid var(--border, #3a4453); border-radius: 12px;
+    background: transparent; color: inherit; padding: 13px 14px;
+    font-size: 15px; cursor: pointer;
+}
+.planning-toggle.active { border-color: var(--accent, #4da3ff); background: rgba(77, 163, 255, 0.12); }
+.planning-toggle.active .planning-toggle-label { color: var(--accent, #4da3ff); font-weight: 700; }
+.planning-toggle-note { color: var(--text-muted, rgba(255, 255, 255, 0.45)); font-size: 13px; }
+.planning-toggle.active .planning-toggle-note { color: var(--accent, #4da3ff); }
 
 /* ===== 老年模式：正文≥20px，关键 22–24px，焦点≥60px，行距 1.5（BR-31） ===== */
 body.elder .planning-page { padding: 18px 14px 70px; }
@@ -143,6 +153,8 @@ body.elder .planning-pause { font-size: 13px; }
 body.elder .planning-elder-toggle { font-size: 19px; min-height: 60px; padding: 10px 16px; }
 body.elder .planning-dialog h2 { font-size: 23px; }
 body.elder .planning-dialog-body label { font-size: 20px; }
+body.elder .planning-toggle { font-size: 20px; min-height: 60px; padding: 14px; }
+body.elder .planning-toggle-note { font-size: 17px; }
 body.elder .planning-message { font-size: 18px; }
 body.elder .form-input { font-size: 20px; }
 
