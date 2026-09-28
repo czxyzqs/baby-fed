@@ -77,7 +77,7 @@
             list.append(node('p', '队列为空。可从食物池添加未排敏食物，或直接自动生成排期。', 'planning-hint'));
             return;
         }
-        schedule.queue.forEach(item => {
+        schedule.queue.forEach((item, index) => {
             const row = node('div', '', 'planning-queue-item');
             row.dataset.id = item.id;
             const handle = button('☰', () => {}, 'planning-queue-handle');
@@ -89,11 +89,16 @@
                 'planning-queue-meta'));
             main.addEventListener('click', () => queueItemDialog(item));
             const arrows = node('div', '', 'planning-queue-arrows');
-            const up = button('↑', () => queueChange(item.id, { move: 'up' }), 'planning-move');
-            up.setAttribute('aria-label', `${item.food_name}提前一位`);
-            const down = button('↓', () => queueChange(item.id, { move: 'down' }), 'planning-move');
-            down.setAttribute('aria-label', `${item.food_name}靠后一位`);
-            arrows.append(up, down);
+            if (index > 0) {
+                const up = button('↑', () => queueChange(item.id, { move: 'up' }), 'planning-move');
+                up.setAttribute('aria-label', `${item.food_name}提前一位`);
+                arrows.append(up);
+            }
+            if (index < schedule.queue.length - 1) {
+                const down = button('↓', () => queueChange(item.id, { move: 'down' }), 'planning-move');
+                down.setAttribute('aria-label', `${item.food_name}靠后一位`);
+                arrows.append(down);
+            }
             row.append(handle, main, arrows);
             enableDrag(row, list, item);
             list.append(row);
