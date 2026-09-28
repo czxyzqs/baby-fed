@@ -90,7 +90,7 @@
                 jump.href = '/screening';
                 card.append(jump);
             } else if (item.kind === 'upcoming') {
-                card.append(node('span', `⏭ ${item.food}（${item.text}）`, 'food-banner-text'));
+                card.append(node('span', `明天吃${item.food}`, 'food-banner-text'));
                 const jump = node('a', '排期 ›', 'food-banner-link');
                 jump.href = '/planning';
                 card.append(jump);

@@ -657,7 +657,6 @@ class FoodScreeningStore(FoodLibraryStore):
                 items.append({
                     'kind': 'upcoming', 'food_id': row['food_id'], 'food': row['food_name'],
                     'observe_days': row['days'],
-                    'text': f'明天开始排敏 · 观察{row["days"]}天',
                 })
             return {'date': today, 'items': items}
 
