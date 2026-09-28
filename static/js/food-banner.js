@@ -88,6 +88,9 @@
                 jump.href = '/screening';
                 card.append(jump);
             } else {
+                const check = node('span', item.eaten_today ? '✓' : '', 'banner-check' + (item.eaten_today ? ' checked' : ''));
+                check.setAttribute('aria-hidden', 'true');
+                card.append(check);
                 card.append(node('span', `${item.food}${item.text ? `（${item.text}）` : ''}`, 'food-banner-text'));
                 card.addEventListener('click', () => openFoodDialog(item));
                 card.style.cursor = 'pointer';

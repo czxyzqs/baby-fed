@@ -187,13 +187,30 @@
 .food-banner-item {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    gap: 14px;
     background: var(--card-bg, rgba(255, 255, 255, 0.06));
     border: 1px solid rgba(77, 163, 255, 0.35);
     border-radius: 14px;
     padding: 16px;
     margin-bottom: 8px;
+}
+.banner-check {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2.5px solid rgba(255, 255, 255, 0.35);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+}
+.banner-check.checked {
+    border-color: transparent;
+    background: linear-gradient(135deg, #00b894, #00d9a5);
 }
 .food-banner-due {
     border-color: rgba(230, 104, 76, 0.5);
@@ -208,6 +225,7 @@
     color: #ff9a80;
 }
 .food-banner-link {
+    margin-left: auto;
     color: var(--accent, #4da3ff);
     font-size: 22px;
     font-weight: 700;

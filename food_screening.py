@@ -600,6 +600,10 @@ class FoodScreeningStore(FoodLibraryStore):
             items = []
             rounds = self.latest_round_map(connection)
             names = {row['id']: row['name'] for row in connection.execute('SELECT id, name FROM foods')}
+            eaten_today_ids = {
+                row[0] for row in connection.execute(
+                    'SELECT DISTINCT food_id FROM food_entries WHERE date = ?', (today,))
+            }
             for food_id, latest in rounds.items():
                 if latest['status'] != 'active':
                     continue
@@ -618,8 +622,8 @@ class FoodScreeningStore(FoodLibraryStore):
                     items.append({
                         'kind': 'screening', 'food_id': food_id, 'food': names.get(food_id),
                         'position': position, 'eaten_days': eaten_days, 'observe_days': observe_days,
-                        'eaten_today': today in eaten,
-                        'text': f'第{position}天/{observe_days}天' + ('' if today in eaten else ' · 今天还没吃'),
+                        'eaten_today': food_id in eaten_today_ids,
+                        'text': f'第{position}天/{observe_days}天',
                     })
             for row in connection.execute(
                 "SELECT p.*, foods.name AS food_name FROM food_plan_blocks p JOIN foods ON foods.id = p.food_id "
@@ -633,6 +637,7 @@ class FoodScreeningStore(FoodLibraryStore):
                 items.append({
                     'kind': 'planned', 'food_id': row['food_id'], 'food': row['food_name'],
                     'position': index, 'observe_days': row['days'],
+                    'eaten_today': row['food_id'] in eaten_today_ids,
                     'text': f'第{index}天/{row["days"]}天',
                 })
             for row in connection.execute(
@@ -640,7 +645,10 @@ class FoodScreeningStore(FoodLibraryStore):
                 "WHERE n.start_date <= ? AND date(n.start_date, '+' || (n.days - 1) || ' days') >= ? ORDER BY n.start_date",
                 (today, today),
             ):
-                items.append({'kind': 'normal', 'food_id': row['food_id'], 'food': row['food_name'], 'text': ''})
+                items.append({
+                    'kind': 'normal', 'food_id': row['food_id'], 'food': row['food_name'],
+                    'eaten_today': row['food_id'] in eaten_today_ids, 'text': '',
+                })
             return {'date': today, 'items': items}
 
     def plans_for_date(self, value):
