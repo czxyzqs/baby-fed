@@ -91,7 +91,7 @@
                 card.append(jump);
             } else if (item.kind === 'upcoming') {
                 card.append(node('span', `明天吃${item.food}`, 'food-banner-text'));
-                const ack = node('button', '已备好', 'banner-ack');
+                const ack = node('button', '我知道了', 'banner-ack');
                 ack.type = 'button';
                 ack.addEventListener('click', async event => {
                     event.stopPropagation();
