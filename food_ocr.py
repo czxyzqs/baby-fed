@@ -1,17 +1,26 @@
-"""辅食库图片导入：RapidOCR 识别图中文字，MiniMax 提取品类与食物建议。"""
+"""辅食库图片导入：RapidOCR 识别图中文字，智谱 glm-5.3-flash 提取品类与食物建议。"""
 import io
 import json
 import os
 import re
+import urllib.error
 import urllib.request
 
 from flask import Blueprint, jsonify, request
 
 from food_library import FoodLibraryStore
 
-MINIMAX_API_KEY = os.getenv('MINIMAX_API_KEY', '')
-MINIMAX_BASE_URL = os.getenv('MINIMAX_BASE_URL', 'https://api.minimaxi.com/v1/chat/completions')
-MINIMAX_MODEL = os.getenv('MINIMAX_OCR_MODEL', 'MiniMax-M3')
+# 智谱 Coding Plan 专用端点（key 走订阅额度；普通端点 /api/paas/v4 会报 1113 余额不足）
+ZHIPU_API_KEY = os.getenv('ZHIPU_API_KEY', '')
+ZHIPU_BASE_URL = os.getenv(
+    'ZHIPU_BASE_URL',
+    'https://open.bigmodel.cn/api/coding/paas/v4/chat/completions',
+)
+ZHIPU_MODEL = os.getenv('ZHIPU_OCR_MODEL', 'glm-5.3-flash')
+
+# 链路预算：AI 超时 × 截断重试 1 次（45×2）+ OCR（实测 <2s）≈ 92s，
+# 必须小于 Dockerfile 里 gunicorn --timeout 120，否则 worker 被杀、前端 502
+AI_TIMEOUT_SECONDS = 45
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 ALLOWED_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
@@ -68,35 +77,43 @@ OCR 文字（按行）：
 6. 图片里没有可加入辅食库的食物时输出 {{"groups": []}}'''
 
 
-def call_minimax(prompt):
+def call_zhipu(prompt):
     payload = json.dumps({
-        'model': MINIMAX_MODEL,
+        'model': ZHIPU_MODEL,
         'messages': [{'role': 'user', 'content': prompt}],
-        'max_tokens': 32000,
+        'max_tokens': 8192,
         'temperature': 0.2,
     }).encode('utf-8')
     req = urllib.request.Request(
-        MINIMAX_BASE_URL,
+        ZHIPU_BASE_URL,
         data=payload,
         headers={
-            'Authorization': f'Bearer {MINIMAX_API_KEY}',
+            'Authorization': f'Bearer {ZHIPU_API_KEY}',
             'Content-Type': 'application/json; charset=utf-8',
         },
         method='POST',
     )
-    with urllib.request.urlopen(req, timeout=90) as resp:
-        data = json.loads(resp.read().decode('utf-8'))
+    try:
+        with urllib.request.urlopen(req, timeout=AI_TIMEOUT_SECONDS) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+    except urllib.error.HTTPError as exc:
+        raise OcrImportError(f'智谱 AI 接口返回错误（HTTP {exc.code}），请稍后重试', 502)
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise OcrImportError('智谱 AI 接口连接失败或超时，请稍后重试', 502)
+    except ValueError:
+        raise OcrImportError('智谱 AI 接口返回内容无法解析，请稍后重试', 502)
     choices = data.get('choices') or []
     if not choices:
         return '', ''
     choice = choices[0]
+    # 思考在 message.reasoning_content 独立字段，content 即纯净答案
     content = str((choice.get('message') or {}).get('content') or '')
     return content, str(choice.get('finish_reason') or '')
 
 
 def extract_groups(lines, snapshot):
-    if not MINIMAX_API_KEY:
-        raise OcrImportError('未配置 MINIMAX_API_KEY，无法智能提取', 503)
+    if not ZHIPU_API_KEY:
+        raise OcrImportError('未配置 ZHIPU_API_KEY，无法智能提取', 503)
     category_names = '、'.join(
         f"{row['name']}({row['emoji']})" for row in snapshot['categories']
     ) or '（暂无品类）'
@@ -104,12 +121,11 @@ def extract_groups(lines, snapshot):
     prompt = EXTRACT_PROMPT.format(
         lines='\n'.join(lines), categories=category_names, foods=food_names
     )
-    content, finish_reason = call_minimax(prompt)
+    content, finish_reason = call_zhipu(prompt)
     if finish_reason == 'length':
-        # M3 思考段长度随机波动，偶发耗尽输出预算；立即重试一次基本能抽到短思考
-        content, finish_reason = call_minimax(prompt)
-    # MiniMax-M 系列回复可能带 <think> 推理段，先剥离再取最外层 JSON
-    content = re.sub(r'<think>.*?</think>', '', content, flags=re.S)
+        content, finish_reason = call_zhipu(prompt)
+    # content 是纯净答案（思考在 reasoning_content，不混入 content），可能带 ```json 围栏，
+    # 直接取最外层 {…} 即可
     match = re.search(r'\{.*\}', content, flags=re.S)
     if match is None:
         if finish_reason == 'length':

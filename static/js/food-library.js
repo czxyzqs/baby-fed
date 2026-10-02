@@ -278,13 +278,13 @@
             return;
         }
         setBusy(true);
-        message('📷 正在识别图片，约需几秒钟…');
+        message('📷 正在识别图片（OCR 识别 + AI 提取），约需 5~15 秒，请稍候…');
         try {
             const form = new FormData();
             form.append('image', file);
             const response = await fetch('/api/food-library/ocr/import', { method: 'POST', body: form });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || '识别失败，请稍后重试');
+            const result = await response.json().catch(() => null);
+            if (!response.ok) throw new Error((result && result.error) || '识别失败，请稍后重试');
             if (!result.groups.length) {
                 message('没有从图片中识别出可添加的食物，请换一张更清晰的清单图片。', true);
                 return;
