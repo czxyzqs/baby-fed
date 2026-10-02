@@ -473,6 +473,27 @@ class FoodScreeningStore(FoodLibraryStore):
             self.repack(connection)
             return self.schedule_in(connection)
 
+    def update_round(self, identifier, data):
+        with self.connect() as connection:
+            row = connection.execute('SELECT * FROM food_rounds WHERE id = ?', (identifier,)).fetchone()
+            if row is None:
+                raise FoodLibraryError('观察轮次已不存在，请刷新后重试', 404)
+            if row['status'] != 'active':
+                raise FoodLibraryError('只有进行中的观察可以调整')
+            days = data.get('observe_days')
+            if type(days) is not int or not 1 <= days <= 14:
+                raise FoodLibraryError('观察天数只能是 1 到 14 天')
+            if days == row['observe_days']:
+                raise FoodLibraryError('没有需要修改的内容')
+            eaten = len(self.round_eaten_dates(connection, identifier))
+            if days < row['observe_days'] or days <= eaten:
+                raise FoodLibraryError('进行中的观察只能延长，且不能少于已吃天数')
+            connection.execute(
+                'UPDATE food_rounds SET observe_days = ? WHERE id = ?',
+                (days, identifier)
+            )
+            return self.schedule_in(connection)
+
     def update_block(self, identifier, data):
         with self.connect() as connection:
             row = connection.execute('SELECT * FROM food_plan_blocks WHERE id = ?', (identifier,)).fetchone()
@@ -937,6 +958,11 @@ def register_food_screening(app, data_dir):
         if request.method == 'DELETE':
             return jsonify({'success': True, **store.delete_block(block_id)})
         return jsonify({'success': True, **store.update_block(block_id, payload())})
+
+    @blueprint.put('/rounds/<int:round_id>')
+    def change_round(round_id):
+        identifier(round_id)
+        return jsonify({'success': True, **store.update_round(round_id, payload())})
 
     @blueprint.post('/pauses')
     def add_pause_segment():

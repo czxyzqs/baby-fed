@@ -123,18 +123,7 @@
             'planning-hint'));
         const state = { days: item.observe_days };
         const daysLabel = node('label', '观察天数（1–14 天）');
-        const daysRow = node('div', '', 'planning-queue-days planning-queue-days-dialog');
-        const minus = button('－', () => {
-            state.days = Math.max(1, state.days - 1);
-            value.textContent = `观察${state.days}天`;
-        });
-        const value = node('span', `观察${state.days}天`, 'planning-queue-days-value');
-        const plus = button('＋', () => {
-            state.days = Math.min(14, state.days + 1);
-            value.textContent = `观察${state.days}天`;
-        });
-        daysRow.append(minus, value, plus);
-        daysLabel.append(daysRow);
+        daysLabel.append(daysStepper(state, 1, 14));
         body.append(daysLabel);
         body.append(node('p', '调整顺序：点队列行的 ↑↓，或长按 ☰ 拖动。', 'planning-hint'));
         const footer = node('div', '', 'planning-actions');
@@ -538,7 +527,8 @@
             const delay = block ? dayDiff(item.start_date, block.start_date) : 0;
             rows.push({
                 sort: item.start_date, color: 'round',
-                text: `${dateRange(item.start_date, item.observe_days)} ${item.food_name} · 排敏观察中${delay > 0 ? ` · 比计划晚${delay}天` : ''}`
+                text: `${dateRange(item.start_date, item.observe_days)} ${item.food_name} · 排敏观察中${delay > 0 ? ` · 比计划晚${delay}天` : ''}`,
+                edit: { type: 'round', item }
             });
         });
         schedule.blocks.filter(block => !block.live).forEach(block => {
@@ -546,6 +536,7 @@
                 sort: block.start_date,
                 color: paletteMap[block.food_id] || 'seg-0',
                 text: `${dateRange(block.start_date, block.days)} ${foodName(block.food_id)} · 观察${block.days}天${block.pinned ? ' · 已固定📌' : ''}${block.stale ? ' · 已失效' : ''}`,
+                edit: block.stale ? null : { type: 'block', block },
                 del: {
                     path: `blocks/${block.id}`,
                     confirm: `删除「${foodName(block.food_id)}」的计划？食物将回到排敏队列末尾。`
@@ -576,6 +567,14 @@
             const line = node('div', '', 'planning-agenda-row');
             line.append(node('span', '', 'planning-agenda-dot ' + row.color));
             line.append(node('span', row.text, 'planning-agenda-text'));
+            if (row.edit) {
+                const edit = node('button', '改', 'planning-agenda-edit');
+                edit.type = 'button';
+                edit.setAttribute('aria-label', `修改日期段：${row.text}`);
+                edit.addEventListener('click', () =>
+                    row.edit.type === 'round' ? editRoundDialog(row.edit.item) : editBlockDialog(row.edit.block));
+                line.append(edit);
+            }
             if (row.del) {
                 const del = node('button', '✕', 'planning-agenda-del');
                 del.type = 'button';
@@ -591,6 +590,92 @@
         const date = new Date(value + 'T00:00:00');
         date.setDate(date.getDate() + count);
         return iso(date);
+    }
+
+    // 观察天数步进器（弹窗内复用）：limit 传 [min, max]
+    function daysStepper(state, min, max) {
+        const row = node('div', '', 'planning-queue-days planning-queue-days-dialog');
+        const minus = button('－', () => {
+            state.days = Math.max(min, state.days - 1);
+            value.textContent = `观察${state.days}天`;
+        });
+        const value = node('span', `观察${state.days}天`, 'planning-queue-days-value');
+        const plus = button('＋', () => {
+            state.days = Math.min(max, state.days + 1);
+            value.textContent = `观察${state.days}天`;
+        });
+        row.append(minus, value, plus);
+        return row;
+    }
+
+    function editRoundDialog(item) {
+        const body = node('div', '', 'planning-dialog-body');
+        body.append(node('p', `「${item.food_name}」已于 ${item.start_date.slice(5).replace('-', '/')} 开始，开始日期不可改，只能延长观察期。`, 'planning-hint'));
+        const state = { days: item.observe_days };
+        const daysLabel = node('label', `观察天数（当前 ${item.observe_days} 天，只能延长）`);
+        daysLabel.append(daysStepper(state, item.observe_days, 14));
+        body.append(daysLabel);
+        body.append(node('p', '延长后判定日期顺延；与后续排期重叠时可用一键重排。', 'planning-hint'));
+        const actions = node('div', '', 'planning-actions');
+        actions.append(button('取消', closeDialog));
+        actions.append(button('保存', async () => {
+            if (state.days === item.observe_days) {
+                closeDialog();
+                return;
+            }
+            try {
+                const result = await api(`rounds/${item.id}`, 'PUT', { observe_days: state.days });
+                applySchedule(result);
+                closeDialog();
+                toast(result.conflicts.length ? '观察期已延长（存在观察期重叠，可一键重排）' : `「${item.food_name}」观察期已延长到 ${state.days} 天`);
+            } catch (error) {
+                message(`保存失败：${error.message}`, true);
+            }
+        }, 'planning-btn primary'));
+        body.append(actions);
+        openDialog(`修改观察期 · ${item.food_name}`, body);
+    }
+
+    function editBlockDialog(block) {
+        const body = node('div', '', 'planning-dialog-body');
+        const startLabel = node('label', '开始日期');
+        const start = node('input', '', 'form-input');
+        start.type = 'date';
+        start.value = block.start_date;
+        start.min = addDays(schedule.today, 1);
+        startLabel.append(start);
+        body.append(startLabel);
+        const state = { days: block.days };
+        const daysLabel = node('label', '观察天数（1–14 天）');
+        daysLabel.append(daysStepper(state, 1, 14));
+        body.append(daysLabel);
+        body.append(node('p', '改开始日期后排期会固定 📌，不再被自动顺延挪动。', 'planning-hint'));
+        const actions = node('div', '', 'planning-actions');
+        actions.append(button('取消', closeDialog));
+        actions.append(button('保存', async () => {
+            if (!start.value) {
+                message('请选择开始日期', true);
+                return;
+            }
+            const data = { start_date: start.value, days: state.days };
+            if (data.start_date === block.start_date && data.days === block.days) {
+                closeDialog();
+                return;
+            }
+            try {
+                const result = await api(`blocks/${block.id}`, 'PUT', data);
+                applySchedule(result);
+                closeDialog();
+                const moved = data.start_date !== block.start_date;
+                toast(result.conflicts.length
+                    ? '排期已修改（存在观察期重叠，可一键重排）'
+                    : (moved ? `「${foodName(block.food_id)}」已改到 ${start.value.slice(5).replace('-', '/')} 并固定 📌` : `「${foodName(block.food_id)}」排期已修改`));
+            } catch (error) {
+                message(`保存失败：${error.message}`, true);
+            }
+        }, 'planning-btn primary'));
+        body.append(actions);
+        openDialog(`修改排期 · ${foodName(block.food_id)}`, body);
     }
 
     function pauseDialog(dateStr) {
