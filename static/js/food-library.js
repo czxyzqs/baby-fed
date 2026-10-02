@@ -428,7 +428,7 @@
                             emoji: group.newEmoji.trim() || '🥣',
                             is_high_allergen: group.newAllergen
                         });
-                        categoryId = result;
+                        categoryId = result.id ?? result;
                         createdCategories += 1;
                     } catch (error) {
                         group.foods.forEach(food => failed.push(`${food.name}（品类创建失败：${error.message}）`));
