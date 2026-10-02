@@ -71,7 +71,7 @@ def call_minimax(prompt):
     payload = json.dumps({
         'model': MINIMAX_MODEL,
         'messages': [{'role': 'user', 'content': prompt}],
-        'max_tokens': 2000,
+        'max_tokens': 6000,
         'temperature': 0.2,
     }).encode('utf-8')
     req = urllib.request.Request(
@@ -86,7 +86,11 @@ def call_minimax(prompt):
     with urllib.request.urlopen(req, timeout=90) as resp:
         data = json.loads(resp.read().decode('utf-8'))
     choices = data.get('choices') or []
-    return str((choices[0].get('message') or {}).get('content') or '') if choices else ''
+    if not choices:
+        return '', ''
+    choice = choices[0]
+    content = str((choice.get('message') or {}).get('content') or '')
+    return content, str(choice.get('finish_reason') or '')
 
 
 def extract_groups(lines, snapshot):
@@ -99,11 +103,13 @@ def extract_groups(lines, snapshot):
     prompt = EXTRACT_PROMPT.format(
         lines='\n'.join(lines), categories=category_names, foods=food_names
     )
-    content = call_minimax(prompt)
+    content, finish_reason = call_minimax(prompt)
     # MiniMax-M 系列回复可能带 <think> 推理段，先剥离再取最外层 JSON
     content = re.sub(r'<think>.*?</think>', '', content, flags=re.S)
     match = re.search(r'\{.*\}', content, flags=re.S)
     if match is None:
+        if finish_reason == 'length':
+            raise OcrImportError('图片里的内容太多，AI 输出被截断，请分块截图后重试', 502)
         raise OcrImportError('AI 返回结果无法解析，请重试或换一张更清晰的图片', 502)
     try:
         groups = json.loads(match.group(0)).get('groups') or []
