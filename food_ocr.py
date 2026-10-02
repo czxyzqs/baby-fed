@@ -72,7 +72,7 @@ def call_minimax(prompt):
     payload = json.dumps({
         'model': MINIMAX_MODEL,
         'messages': [{'role': 'user', 'content': prompt}],
-        'max_tokens': 6000,
+        'max_tokens': 32000,
         'temperature': 0.2,
     }).encode('utf-8')
     req = urllib.request.Request(
@@ -105,6 +105,9 @@ def extract_groups(lines, snapshot):
         lines='\n'.join(lines), categories=category_names, foods=food_names
     )
     content, finish_reason = call_minimax(prompt)
+    if finish_reason == 'length':
+        # M3 思考段长度随机波动，偶发耗尽输出预算；立即重试一次基本能抽到短思考
+        content, finish_reason = call_minimax(prompt)
     # MiniMax-M 系列回复可能带 <think> 推理段，先剥离再取最外层 JSON
     content = re.sub(r'<think>.*?</think>', '', content, flags=re.S)
     match = re.search(r'\{.*\}', content, flags=re.S)
