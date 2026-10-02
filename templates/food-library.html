@@ -31,6 +31,7 @@
                 <div class="food-library-actions">
                     <button type="button" class="food-library-primary" id="food-library-add-food">＋ 新增食物</button>
                     <button type="button" id="food-library-add-category">＋ 新增品类</button>
+                    <button type="button" id="food-library-ocr">📷 拍照导入</button>
                     <button type="button" id="food-library-refresh">刷新</button>
                 </div>
             </div>
@@ -60,6 +61,16 @@
                 <button type="button" id="food-library-cancel">返回食物池</button>
             </div>
         </form>
+        <div id="food-library-ocr-panel" hidden>
+            <h2>📷 识别结果</h2>
+            <p id="food-library-ocr-lines" class="food-library-hint"></p>
+            <div id="food-library-ocr-groups"></div>
+            <div class="food-library-actions">
+                <button type="button" class="food-library-primary" id="food-library-ocr-confirm">导入勾选的食物</button>
+                <button type="button" id="food-library-ocr-cancel">取消</button>
+            </div>
+        </div>
+        <input type="file" id="food-library-ocr-file" accept="image/jpeg,image/png,image/webp" hidden>
     </main>
 </body>
 </html>

@@ -189,3 +189,84 @@
 .food-library-tab.active { background: var(--accent, #4da3ff); color: #fff; }
 
 body.elder .food-library-tab { font-size: 19px; padding: 13px 18px; border-radius: 22px; min-height: 60px; }
+
+/* 拍照导入：识别结果确认面板 */
+#food-library-ocr-panel h2 {
+    margin-bottom: 10px;
+}
+
+#food-library-ocr-lines {
+    margin-bottom: 14px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.food-library-ocr-group {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.food-library-ocr-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.food-library-ocr-head .form-input {
+    max-width: 220px;
+}
+
+.food-library-ocr-new {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.food-library-ocr-new .form-input {
+    max-width: 160px;
+}
+
+.food-library-ocr-foods {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.food-library-ocr-food {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.food-library-ocr-food input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    flex: none;
+}
+
+.food-library-ocr-food .form-input {
+    max-width: 260px;
+}
+
+.food-library-ocr-badge {
+    flex: none;
+    font-size: 13px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-secondary, var(--text-primary));
+    opacity: 0.75;
+}
+
+body.elder .food-library-ocr-head .form-input,
+body.elder .food-library-ocr-food .form-input {
+    max-width: 300px;
+}

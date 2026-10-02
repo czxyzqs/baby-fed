@@ -3,6 +3,7 @@
     let loaded = false;
     let busy = false;
     let editor = null;
+    let ocrState = null;
     let requestVersion = 0;
     let activeCategory = '';
     const element = id => document.getElementById(`food-library-${id}`);
@@ -177,7 +178,9 @@
 
     function showPool() {
         editor = null;
+        ocrState = null;
         element('editor').hidden = true;
+        element('ocr-panel').hidden = true;
         element('pool').hidden = false;
         window.scrollTo(0, 0);
     }
@@ -260,10 +263,218 @@
         await mutate(`/${kind === 'food' ? 'foods' : 'categories'}/${item.id}`, 'DELETE', undefined, `已删除${label}`);
     }
 
+    // ---------- 拍照导入：OCR 识别 + 确认入库 ----------
+
+    async function uploadOcrImage(event) {
+        const file = event.target.files[0];
+        event.target.value = '';
+        if (!file || busy) return;
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+            message('仅支持 JPG、PNG、WebP 格式的图片', true);
+            return;
+        }
+        if (file.size > 8 * 1024 * 1024) {
+            message('图片不能超过 8MB，请压缩后重试', true);
+            return;
+        }
+        setBusy(true);
+        message('📷 正在识别图片，约需几秒钟…');
+        try {
+            const form = new FormData();
+            form.append('image', file);
+            const response = await fetch('/api/food-library/ocr/import', { method: 'POST', body: form });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || '识别失败，请稍后重试');
+            if (!result.groups.length) {
+                message('没有从图片中识别出可添加的食物，请换一张更清晰的清单图片。', true);
+                return;
+            }
+            showOcrPanel(result);
+            message();
+        } catch (error) {
+            message(`识别失败：${error.message}`, true);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    function showOcrPanel(result) {
+        ocrState = result.groups.map(group => ({
+            categoryId: group.existing_category_id === null ? 'new' : String(group.existing_category_id),
+            newName: group.category_name,
+            newEmoji: group.emoji || '🥣',
+            newAllergen: group.is_high_allergen === true,
+            foods: (group.foods || []).map(food => ({
+                name: food.name, exists: food.exists === true, checked: !food.exists
+            }))
+        }));
+        element('ocr-lines').textContent = `识别文字：${result.lines.join(' / ')}`;
+        element('pool').hidden = true;
+        element('editor').hidden = true;
+        element('ocr-panel').hidden = false;
+        renderOcrGroups();
+        window.scrollTo(0, 0);
+    }
+
+    function renderOcrGroups() {
+        const container = element('ocr-groups');
+        container.replaceChildren();
+        ocrState.forEach((group, groupIndex) => {
+            const card = document.createElement('div');
+            card.className = 'food-library-ocr-group';
+            const head = document.createElement('div');
+            head.className = 'food-library-ocr-head';
+            const categorySelect = document.createElement('select');
+            categorySelect.className = 'form-input';
+            library.categories.forEach(category => {
+                categorySelect.add(new Option(`${category.emoji} ${category.name}`, String(category.id)));
+            });
+            if (library.categories.length < 20) categorySelect.add(new Option('➕ 新建品类…', 'new'));
+            if ([...categorySelect.options].some(option => option.value === group.categoryId)) {
+                categorySelect.value = group.categoryId;
+            }
+            categorySelect.addEventListener('change', () => {
+                group.categoryId = categorySelect.value;
+                renderOcrGroups();
+            });
+            head.append(categorySelect);
+            const toggle = action(group.foods.every(food => food.checked) ? '全不选' : '全选', () => {
+                const target = !group.foods.every(food => food.checked);
+                group.foods.forEach(food => { food.checked = target; });
+                renderOcrGroups();
+            });
+            head.append(toggle);
+            card.append(head);
+            if (group.categoryId === 'new') {
+                const creator = document.createElement('div');
+                creator.className = 'food-library-ocr-new';
+                const nameInput = document.createElement('input');
+                nameInput.className = 'form-input';
+                nameInput.placeholder = '新品类名称';
+                nameInput.maxLength = 30;
+                nameInput.value = group.newName;
+                nameInput.addEventListener('input', () => { group.newName = nameInput.value; });
+                const emojiInput = document.createElement('input');
+                emojiInput.className = 'form-input';
+                emojiInput.placeholder = '图标';
+                emojiInput.maxLength = 16;
+                emojiInput.value = group.newEmoji;
+                emojiInput.addEventListener('input', () => { group.newEmoji = emojiInput.value; });
+                const allergenLabel = document.createElement('label');
+                allergenLabel.className = 'food-library-checkbox';
+                const allergenInput = document.createElement('input');
+                allergenInput.type = 'checkbox';
+                allergenInput.checked = group.newAllergen;
+                allergenInput.addEventListener('change', () => { group.newAllergen = allergenInput.checked; });
+                allergenLabel.append(allergenInput, document.createTextNode(' 高致敏品类'));
+                creator.append(nameInput, emojiInput, allergenLabel);
+                card.append(creator);
+            }
+            const list = document.createElement('div');
+            list.className = 'food-library-ocr-foods';
+            group.foods.forEach((food, foodIndex) => {
+                const row = document.createElement('label');
+                row.className = 'food-library-ocr-food';
+                const check = document.createElement('input');
+                check.type = 'checkbox';
+                check.checked = food.checked;
+                check.addEventListener('change', () => { food.checked = check.checked; });
+                const nameInput = document.createElement('input');
+                nameInput.className = 'form-input';
+                nameInput.value = food.name;
+                nameInput.maxLength = 50;
+                nameInput.addEventListener('input', () => { food.name = nameInput.value; });
+                row.append(check, nameInput);
+                if (food.exists) {
+                    const badge = document.createElement('span');
+                    badge.className = 'food-library-ocr-badge';
+                    badge.textContent = '已有';
+                    row.append(badge);
+                }
+                list.append(row);
+            });
+            card.append(list);
+            container.append(card);
+        });
+    }
+
+    async function confirmOcrImport() {
+        if (busy || !ocrState) return;
+        const picked = ocrState.map(group => ({
+            ...group,
+            foods: group.foods.filter(food => food.checked && food.name.trim())
+        })).filter(group => group.foods.length);
+        if (!picked.length) {
+            message('请先勾选要导入的食物', true);
+            return;
+        }
+        if (picked.some(group => group.categoryId === 'new' && !group.newName.trim())) {
+            message('请填写新建品类的名称', true);
+            return;
+        }
+        setBusy(true);
+        message('正在导入…');
+        let createdCategories = 0;
+        let createdFoods = 0;
+        const skipped = [];
+        const failed = [];
+        try {
+            for (const group of picked) {
+                let categoryId = Number(group.categoryId);
+                if (group.categoryId === 'new') {
+                    try {
+                        const result = await api('/categories', 'POST', {
+                            name: group.newName.trim(),
+                            emoji: group.newEmoji.trim() || '🥣',
+                            is_high_allergen: group.newAllergen
+                        });
+                        categoryId = result;
+                        createdCategories += 1;
+                    } catch (error) {
+                        group.foods.forEach(food => failed.push(`${food.name}（品类创建失败：${error.message}）`));
+                        continue;
+                    }
+                }
+                for (const food of group.foods) {
+                    try {
+                        await api('/foods', 'POST', { name: food.name.trim(), category_id: categoryId });
+                        createdFoods += 1;
+                    } catch (error) {
+                        if (error.message.includes('同名')) skipped.push(food.name);
+                        else failed.push(`${food.name}：${error.message}`);
+                    }
+                }
+            }
+            const parts = [`已导入 ${createdFoods} 个食物`];
+            if (createdCategories) parts.push(`${createdCategories} 个新品类`);
+            if (skipped.length) parts.push(`${skipped.length} 个已存在跳过`);
+            if (failed.length) parts.push(`${failed.length} 个失败`);
+            window.showToast?.(parts.join('，'));
+            if (failed.length) {
+                message(`部分导入失败：${failed.join('；')}`, true);
+            } else {
+                message();
+            }
+            showPool();
+            await load();
+        } finally {
+            setBusy(false);
+        }
+    }
+
     element('search').addEventListener('input', render);
     element('refresh').addEventListener('click', load);
     element('add-food').addEventListener('click', () => openEditor('food'));
     element('add-category').addEventListener('click', () => openEditor('category'));
+    element('ocr').addEventListener('click', () => {
+        if (!busy) element('ocr-file').click();
+    });
+    element('ocr-file').addEventListener('change', uploadOcrImage);
+    element('ocr-confirm').addEventListener('click', confirmOcrImport);
+    element('ocr-cancel').addEventListener('click', () => {
+        showPool();
+        message();
+    });
     element('cancel').addEventListener('click', () => {
         showPool();
         message();
