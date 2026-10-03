@@ -83,6 +83,8 @@ def call_zhipu(prompt):
         'messages': [{'role': 'user', 'content': prompt}],
         'max_tokens': 8192,
         'temperature': 0.2,
+        # 结构化提取不需要深度思考；实测关闭后 2s 级（开着要 17~45s 且方差大）
+        'thinking': {'type': 'disabled'},
     }).encode('utf-8')
     req = urllib.request.Request(
         ZHIPU_BASE_URL,
