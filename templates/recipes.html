@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>辅食食谱 · 豚豚喂养记录</title>
+    <script>
+        try {
+            if (localStorage.getItem('theme') === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        } catch (error) {}
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/recipes.css') }}">
+    <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/recipes.js') }}"></script>
+</head>
+<body>
+    <main class="recipes recipes-page" id="recipes-page" aria-labelledby="recipes-title">
+        <header class="recipes-page-header">
+            <a class="recipes-back" href="/food-hub">← 辅食中心</a>
+            <h1 id="recipes-title">📖 辅食食谱</h1>
+        </header>
+        <noscript><p class="recipes-message">请启用浏览器 JavaScript 后使用辅食食谱。</p></noscript>
+        <p id="recipes-message" class="recipes-message" role="status" aria-live="polite" hidden></p>
+
+        <div id="recipes-list-view">
+            <div class="recipes-toolbar">
+                <label for="recipes-search">搜索食谱</label>
+                <input id="recipes-search" class="form-input" type="search"
+                       placeholder="菜名、食材、做法关键词，如：西兰花 米糊" autocomplete="off">
+                <div class="recipes-actions">
+                    <button type="button" class="recipes-primary" id="recipes-ocr">📷 拍照收藏</button>
+                    <button type="button" id="recipes-refresh">刷新</button>
+                </div>
+            </div>
+            <p id="recipes-count" class="recipes-hint"></p>
+            <div id="recipes-list" class="recipes-grid"></div>
+        </div>
+
+        <div id="recipes-detail" hidden>
+            <button type="button" class="recipes-back-btn" id="recipes-detail-back">← 返回列表</button>
+            <div id="recipes-detail-body"></div>
+        </div>
+
+        <div id="recipes-editor" hidden>
+            <h2 id="recipes-editor-title">收藏食谱</h2>
+            <img id="recipes-editor-preview" class="recipes-editor-preview" alt="食谱图片预览" hidden>
+            <div class="form-group">
+                <label for="recipes-field-title">菜名</label>
+                <input id="recipes-field-title" class="form-input" maxlength="60" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="recipes-field-months">适领最小月龄（月）</label>
+                <input id="recipes-field-months" class="form-input" type="number" min="4" max="36" value="6">
+            </div>
+            <div class="form-group">
+                <label for="recipes-field-ingredients">食材（用顿号、逗号或空格分隔）</label>
+                <input id="recipes-field-ingredients" class="form-input" autocomplete="off" placeholder="西兰花、米粉">
+            </div>
+            <div class="form-group">
+                <label for="recipes-field-steps">做法步骤（一步一行）</label>
+                <textarea id="recipes-field-steps" class="form-input" rows="8"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="recipes-field-note">备注（选填）</label>
+                <input id="recipes-field-note" class="form-input" maxlength="200" autocomplete="off">
+            </div>
+            <div class="recipes-actions">
+                <button type="button" class="recipes-primary" id="recipes-save">保存</button>
+                <button type="button" id="recipes-cancel">取消</button>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

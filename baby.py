@@ -20,6 +20,7 @@ from food_library import register_food_library
 from food_entries import register_food_entries
 from food_screening import register_food_screening
 from food_ocr import register_food_ocr
+from food_recipes import register_food_recipes
 from storage import BackupNotFoundError, JsonRecordStore, StorageError, StorageValidationError
 from storage import record_time as stored_record_time
 
@@ -113,6 +114,7 @@ DATA_DIR = os.getenv('BABY_DATA_DIR', os.path.join(BASE_DIR, 'data'))
 record_store = JsonRecordStore(DATA_DIR)
 register_food_library(app, DATA_DIR)
 register_food_ocr(app, DATA_DIR)
+register_food_recipes(app, DATA_DIR)
 register_food_entries(app, DATA_DIR)
 register_food_screening(app, DATA_DIR)
 BABY_BIRTH_DATE = '2026-03-08'  # 宝宝出生日期
@@ -754,6 +756,16 @@ def get_dashboard():
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['X-Records-Version'] = records_file_version()
     return response
+
+
+@app.route('/food-hub')
+def food_hub_page():
+    return render_template('food-hub.html')
+
+
+@app.route('/recipes')
+def recipes_page():
+    return render_template('recipes.html')
 
 
 @app.route('/food-library')

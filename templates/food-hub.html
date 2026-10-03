@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>辅食中心 · 豚豚喂养记录</title>
+    <script>
+        try {
+            if (localStorage.getItem('theme') === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        } catch (error) {}
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-hub.css') }}">
+</head>
+<body>
+    <main class="food-hub food-hub-page" aria-labelledby="food-hub-title">
+        <header class="food-hub-header">
+            <a class="food-hub-back" href="/">← 返回首页</a>
+            <h1 id="food-hub-title">🥣 辅食中心</h1>
+        </header>
+        <nav class="food-hub-grid" aria-label="辅食功能入口">
+            <a class="food-hub-card" href="/food-history">
+                <span class="food-hub-icon" aria-hidden="true">📋</span>
+                <span class="food-hub-name">辅食记录</span>
+                <span class="food-hub-desc">每天吃了什么、进食与反应</span>
+            </a>
+            <a class="food-hub-card" href="/food-library">
+                <span class="food-hub-icon" aria-hidden="true">🥄</span>
+                <span class="food-hub-name">辅食库</span>
+                <span class="food-hub-desc">品类与食物池，拍照导入</span>
+            </a>
+            <a class="food-hub-card" href="/screening">
+                <span class="food-hub-icon" aria-hidden="true">🩺</span>
+                <span class="food-hub-name">排敏看板</span>
+                <span class="food-hub-desc">观察轮次与反应判定</span>
+            </a>
+            <a class="food-hub-card" href="/planning">
+                <span class="food-hub-icon" aria-hidden="true">📅</span>
+                <span class="food-hub-name">排敏规划</span>
+                <span class="food-hub-desc">排期日历、暂停段与队列</span>
+            </a>
+            <a class="food-hub-card food-hub-card-new" href="/recipes">
+                <span class="food-hub-icon" aria-hidden="true">📖</span>
+                <span class="food-hub-name">辅食食谱</span>
+                <span class="food-hub-desc">拍照收藏食谱，按食材搜索</span>
+            </a>
+        </nav>
+    </main>
+</body>
+</html>
