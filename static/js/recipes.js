@@ -125,6 +125,10 @@
             message(`加载失败：${error.message}。请点击“刷新”重试。`, true);
         } finally {
             setBusy(false);
+            if (searchQueued) {
+                searchQueued = false;
+                load();
+            }
         }
     }
 
@@ -327,10 +331,12 @@
     }
 
     let searchTimer = null;
+    let searchQueued = false;
     element('search').addEventListener('input', () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(() => {
-            if (!busy) load();
+            if (busy) { searchQueued = true; return; }
+            load();
         }, 250);
     });
     element('refresh').addEventListener('click', () => { if (!busy) load(); });
