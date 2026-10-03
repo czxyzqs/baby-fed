@@ -1679,3 +1679,6 @@
 body.elder .sdp-trigger { font-size: 19px; padding: 14px; }
 body.elder .sdp-day { font-size: 17px; padding: 11px 0; }
 body.elder .sdp-today { font-size: 17px; }
+
+/* 首页字号模式：默认大字（老年模式），关闭 elder 即正常模式，整页等比缩小（仅首页） */
+body.page-index:not(.elder) { zoom: 0.8; }

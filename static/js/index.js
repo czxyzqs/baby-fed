@@ -2672,3 +2672,20 @@ async function saveSupplementSettings() {
     button.textContent = '保存';
   }
 }
+
+// ---------- 字号模式切换（老年模式默认开启，切换记忆与排敏看板共用 elder-mode） ----------
+(function () {
+  const fontModeBtn = document.getElementById('font-mode-btn');
+  function applyElder(on) {
+    document.body.classList.toggle('elder', on);
+    if (fontModeBtn) fontModeBtn.textContent = on ? 'A- 标准' : 'A+ 大字';
+  }
+  if (fontModeBtn) {
+    applyElder(document.body.classList.contains('elder'));
+    fontModeBtn.addEventListener('click', () => {
+      const on = !document.body.classList.contains('elder');
+      applyElder(on);
+      try { localStorage.setItem('elder-mode', on ? '1' : '0'); } catch (error) {}
+    });
+  }
+})();
