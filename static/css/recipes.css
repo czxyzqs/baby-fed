@@ -232,13 +232,94 @@
 #recipes-editor h2 { margin-bottom: 14px; }
 
 .recipes-editor-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.recipes-editor-thumb {
+    position: relative;
+    width: 104px;
+    height: 104px;
+    border-radius: 12px;
+    overflow: visible;
+    border: none;
+    padding: 0;
+    background: none;
+}
+
+.recipes-editor-thumb img {
     width: 100%;
-    max-height: 300px;
-    object-fit: contain;
+    height: 100%;
+    object-fit: cover;
     border-radius: 12px;
     border: 1px solid var(--border);
-    margin-bottom: 14px;
-    background: rgba(255, 255, 255, 0.03);
+    display: block;
+}
+
+.recipes-editor-thumb-del {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(230, 104, 76, 0.9);
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.recipes-editor-thumb-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary, var(--text-primary));
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.recipes-editor-thumb-add:hover { border-color: var(--text-secondary, #888); }
+
+.recipes-card-cover {
+    position: relative;
+}
+
+.recipes-card-more {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+}
+
+.recipes-detail-gallery {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.recipes-detail-gallery.many {
+    flex-direction: row;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 6px;
+}
+
+.recipes-detail-gallery.many .recipes-detail-image {
+    flex: 0 0 86%;
+    scroll-snap-align: center;
+    max-height: 420px;
+    cursor: zoom-in;
 }
 
 #recipes-editor .form-input { width: 100%; }

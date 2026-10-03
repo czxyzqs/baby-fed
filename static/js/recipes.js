@@ -2,7 +2,7 @@
     let recipes = [];
     let loaded = false;
     let busy = false;
-    let editing = null;      // { id: number | null, image_name: string }
+    let editing = null;      // { id: number | null, images: string[] }
     const element = id => document.getElementById(`recipes-${id}`);
 
     function message(text = '', error = false) {
@@ -58,13 +58,23 @@
             card.type = 'button';
             card.className = 'recipes-card';
             card.addEventListener('click', () => showDetail(item.id));
-            if (item.image) {
+            const images = item.images || [];
+            if (images.length) {
+                const cover = document.createElement('div');
+                cover.className = 'recipes-card-cover';
                 const img = document.createElement('img');
                 img.className = 'recipes-card-image';
                 img.loading = 'lazy';
-                img.src = `/api/food-recipes/images/${item.image}`;
+                img.src = `/api/food-recipes/images/${images[0]}`;
                 img.alt = item.title;
-                card.append(img);
+                cover.append(img);
+                if (images.length > 1) {
+                    const more = document.createElement('span');
+                    more.className = 'recipes-card-more';
+                    more.textContent = `${images.length} 图`;
+                    cover.append(more);
+                }
+                card.append(cover);
             } else {
                 const ph = document.createElement('div');
                 ph.className = 'recipes-card-image recipes-card-placeholder';
@@ -137,12 +147,20 @@
         if (!item) return;
         const body = element('detail-body');
         body.replaceChildren();
-        if (item.image) {
-            const img = document.createElement('img');
-            img.className = 'recipes-detail-image';
-            img.src = `/api/food-recipes/images/${item.image}`;
-            img.alt = item.title;
-            body.append(img);
+        const images = item.images || [];
+        if (images.length) {
+            const gallery = document.createElement('div');
+            gallery.className = images.length > 1 ? 'recipes-detail-gallery many' : 'recipes-detail-gallery';
+            images.forEach(name => {
+                const img = document.createElement('img');
+                img.className = 'recipes-detail-image';
+                img.loading = 'lazy';
+                img.src = `/api/food-recipes/images/${name}`;
+                img.alt = item.title;
+                img.addEventListener('click', () => window.open(img.src, '_blank'));
+                gallery.append(img);
+            });
+            body.append(gallery);
         }
         const head = document.createElement('div');
         head.className = 'recipes-detail-head';
@@ -212,19 +230,48 @@
         return value.split(/[、,，\s]+/).map(name => name.trim()).filter(Boolean);
     }
 
+    function renderEditorImages() {
+        const preview = element('editor-preview');
+        preview.replaceChildren();
+        if (!editing || !editing.images.length) {
+            preview.hidden = true;
+            return;
+        }
+        preview.hidden = false;
+        editing.images.forEach((name, index) => {
+            const cell = document.createElement('div');
+            cell.className = 'recipes-editor-thumb';
+            const img = document.createElement('img');
+            img.src = `/api/food-recipes/images/${name}`;
+            img.alt = `食谱图 ${index + 1}`;
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'recipes-editor-thumb-del';
+            remove.textContent = '✕';
+            remove.setAttribute('aria-label', '移除这张图');
+            remove.addEventListener('click', () => {
+                editing.images.splice(index, 1);
+                renderEditorImages();
+            });
+            cell.append(img, remove);
+            preview.append(cell);
+        });
+        const addCell = document.createElement('button');
+        addCell.type = 'button';
+        addCell.className = 'recipes-editor-thumb recipes-editor-thumb-add';
+        addCell.textContent = '＋ 追加图片';
+        addCell.addEventListener('click', () => {
+            if (!busy) element('append-file').click();
+        });
+        preview.append(addCell);
+    }
+
     function openEditor(item = null) {
         editing = item
-            ? { id: item.id, image_name: item.image || '' }
-            : { id: null, image_name: '' };
+            ? { id: item.id, images: [...(item.images || [])] }
+            : { id: null, images: [] };
         element('editor-title').textContent = item ? '编辑食谱' : '收藏食谱';
-        const preview = element('editor-preview');
-        if (editing.image_name) {
-            preview.src = `/api/food-recipes/images/${editing.image_name}`;
-            preview.hidden = false;
-        } else {
-            preview.removeAttribute('src');
-            preview.hidden = true;
-        }
+        renderEditorImages();
         element('field-title').value = item?.title || '';
         element('field-months').value = item?.months_min ?? 6;
         element('field-ingredients').value = (item?.ingredients || []).join('、');
@@ -242,7 +289,7 @@
             ingredients: splitIngredients(element('field-ingredients').value),
             steps: element('field-steps').value.trim(),
             note: element('field-note').value.trim(),
-            image_name: editing.image_name || '',
+            image_names: editing.images,
         };
         if (!data.title) {
             message('菜名不能为空', true);
@@ -287,40 +334,60 @@
         }
     }
 
-    async function uploadOcrImage(event) {
-        const file = event.target.files[0];
-        event.target.value = '';
-        if (!file || busy) return;
-        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-            message('仅支持 JPG、PNG、WebP 格式的图片', true);
-            return;
-        }
-        if (file.size > 8 * 1024 * 1024) {
-            message('图片不能超过 8MB，请压缩后重试', true);
-            return;
+    async function uploadOcrImages(files) {
+        if (!files.length || busy) return;
+        for (const file of files) {
+            if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+                message('仅支持 JPG、PNG、WebP 格式的图片', true);
+                return;
+            }
+            if (file.size > 8 * 1024 * 1024) {
+                message('单张图片不能超过 8MB，请压缩后重试', true);
+                return;
+            }
         }
         setBusy(true);
-        message('📷 正在识别食谱，约需几秒钟…');
+        message(files.length > 1 ? `📷 正在识别 ${files.length} 张图片，约需几秒钟…` : '📷 正在识别食谱，约需几秒钟…');
         try {
             const form = new FormData();
-            form.append('image', file);
+            [...files].forEach(file => form.append('image', file));
             const response = await fetch('/api/food-recipes/ocr', { method: 'POST', body: form });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || '识别失败，请稍后重试');
-            editing = { id: null, image_name: result.draft.image_name || '' };
-            const preview = element('editor-preview');
-            preview.src = URL.createObjectURL(file);
-            preview.hidden = false;
+            editing = { id: null, images: result.draft.image_names || [] };
             element('editor-title').textContent = '收藏食谱（已识别）';
+            renderEditorImages();
             element('field-title').value = result.draft.title;
             element('field-months').value = result.draft.months_min;
             element('field-ingredients').value = (result.draft.ingredients || []).join('、');
             element('field-steps').value = result.draft.steps || '';
             element('field-note').value = '';
             showView('editor');
-            message('AI 已识别食谱内容，请核对后保存。');
+            message(files.length > 1 ? `AI 已合并识别 ${files.length} 张图片，请核对后保存。` : 'AI 已识别食谱内容，请核对后保存。');
         } catch (error) {
             message(`识别失败：${error.message}`, true);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function appendImages(event) {
+        const files = [...event.target.files];
+        event.target.value = '';
+        if (!files.length || !busy) return;
+        setBusy(true);
+        message('正在上传图片…');
+        try {
+            const form = new FormData();
+            files.forEach(file => form.append('image', file));
+            const response = await fetch('/api/food-recipes/images', { method: 'POST', body: form });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || '上传失败，请稍后重试');
+            editing.images.push(...(result.image_names || []));
+            renderEditorImages();
+            message();
+        } catch (error) {
+            message(`图片上传失败：${error.message}`, true);
         } finally {
             setBusy(false);
         }
@@ -354,8 +421,18 @@
     fileInput.type = 'file';
     fileInput.id = 'recipes-ocr-file';
     fileInput.accept = 'image/jpeg,image/png,image/webp';
+    fileInput.multiple = true;
     fileInput.hidden = true;
     document.body.append(fileInput);
-    fileInput.addEventListener('change', uploadOcrImage);
+    fileInput.addEventListener('change', event => uploadOcrImages([...event.target.files]));
+
+    const appendInput = document.createElement('input');
+    appendInput.type = 'file';
+    appendInput.id = 'recipes-append-file';
+    appendInput.accept = 'image/jpeg,image/png,image/webp';
+    appendInput.multiple = true;
+    appendInput.hidden = true;
+    document.body.append(appendInput);
+    appendInput.addEventListener('change', appendImages);
     load();
 })();

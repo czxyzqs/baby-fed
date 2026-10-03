@@ -42,6 +42,37 @@ def now_cn():
     return datetime.now(CN_TZ).isoformat()
 
 
+IMAGE_NAME_PATTERN = re.compile(r'[0-9a-f]{32}\.(jpg|png|webp)')
+
+
+def parse_images(value):
+    """image 字段存 JSON 数组；兼容早期单文件名格式。"""
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, list):
+            return [name for name in parsed if IMAGE_NAME_PATTERN.fullmatch(str(name))]
+    except (TypeError, ValueError):
+        pass
+    name = str(value)
+    return [name] if IMAGE_NAME_PATTERN.fullmatch(name) else []
+
+
+def clean_image_names(value):
+    """接收任意输入，返回合法的去重图片名列表。"""
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    seen = []
+    for name in value:
+        text = str(name)
+        if IMAGE_NAME_PATTERN.fullmatch(text) and text not in seen:
+            seen.append(text)
+    return seen
+
+
 class RecipeStore:
     def __init__(self, data_dir):
         self.path = Path(data_dir) / 'baby-food.db'
@@ -86,6 +117,7 @@ class RecipeStore:
                 item['ingredients'] = json.loads(item['ingredients'])
             except (TypeError, ValueError):
                 item['ingredients'] = []
+            item['images'] = parse_images(item.pop('image', ''))
             item['warnings'] = sorted({
                 name for name in item['ingredients']
                 if allergens.get(name) == 'allergic'
@@ -144,19 +176,20 @@ class RecipeStore:
             'note': str(data.get('note') or '').strip()[:200],
         }
 
-    def create(self, data, image_name=''):
+    def create(self, data, image_names=None):
         values = self.validate(data)
+        image_names = clean_image_names(image_names)
         stamp = now_cn()
         with self.connect() as connection:
             cursor = connection.execute(
                 'INSERT INTO recipes (title, months_min, ingredients, steps, image, note, created_at, updated_at) '
                 'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 (values['title'], values['months_min'], values['ingredients'],
-                 values['steps'], image_name, values['note'], stamp, stamp),
+                 values['steps'], json.dumps(image_names), values['note'], stamp, stamp),
             )
             return cursor.lastrowid
 
-    def update(self, identifier, data, image_name=None):
+    def update(self, identifier, data, image_names=None):
         values = self.validate(data)
         with self.connect() as connection:
             self.require(connection, identifier)
@@ -165,9 +198,9 @@ class RecipeStore:
             ]
             params = [values['title'], values['months_min'], values['ingredients'],
                       values['steps'], values['note'], now_cn()]
-            if image_name is not None:
+            if image_names is not None:
                 assignments.insert(4, 'image = ?')
-                params.insert(4, image_name)
+                params.insert(4, json.dumps(clean_image_names(image_names)))
             params.append(identifier)
             connection.execute(
                 f"UPDATE recipes SET {', '.join(assignments)} WHERE id = ?", params,
@@ -179,7 +212,7 @@ class RecipeStore:
             self.require(connection, identifier)
             row = connection.execute('SELECT image FROM recipes WHERE id = ?', (identifier,)).fetchone()
             connection.execute('DELETE FROM recipes WHERE id = ?', (identifier,))
-            return row['image'] if row else ''
+            return parse_images(row['image']) if row else []
 
     def save_image(self, image_bytes, extension):
         self.image_dir.mkdir(parents=True, exist_ok=True)
@@ -251,24 +284,17 @@ def register_food_recipes(app, data_dir):
     @blueprint.post('')
     def create_recipe():
         data = request.get_json(silent=True) or {}
-        image_name = data.pop('image_name', '')
-        if image_name and not re.fullmatch(r'[0-9a-f]{32}\.(jpg|png|webp)', str(image_name)):
-            raise RecipeError('无效的图片引用')
-        return jsonify({'success': True, 'id': store.create(data, str(image_name))}), 201
+        return jsonify({'success': True, 'id': store.create(data, data.get('image_names'))}), 201
 
     @blueprint.put('/<int:identifier>')
     def update_recipe(identifier):
         data = request.get_json(silent=True) or {}
-        image_name = data.pop('image_name', None)
-        if image_name is not None and not re.fullmatch(r'[0-9a-f]{32}\.(jpg|png|webp)|^$', str(image_name)):
-            raise RecipeError('无效的图片引用')
-        store.update(identifier, data, image_name=str(image_name or ''))
+        store.update(identifier, data, data.get('image_names'))
         return jsonify({'success': True, 'id': identifier})
 
     @blueprint.delete('/<int:identifier>')
     def delete_recipe(identifier):
-        image = store.delete(identifier)
-        if image:
+        for image in store.delete(identifier):
             try:
                 (store.image_dir / image).unlink(missing_ok=True)
             except OSError:
@@ -277,23 +303,49 @@ def register_food_recipes(app, data_dir):
 
     @blueprint.post('/ocr')
     def ocr_recipe():
-        image = request.files.get('image')
-        if image is None:
+        images = [file for file in request.files.getlist('image') if file and file.filename]
+        if not images:
             raise RecipeError('请选择要识别的图片')
-        if image.mimetype not in ALLOWED_TYPES:
-            raise RecipeError('仅支持 JPG、PNG、WebP 格式图片')
-        image_bytes = image.read()
-        if len(image_bytes) > MAX_IMAGE_BYTES:
-            raise RecipeError('图片不能超过 8MB，请压缩后重试')
-        try:
-            lines = run_ocr(image_bytes)
-        except Exception:
-            raise RecipeError('图片读取失败，请确认图片未损坏后重试')
-        if not lines:
+        saved = []
+        all_lines = []
+        for image in images[:9]:
+            if image.mimetype not in ALLOWED_TYPES:
+                raise RecipeError('仅支持 JPG、PNG、WebP 格式图片')
+            image_bytes = image.read()
+            if len(image_bytes) > MAX_IMAGE_BYTES:
+                raise RecipeError('单张图片不能超过 8MB，请压缩后重试')
+            try:
+                all_lines.extend(run_ocr(image_bytes))
+            except Exception:
+                raise RecipeError('图片读取失败，请确认图片未损坏后重试')
+            saved.append(store.save_image(image_bytes, ALLOWED_TYPES[image.mimetype]))
+        if not all_lines:
+            for name in saved:
+                (store.image_dir / name).unlink(missing_ok=True)
             raise RecipeError('没有从图片中识别出文字，请换一张文字更清晰的食谱图')
-        draft = extract_recipe(lines)
-        draft['image_name'] = store.save_image(image_bytes, ALLOWED_TYPES[image.mimetype])
-        return jsonify({'success': True, 'lines': lines, 'draft': draft})
+        try:
+            draft = extract_recipe(all_lines)
+        except Exception:
+            for name in saved:
+                (store.image_dir / name).unlink(missing_ok=True)
+            raise
+        draft['image_names'] = saved
+        return jsonify({'success': True, 'lines': all_lines, 'draft': draft})
+
+    @blueprint.post('/images')
+    def upload_images():
+        images = [file for file in request.files.getlist('image') if file and file.filename]
+        if not images:
+            raise RecipeError('请选择要上传的图片')
+        saved = []
+        for image in images[:9]:
+            if image.mimetype not in ALLOWED_TYPES:
+                raise RecipeError('仅支持 JPG、PNG、WebP 格式图片')
+            image_bytes = image.read()
+            if len(image_bytes) > MAX_IMAGE_BYTES:
+                raise RecipeError('单张图片不能超过 8MB，请压缩后重试')
+            saved.append(store.save_image(image_bytes, ALLOWED_TYPES[image.mimetype]))
+        return jsonify({'success': True, 'image_names': saved})
 
     @blueprint.get('/images/<path:name>')
     def recipe_image(name):
