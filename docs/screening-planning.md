@@ -35,7 +35,7 @@ SQLite `baby-food.db` 版本 3（`food_library.py` 迁移）：新增 `food_reac
 | POST | `/api/screening/schedule/auto` `/repack` | 自动排期 / 重排未固定未来项 |
 | PUT/DELETE | `/api/screening/blocks/:id` | 移动（即固定）、天数（进行中只能延长）、取消固定；删除回队列尾 |
 | POST/DELETE | `/api/screening/pauses(/:id)` | 暂停段（手动或过敏顺延生成） |
-| POST/DELETE | `/api/screening/normals(/:id)` | 常规计划（仅限已正常食物） |
+| POST/DELETE | `/api/screening/normals(/:id)` | 常规计划（仅限已正常食物；`food_id` 单个或 `food_ids` 数组一次多种，同一事务写入） |
 | GET | `/api/screening/banner` | 首页横幅 |
 | GET | `/api/screening/plans?date=` | 记录表单预填 |
 | GET | `/api/screening/stats` | 统计 |

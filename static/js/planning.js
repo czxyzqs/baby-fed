@@ -752,16 +752,20 @@
             return;
         }
         const group = node('div', '', 'planning-chip-group');
-        const chosen = { food: null };
+        const chosen = new Set();
         schedule.normal_foods.forEach(food => {
             const chip = button(food.name, () => {
-                chosen.food = food.id;
-                [...group.children].forEach(child => child.classList.remove('active'));
-                chip.classList.add('active');
+                if (chosen.has(food.id)) {
+                    chosen.delete(food.id);
+                    chip.classList.remove('active');
+                } else {
+                    chosen.add(food.id);
+                    chip.classList.add('active');
+                }
             }, 'planning-chip');
             group.append(chip);
         });
-        body.append(node('p', '常规计划只能选「正常」食物，未排敏食物请加入排敏队列。', 'planning-hint'));
+        body.append(node('p', '可一次点选多种「正常」食物，未排敏食物请加入排敏队列。', 'planning-hint'));
         body.append(group);
         const daysLabel = node('label', '连续天数');
         const daysGroup = node('div', '', 'planning-chip-group');
@@ -779,17 +783,17 @@
         const actions = node('div', '', 'planning-actions');
         actions.append(button('取消', closeDialog));
         actions.append(button('保存常规计划', async () => {
-            if (!chosen.food) {
-                message('请选择一种食物', true);
+            if (!chosen.size) {
+                message('请至少选择一种食物', true);
                 return;
             }
             try {
                 const result = await api('normals', 'POST', {
-                    food_id: chosen.food, start_date: dateStr, days: chosenDays.days
+                    food_ids: [...chosen], start_date: dateStr, days: chosenDays.days
                 });
                 applySchedule(result);
                 closeDialog();
-                toast('已添加常规计划');
+                toast(chosen.size > 1 ? `已为 ${chosen.size} 种食物添加常规计划` : '已添加常规计划');
             } catch (error) {
                 message(`保存失败：${error.message}`, true);
             }

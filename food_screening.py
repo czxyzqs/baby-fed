@@ -656,25 +656,35 @@ class FoodScreeningStore(FoodLibraryStore):
             return self.schedule_in(connection)
 
     def add_normal(self, data):
-        food_id = data.get('food_id')
-        if type(food_id) is not int:
+        raw_ids = data.get('food_ids')
+        if raw_ids is None:
+            single = data.get('food_id')
+            raw_ids = [single] if type(single) is int else []
+        if not isinstance(raw_ids, list) or not raw_ids or not all(type(item) is int for item in raw_ids):
             raise FoodLibraryError('请选择有效食物')
+        food_ids = list(dict.fromkeys(raw_ids))
         start = parse_date(data.get('start_date'), '计划日期', allow_future=True)
         days = data.get('days', 1)
         if type(days) is not int or not 1 <= days <= 14:
             raise FoodLibraryError('常规计划最多连续 14 天')
         with self.connect() as connection:
-            if connection.execute('SELECT 1 FROM foods WHERE id = ?', (food_id,)).fetchone() is None:
-                raise FoodLibraryError('该食物已不存在，请刷新后重试', 404)
-            latest = connection.execute(
-                'SELECT * FROM food_rounds WHERE food_id = ? ORDER BY id DESC LIMIT 1', (food_id,)
-            ).fetchone()
-            if latest is None or latest['status'] != 'normal':
-                raise FoodLibraryError('常规计划只能选择已正常的食物，未排敏食物请加入排敏队列', 409)
-            connection.execute(
-                'INSERT INTO food_normal_plans (food_id, start_date, days, created_at) VALUES (?, ?, ?, ?)',
-                (food_id, start.isoformat(), days, datetime.now(CN_TZ).isoformat()),
-            )
+            for food_id in food_ids:
+                food = connection.execute(
+                    'SELECT name FROM foods WHERE id = ?', (food_id,)
+                ).fetchone()
+                if food is None:
+                    raise FoodLibraryError('该食物已不存在，请刷新后重试', 404)
+                latest = connection.execute(
+                    'SELECT * FROM food_rounds WHERE food_id = ? ORDER BY id DESC LIMIT 1', (food_id,)
+                ).fetchone()
+                if latest is None or latest['status'] != 'normal':
+                    raise FoodLibraryError(f'「{food["name"]}」还不是已正常的食物，未排敏食物请加入排敏队列', 409)
+            now = datetime.now(CN_TZ).isoformat()
+            for food_id in food_ids:
+                connection.execute(
+                    'INSERT INTO food_normal_plans (food_id, start_date, days, created_at) VALUES (?, ?, ?, ?)',
+                    (food_id, start.isoformat(), days, now),
+                )
             return self.schedule_in(connection)
 
     def delete_normal(self, identifier):
