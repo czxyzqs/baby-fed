@@ -216,15 +216,23 @@
 
     .header-actions {
         display: flex;
-        flex-wrap: wrap;
+        flex-direction: column;
         gap: 8px;
-        justify-content: center;
+        align-items: center;
         margin-top: 12px;
+    }
+
+    .header-actions-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: inherit;
+        justify-content: center;
     }
 
     .header-actions .stats-btn {
         white-space: nowrap;
         padding: 8px 12px;
+        margin-top: 0;
     }
 
     .header-actions .health-management-btn {
