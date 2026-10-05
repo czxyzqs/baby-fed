@@ -235,6 +235,31 @@
         margin-top: 0;
     }
 
+    /* 第二行工具按钮（字号切换/刷新）：主题感知的实底样式，保证文字清晰可读 */
+    .header-actions .header-tools-btn {
+        background: rgba(255, 255, 255, 0.16);
+        border: 1px solid rgba(255, 255, 255, 0.38);
+        color: var(--text-primary);
+        cursor: pointer;
+        margin-top: 0;
+    }
+
+    .header-actions .header-tools-btn:hover {
+        background: rgba(255, 255, 255, 0.28);
+        border-color: rgba(255, 255, 255, 0.5);
+        color: var(--text-primary);
+    }
+
+    [data-theme="light"] .header-actions .header-tools-btn {
+        background: rgba(255, 255, 255, 0.92);
+        border-color: rgba(0, 0, 0, 0.18);
+    }
+
+    [data-theme="light"] .header-actions .header-tools-btn:hover {
+        background: #ffffff;
+        border-color: rgba(0, 0, 0, 0.3);
+    }
+
     .header-actions .health-management-btn {
         background: linear-gradient(135deg, #0d9488, #0284c7);
         color: white;

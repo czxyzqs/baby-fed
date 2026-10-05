@@ -36,8 +36,8 @@
                     <button class="stats-btn" id="fever-analysis-btn" onclick="openFeverAnalysisModal()" style="background:linear-gradient(135deg,#ef4444,#f97316);color:white;border:none;{% if not has_recent_health_records %}display:none;{% endif %}">🤒 发烧分析</button>
                 </div>
                 <div class="header-actions-row tools">
-                    <button type="button" class="stats-btn" id="font-mode-btn" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.18);">A- 标准</button>
-                    <button onclick="location.reload()" title="刷新页面" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:8px 12px;color:var(--text-secondary);cursor:pointer;font-size:36px;">🔄</button>
+                    <button type="button" class="stats-btn header-tools-btn" id="font-mode-btn">A- 标准</button>
+                    <button onclick="location.reload()" title="刷新页面" class="header-tools-btn" style="border-radius:8px;padding:8px 12px;font-size:36px;">🔄</button>
                 </div>
             </div>
         </header>
@@ -215,21 +215,6 @@
                     <span class="health-management-copy"><strong>药品配置</strong><span>管理发烧记录中的可选药品</span></span>
                     <span aria-hidden="true">›</span>
                 </button>
-                <a class="health-management-item" href="{{ url_for('food_library_page') }}" onclick="closeModal('health-management')">
-                    <span class="health-management-icon" aria-hidden="true">🥣</span>
-                    <span class="health-management-copy"><strong>辅食设置（辅食库）</strong><span>查看食物池，管理食物和品类</span></span>
-                    <span aria-hidden="true">›</span>
-                </a>
-                <a class="health-management-item" href="{{ url_for('screening_page') }}" onclick="closeModal('health-management')">
-                    <span class="health-management-icon" aria-hidden="true">🛡️</span>
-                    <span class="health-management-copy"><strong>排敏看板</strong><span>排敏进度、反应档案与结果标记</span></span>
-                    <span aria-hidden="true">›</span>
-                </a>
-                <a class="health-management-item" href="{{ url_for('planning_page') }}" onclick="closeModal('health-management')">
-                    <span class="health-management-icon" aria-hidden="true">📅</span>
-                    <span class="health-management-copy"><strong>排敏规划</strong><span>排敏队列、日历排期与暂停段</span></span>
-                    <span aria-hidden="true">›</span>
-                </a>
             </div>
         </div>
     </div>
