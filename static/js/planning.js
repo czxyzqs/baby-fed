@@ -831,6 +831,8 @@
             result.board_foods = board.foods;
             schedule = result;
             paletteMap = buildColorMap();
+            // 首次进入默认选中今天：当天安排与常规计划入口直达，无需先手动点日期
+            if (!selectedDay) selectedDay = schedule.today;
             message();
             renderQueue();
             renderConflicts();
