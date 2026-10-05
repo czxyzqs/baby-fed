@@ -80,16 +80,17 @@
             return;
         }
         banner.hidden = false;
+        const foods = [];
         items.forEach(item => {
-            const card = node('div', '', 'food-banner-item'
-                + (item.kind === 'due' ? ' food-banner-due' : '')
-                + (item.kind === 'upcoming' ? ' food-banner-upcoming' : ''));
             if (item.kind === 'due') {
+                const card = node('div', '', 'food-banner-item food-banner-due');
                 card.append(node('span', `🔔 ${item.food} ${item.text}`, 'food-banner-text'));
                 const jump = node('a', '去标记 ›', 'food-banner-link');
                 jump.href = '/screening';
                 card.append(jump);
+                body.append(card);
             } else if (item.kind === 'upcoming') {
+                const card = node('div', '', 'food-banner-item food-banner-upcoming');
                 card.append(node('span', `明天吃${item.food}`, 'food-banner-text'));
                 const ack = node('button', '我知道了', 'banner-ack');
                 ack.type = 'button';
@@ -105,16 +106,90 @@
                     }
                 });
                 card.append(ack);
+                body.append(card);
             } else {
-                const check = node('span', item.eaten_today ? '✓' : '', 'banner-check' + (item.eaten_today ? ' checked' : ''));
-                check.setAttribute('aria-hidden', 'true');
-                card.append(check);
-                card.append(node('span', `${item.food}${item.text ? `（${item.text}）` : ''}`, 'food-banner-text'));
-                card.addEventListener('click', () => openFoodDialog(item));
-                card.style.cursor = 'pointer';
+                foods.push(item);
             }
-            body.append(card);
         });
+        if (!foods.length) return;
+        // 多种食物排在同一行：药丸 = ✓ 快捷勾选 + 点其余区域弹多选弹窗
+        const pills = node('div', '', 'food-banner-pills');
+        foods.forEach(item => {
+            const eaten = !!item.eaten_today;
+            const pill = node('span', '', 'food-banner-pill' + (eaten ? ' eaten' : ''));
+            const check = node('button', eaten ? '✓' : '', 'banner-check' + (eaten ? ' checked' : ''));
+            check.type = 'button';
+            check.setAttribute('aria-pressed', String(eaten));
+            check.setAttribute('aria-label', `快速记录「${item.food}」今天${eaten ? '已吃（点按取消）' : '吃了'}`);
+            check.addEventListener('click', event => {
+                event.stopPropagation();
+                toggleEaten(item);
+            });
+            const name = node('button', '', 'food-banner-pill-name');
+            name.type = 'button';
+            name.append(node('span', item.food));
+            if (item.text) name.append(node('small', item.text));
+            name.addEventListener('click', () => openBatchDialog());
+            pill.append(check, name);
+            pills.append(pill);
+        });
+        body.append(pills);
+    }
+
+    function suggestedAmount(item) {
+        return AMOUNTS[Math.min(Math.max(item.position || 1, 1), 4) - 1];
+    }
+
+    function plannedFoods() {
+        return lastItems.filter(item => item.kind !== 'due' && item.kind !== 'upcoming');
+    }
+
+    // 引入新食物时的归因提醒：还有别的食物在排敏观察中需确认
+    async function confirmNoOtherScreening(foodIds, name) {
+        const board = await api('screening/board');
+        const other = board.foods.find(food => food.status === 'screening' && !foodIds.includes(food.id));
+        if (!other) return true;
+        return window.confirm(
+            `「${other.food}」正在排敏观察中。同时引入「${name}」会让过敏反应难以归因，建议等观察期结束。确定仍要记录吗？`);
+    }
+
+    // 横幅 ✓ 快捷勾选：没吃 → 按建议量记一笔记食；已吃 → 撤销今天的记录
+    async function toggleEaten(item) {
+        try {
+            const dateValue = today();
+            const result = await api(`entries?date=${dateValue}`);
+            const entry = result.entries.find(row => row.food_id === item.food_id);
+            const keepOthers = meal => result.entries
+                .filter(row => row.meal === meal && (entry ? row.food_id !== item.food_id : true))
+                .map(row => ({
+                    id: row.id, food_id: row.food_id, amount: row.amount,
+                    rating: row.rating, note: row.note, mode: 'keep'
+                }));
+            if (entry) {
+                await api('meals', 'POST', {
+                    date: dateValue, meal: entry.meal,
+                    revision: result.revisions[entry.meal], entries: keepOthers(entry.meal)
+                });
+                toast(`已取消「${item.food}」今天的进食记录`);
+            } else {
+                const meal = suggestedMeal();
+                const mode = item.kind === 'planned' ? 'start' : 'keep';
+                if (mode === 'start' && !await confirmNoOtherScreening([item.food_id], item.food)) return;
+                const amount = suggestedAmount(item);
+                await api('meals', 'POST', {
+                    date: dateValue, meal,
+                    revision: result.revisions[meal],
+                    entries: [...keepOthers(meal), {
+                        food_id: item.food_id, amount, rating: null, note: '', mode
+                    }]
+                });
+                toast(`已记录：${item.food} ${amount}`);
+            }
+            todayContext = null;
+            load();
+        } catch (error) {
+            toast(`操作失败：${error.message}`);
+        }
     }
 
     // ---------- 记录弹窗：进食 + 反应 ----------
@@ -139,9 +214,8 @@
             toast(`加载食物失败：${error.message}`);
             return;
         }
-        const preferred = lastItems.find(item => item.kind !== 'due' && item.kind !== 'upcoming');
-        if (preferred) {
-            openFoodDialog(preferred);
+        if (plannedFoods().length) {
+            openBatchDialog();
             return;
         }
         openPickerDialog(context);
@@ -217,6 +291,160 @@
             ? `第${food.position}/${food.observe_days}天`
             : STATUS_LABELS[food.status];
         openFoodDialog(item);
+    }
+
+    // ---------- 今日计划多选弹窗：勾选要摄入的部分食物，一次批量记录 ----------
+
+    function openBatchDialog() {
+        const foods = plannedFoods();
+        if (!foods.length) return;
+        // 只有一种计划食物时直接用单食物弹窗（含量化/反应的完整记录）
+        if (foods.length === 1) {
+            openFoodDialog(foods[0]);
+            return;
+        }
+        closeDialog();
+        const state = { meal: suggestedMeal() };
+
+        overlay = node('div', '', 'banner-dialog-overlay');
+        overlay.addEventListener('click', event => {
+            if (event.target === overlay) closeDialog();
+        });
+        const dialog = node('div', '', 'banner-dialog');
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+
+        const head = node('div', '', 'banner-dialog-head');
+        head.append(node('h2', '今天吃了哪些？', 'banner-dialog-title'));
+        const close = node('button', '✕', 'banner-dialog-close');
+        close.type = 'button';
+        close.setAttribute('aria-label', '关闭');
+        close.addEventListener('click', closeDialog);
+        head.append(close);
+        dialog.append(head);
+
+        const mealGroup = node('div', '', 'banner-chip-group');
+        Object.entries(MEALS).forEach(([value, label]) => {
+            mealGroup.append(chip(label, () => {
+                state.meal = value;
+                [...mealGroup.children].forEach(child => child.classList.remove('active'));
+                [...mealGroup.children][Object.keys(MEALS).indexOf(value)].classList.add('active');
+                refreshRows();
+            }, value === state.meal));
+        });
+        dialog.append(mealGroup);
+
+        const rows = node('div', '', 'banner-meal-rows');
+        dialog.append(rows);
+
+        const save = node('button', '保存已选进食', 'banner-dialog-primary');
+        save.type = 'button';
+        save.addEventListener('click', saveBatch);
+        dialog.append(save);
+        dialog.append(node('p', '勾选这餐吃了哪些计划食物；点 ⚠️ 可记录单个食物的反应。', 'banner-dialog-section'));
+
+        overlay.append(dialog);
+        document.body.append(overlay);
+        document.body.style.overflow = 'hidden';
+
+        async function refreshRows() {
+            let entries = [];
+            try {
+                entries = (await api(`entries?date=${today()}`)).entries;
+            } catch (error) {
+                toast(`加载记录失败：${error.message}`);
+            }
+            rows.replaceChildren();
+            foods.forEach(item => {
+                const entry = entries.find(row => row.food_id === item.food_id && row.meal === state.meal);
+                const chosen = { on: !!entry, amount: entry ? entry.amount : suggestedAmount(item) };
+                const row = node('div', '', 'banner-meal-row');
+                const check = node('button', chosen.on ? '✓' : '', 'banner-check' + (chosen.on ? ' checked' : ''));
+                check.type = 'button';
+                check.setAttribute('aria-pressed', String(chosen.on));
+                check.setAttribute('aria-label', `选择「${item.food}」`);
+                const name = node('button', '', 'banner-meal-name');
+                name.type = 'button';
+                name.append(node('span', item.food));
+                if (item.text) name.append(node('small', item.text));
+                function toggle() {
+                    chosen.on = !chosen.on;
+                    check.classList.toggle('checked', chosen.on);
+                    check.textContent = chosen.on ? '✓' : '';
+                    check.setAttribute('aria-pressed', String(chosen.on));
+                }
+                check.addEventListener('click', toggle);
+                name.addEventListener('click', toggle);
+                const amount = node('select', '', 'banner-amount-select');
+                amount.setAttribute('aria-label', `${item.food} 的量`);
+                AMOUNTS.forEach(value => {
+                    const option = node('option', value);
+                    option.value = value;
+                    amount.append(option);
+                });
+                amount.value = chosen.amount;
+                amount.addEventListener('change', () => { chosen.amount = amount.value; });
+                const react = node('button', '⚠️ 反应', 'banner-react-btn');
+                react.type = 'button';
+                react.setAttribute('aria-label', `记录「${item.food}」的反应`);
+                react.addEventListener('click', event => {
+                    event.stopPropagation();
+                    openFoodDialog(item);
+                });
+                row.append(check, name, amount, react);
+                row._item = item;
+                row._check = check;
+                row._amount = () => amount.value;
+                rows.append(row);
+            });
+            if (!rows.children.length) rows.append(node('p', '今天没有计划食物。', 'banner-dialog-section'));
+        }
+
+        async function saveBatch() {
+            const selected = [...rows.children]
+                .filter(row => row._check?.classList.contains('checked'))
+                .map(row => ({ item: row._item, amount: row._amount() }));
+            if (!selected.length) {
+                toast('请先勾选这餐吃了哪些食物');
+                return;
+            }
+            try {
+                const dateValue = today();
+                const result = await api(`entries?date=${dateValue}`);
+                const selectedIds = selected.map(entry => entry.item.food_id);
+                const plannedNames = selected
+                    .filter(entry => entry.item.kind === 'planned')
+                    .map(entry => entry.item.food);
+                if (plannedNames.length
+                    && !await confirmNoOtherScreening(selectedIds, plannedNames.join('、'))) {
+                    return;
+                }
+                const others = result.entries
+                    .filter(row => row.meal === state.meal && !selectedIds.includes(row.food_id))
+                    .map(row => ({
+                        id: row.id, food_id: row.food_id, amount: row.amount,
+                        rating: row.rating, note: row.note, mode: 'keep'
+                    }));
+                const entries = [...others, ...selected.map(({ item, amount }) => ({
+                    food_id: item.food_id,
+                    amount,
+                    rating: null, note: '',
+                    mode: item.kind === 'planned' ? 'start' : 'keep'
+                }))];
+                await api('meals', 'POST', {
+                    date: dateValue, meal: state.meal,
+                    revision: result.revisions[state.meal], entries
+                });
+                todayContext = null;
+                closeDialog();
+                toast(`已记录${MEALS[state.meal]}：${selected.map(entry => entry.item.food).join('、')}`);
+                load();
+            } catch (error) {
+                toast(`保存失败：${error.message}`);
+            }
+        }
+
+        refreshRows();
     }
 
     function openFoodDialog(item) {
@@ -354,14 +582,9 @@
             const dateValue = today();
             const mode = state.modeOverride || (item.kind === 'planned' ? 'start' : 'keep');
             // 引入新食物（start/retry）时提醒：同时排敏多种食物会让反应难以归因
-            if (mode === 'start' || mode === 'retry') {
-                const board = await api('screening/board');
-                const other = board.foods.find(food =>
-                    food.status === 'screening' && food.id !== item.food_id);
-                if (other && !window.confirm(
-                    `「${other.food}」正在排敏观察中。同时引入「${item.food}」会让过敏反应难以归因，建议等观察期结束。确定仍要记录吗？`)) {
-                    return;
-                }
+            if ((mode === 'start' || mode === 'retry')
+                && !await confirmNoOtherScreening([item.food_id], item.food)) {
+                return;
             }
             const result = await api(`entries?date=${dateValue}`);
             const others = result.entries.filter(row => row.meal === state.meal && row.food_id !== item.food_id);

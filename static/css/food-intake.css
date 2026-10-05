@@ -238,6 +238,62 @@
     font-weight: 600;
     line-height: 1.4;
 }
+/* 多种食物同一行：药丸（✓ 快捷勾选 + 点其余区域弹多选弹窗），放不下时横向滑动 */
+.food-banner-pills {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-bottom: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 2px 0 6px;
+}
+.food-banner-pills::-webkit-scrollbar { display: none; }
+.food-banner-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--card-bg, rgba(255, 255, 255, 0.06));
+    border: 1px solid rgba(77, 163, 255, 0.35);
+    border-radius: 999px;
+    padding: 6px 18px 6px 6px;
+}
+.food-banner-pill.eaten {
+    border-color: rgba(0, 184, 148, 0.55);
+    background: rgba(0, 184, 148, 0.1);
+}
+button.banner-check {
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+}
+.food-banner-pill .banner-check {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+    border-width: 2.5px;
+}
+.food-banner-pill-name {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 24px;
+    font-weight: 600;
+    padding: 8px 0;
+    white-space: nowrap;
+}
+.food-banner-pill-name small {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-muted, rgba(255, 255, 255, 0.6));
+}
 .food-banner-due .food-banner-text {
     color: #ff9a80;
 }
@@ -306,6 +362,65 @@ body.elder #food-intake-history-message { font-size: 18px; }
 }
 .banner-dialog-primary { background: var(--accent, #4da3ff); color: #fff; }
 .banner-dialog-danger { background: rgba(230, 104, 76, 0.16); color: #ff9a80; margin-top: 4px; }
+
+/* 今日计划多选弹窗：每行 = 勾选 + 食物名 + 量 + 记反应 */
+.banner-meal-rows { margin-bottom: 6px; }
+.banner-meal-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border, #3a4453);
+}
+.banner-meal-row:last-child { border-bottom: none; }
+.banner-meal-row .banner-check { cursor: pointer; }
+.banner-meal-name {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 18px;
+    font-weight: 600;
+    padding: 6px 0;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.banner-meal-name small {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-muted, #8a94a3);
+}
+.banner-amount-select {
+    flex: none;
+    max-width: 110px;
+    background: var(--card-bg, rgba(255, 255, 255, 0.08));
+    color: inherit;
+    border: 1px solid var(--border, #3a4453);
+    border-radius: 10px;
+    padding: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    min-height: 46px;
+}
+.banner-react-btn {
+    flex: none;
+    border: 1px solid rgba(230, 104, 76, 0.4);
+    background: rgba(230, 104, 76, 0.08);
+    color: #ff9a80;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    min-height: 46px;
+}
 
 .banner-search {
     display: block; width: 100%; min-height: 48px; font-size: 16px;
