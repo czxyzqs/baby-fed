@@ -473,10 +473,13 @@
             if (actions.children.length) row.append(actions);
             container.append(row);
         });
-        if (future) {
+        if (selectedDay >= schedule.today) {
+            // 暂停段内不排新食物，但正常食物的常规计划照常可安排（含今天）
+            const inPause = schedule.pauses.some(item => selectedDay >= item.start_date && selectedDay <= item.end_date);
+            if (inPause) container.append(node('p', '⏸ 这天在暂停段内：新食物排敏自动绕开，可以安排正常食物的常规计划。', 'planning-hint'));
             const addRow = node('div', '', 'planning-day-add');
             addRow.append(button('＋ 常规计划（正常食物）', () => normalDialog(selectedDay)));
-            addRow.append(button('⏸ 划暂停段', () => pauseDialog(selectedDay)));
+            if (future) addRow.append(button('⏸ 划暂停段', () => pauseDialog(selectedDay)));
             container.append(addRow);
         }
     }
