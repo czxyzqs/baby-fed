@@ -584,6 +584,20 @@ class FoodScreeningStore(FoodLibraryStore):
             (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
             for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
         ]
+        # 固定📌的排期和进行中的观察也是障碍：顺延的排期不能压上去
+        obstacles = list(pauses)
+        for row in connection.execute(
+            "SELECT start_date, days FROM food_plan_blocks WHERE pinned = 1 AND status = 'scheduled'"
+        ):
+            obstacles.append((
+                date.fromisoformat(row['start_date']),
+                date.fromisoformat(row['start_date']) + timedelta(days=row['days'] - 1),
+            ))
+        for row in connection.execute("SELECT start_date, observe_days FROM food_rounds WHERE status = 'active'"):
+            obstacles.append((
+                date.fromisoformat(row['start_date']),
+                date.fromisoformat(row['start_date']) + timedelta(days=row['observe_days'] - 1),
+            ))
         blocks = [dict(row) for row in connection.execute(
             "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' AND pinned = 0 ORDER BY start_date, id"
         )]
@@ -604,11 +618,11 @@ class FoodScreeningStore(FoodLibraryStore):
             overlap = True
             while overlap:
                 overlap = False
-                for pause_start, pause_end in pauses:
-                    if start <= pause_end and end >= pause_start:
-                        if first_pause is None:
-                            first_pause = pause_start
-                        start = pause_end + timedelta(days=1)
+                for ob_start, ob_end in obstacles:
+                    if start <= ob_end and end >= ob_start:
+                        if first_pause is None and (ob_start, ob_end) in pauses:
+                            first_pause = ob_start
+                        start = ob_end + timedelta(days=1)
                         end = start + timedelta(days=block['days'] - 1)
                         overlap = True
                         moved = True
@@ -647,6 +661,116 @@ class FoodScreeningStore(FoodLibraryStore):
                             'UPDATE food_rounds SET observe_days = ? WHERE id = ?',
                             (min(max(latest['observe_days'], cover), 14), latest['id']),
                         )
+
+    def insert_block(self, data):
+        """在指定日期插入一个新食物的排敏；不覆盖暂停段（自动避让），与现有排期重叠时按策略处理。"""
+        food_id = data.get('food_id')
+        if type(food_id) is not int:
+            raise FoodLibraryError('请选择有效食物')
+        days = data.get('days')
+        if type(days) is not int or not 1 <= days <= 14:
+            raise FoodLibraryError('观察天数只能是 1 到 14 天')
+        start = parse_date(data.get('start_date'), '开始日期', allow_future=True)
+        strategy = data.get('strategy') or 'defer'
+        if strategy not in ('defer', 'overlap'):
+            raise FoodLibraryError('不支持的重叠处理方式')
+        today = today_cn()
+        if start < today:
+            raise FoodLibraryError('只能从今天或之后的日期插入')
+        with self.connect() as connection:
+            if connection.execute('SELECT 1 FROM foods WHERE id = ?', (food_id,)).fetchone() is None:
+                raise FoodLibraryError('该食物已不存在，请刷新后重试', 404)
+            latest = connection.execute(
+                'SELECT * FROM food_rounds WHERE food_id = ? ORDER BY id DESC LIMIT 1', (food_id,)
+            ).fetchone()
+            if latest is not None:
+                raise FoodLibraryError('只有未排敏的食物才能插入排敏', 409)
+            if connection.execute(
+                "SELECT 1 FROM food_plan_blocks WHERE food_id = ? AND status = 'scheduled'", (food_id,)
+            ).fetchone():
+                raise FoodLibraryError('该食物已有排期，请在排期一览用「改」调整', 409)
+            # 永不覆盖暂停段：撞上就顺到暂停结束后再试
+            pauses = [
+                (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
+                for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
+            ]
+            while True:
+                hit = next((p_end for p_start, p_end in pauses if start <= p_end and start + timedelta(days=days - 1) >= p_start), None)
+                if hit is None:
+                    break
+                start = hit + timedelta(days=1)
+            end = start + timedelta(days=days - 1)
+            now = datetime.now(CN_TZ).isoformat()
+            cursor = connection.execute(
+                'INSERT INTO food_plan_blocks (food_id, start_date, days, pinned, status, created_at, updated_at) '
+                'VALUES (?, ?, ?, 1, ?, ?, ?)',
+                (food_id, start.isoformat(), days, 'scheduled', now, now),
+            )
+            inserted_id = cursor.lastrowid
+            if strategy == 'defer':
+                self.shift_blocks_clear_of(connection, start, end, exclude_id=inserted_id)
+            # 已在队列里的食物插入排期后移出队列
+            connection.execute('DELETE FROM food_queue WHERE food_id = ?', (food_id,))
+            return self.schedule_in(connection)
+
+    def shift_blocks_clear_of(self, connection, obstacle_start, obstacle_end, exclude_id=None):
+        """把与障碍区间（新插入的排敏）重叠的未固定排期链式顺延到障碍之后，且避让暂停段、固定📌排期和观察轮次。"""
+        blocks = [dict(row) for row in connection.execute(
+            "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' AND pinned = 0 ORDER BY start_date, id"
+        )]
+        obstacles = [
+            (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
+            for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
+        ]
+        for row in connection.execute(
+            "SELECT id, start_date, days FROM food_plan_blocks WHERE pinned = 1 AND status = 'scheduled'"
+        ):
+            if row['id'] == exclude_id:
+                continue
+            obstacles.append((
+                date.fromisoformat(row['start_date']),
+                date.fromisoformat(row['start_date']) + timedelta(days=row['days'] - 1),
+            ))
+        for row in connection.execute("SELECT start_date, observe_days FROM food_rounds WHERE status = 'active'"):
+            obstacles.append((
+                date.fromisoformat(row['start_date']),
+                date.fromisoformat(row['start_date']) + timedelta(days=row['observe_days'] - 1),
+            ))
+        now = datetime.now(CN_TZ).isoformat()
+        moved_region = False
+        cursor = None
+        for block in blocks:
+            if block['id'] == exclude_id:
+                continue
+            original = date.fromisoformat(block['start_date'])
+            start = original
+            end = start + timedelta(days=block['days'] - 1)
+            hits_obstacle = start <= obstacle_end and end >= obstacle_start
+            if hits_obstacle:
+                moved_region = True
+            limit = None
+            if hits_obstacle:
+                # 撞上新插入块：让到障碍之后，且不早于链上前一块
+                limit = obstacle_end if cursor is None or obstacle_end >= cursor else cursor
+            elif moved_region and cursor is not None and start <= cursor:
+                limit = cursor
+            if limit is not None:
+                start = limit + timedelta(days=1)
+                end = start + timedelta(days=block['days'] - 1)
+                overlap = True
+                while overlap:
+                    overlap = False
+                    for ob_start, ob_end in obstacles:
+                        if start <= ob_end and end >= ob_start:
+                            start = ob_end + timedelta(days=1)
+                            end = start + timedelta(days=block['days'] - 1)
+                            overlap = True
+            if start != original:
+                connection.execute(
+                    'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
+                    (start.isoformat(), now, block['id']),
+                )
+            cursor = end
 
     def delete_pause(self, identifier):
         with self.connect() as connection:
@@ -968,6 +1092,10 @@ def register_food_screening(app, data_dir):
         if request.method == 'DELETE':
             return jsonify({'success': True, **store.delete_block(block_id)})
         return jsonify({'success': True, **store.update_block(block_id, payload())})
+
+    @blueprint.post('/blocks/insert')
+    def insert_block():
+        return jsonify({'success': True, **store.insert_block(payload())})
 
     @blueprint.put('/rounds/<int:round_id>')
     def change_round(round_id):

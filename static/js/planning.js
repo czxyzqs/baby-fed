@@ -486,6 +486,7 @@
             const inPause = schedule.pauses.some(item => selectedDay >= item.start_date && selectedDay <= item.end_date);
             if (inPause) container.append(node('p', '⏸ 这天在暂停段内：新食物排敏自动绕开，可以安排正常食物的常规计划。', 'planning-hint'));
             const addRow = node('div', '', 'planning-day-add');
+            addRow.append(button('＋ 插入排敏（新食物）', () => insertDialog(selectedDay)));
             addRow.append(button('＋ 常规计划（正常食物）', () => normalDialog(selectedDay)));
             if (future) addRow.append(button('⏸ 划暂停段', () => pauseDialog(selectedDay)));
             container.append(addRow);
@@ -687,6 +688,167 @@
         }, 'planning-btn primary'));
         body.append(actions);
         openDialog(`修改排期 · ${foodName(block.food_id)}`, body);
+    }
+
+    // ---------- 插入排敏：任意日期插入新食物，冲突时选顺延或保持重叠 ----------
+
+    async function insertDialog(dateStr) {
+        let board;
+        try {
+            board = await api('board');
+        } catch (error) {
+            message(`加载食物失败：${error.message}`, true);
+            return;
+        }
+        const scheduledFoods = new Set(
+            schedule.blocks.filter(block => !block.stale).map(block => block.food_id));
+        const candidates = board.foods.filter(food =>
+            food.status === 'untouched' && !scheduledFoods.has(food.id));
+        if (!candidates.length) {
+            message('没有可插入的未排敏食物（已在排期里的可用排期一览的「改」调整日期）。', true);
+            return;
+        }
+        const body = node('div', '', 'planning-dialog-body');
+        const state = { food: null, days: board.settings?.observe_days_default || 3, strategy: 'defer' };
+
+        body.append(node('h3', '选择食物（未排敏）', 'planning-group-title'));
+        const search = node('input', '', 'form-input');
+        search.type = 'search';
+        search.placeholder = '搜索食物或品类';
+        search.addEventListener('input', () => renderFoods());
+        body.append(search);
+        const foodList = node('div', '', 'planning-queue-picker-list');
+        body.append(foodList);
+
+        const daysLabel = node('label', '观察天数');
+        const daysRow = node('div', '', 'planning-queue-days planning-queue-days-dialog');
+        const daysValue = node('span', '', 'planning-queue-days-value');
+        daysRow.append(
+            button('－', () => { state.days = Math.max(1, state.days - 1); syncDays(); }),
+            daysValue,
+            button('＋', () => { state.days = Math.min(14, state.days + 1); syncDays(); }));
+        daysLabel.append(daysRow);
+        body.append(daysLabel);
+
+        const preview = node('p', '', 'planning-hint');
+        const strategyGroup = node('div', '', 'planning-chip-group');
+        body.append(preview, strategyGroup);
+
+        function adjustedStart() {
+            let start = dateStr;
+            let hit = true;
+            while (hit) {
+                hit = false;
+                for (const pause of schedule.pauses) {
+                    if (start <= pause.end_date && addDays(start, state.days - 1) >= pause.start_date) {
+                        start = addDays(pause.end_date, 1);
+                        hit = true;
+                    }
+                }
+            }
+            return start;
+        }
+
+        function conflictsFor(start) {
+            const end = addDays(start, state.days - 1);
+            const names = [];
+            schedule.blocks.forEach(block => {
+                if (block.live || block.stale) return;
+                if (block.start_date <= end && addDays(block.start_date, block.days - 1) >= start) {
+                    names.push(foodName(block.food_id));
+                }
+            });
+            (schedule.rounds || []).forEach(round => {
+                const roundEnd = addDays(round.start_date, round.observe_days - 1);
+                if (round.start_date <= end && roundEnd >= start) names.push(`${round.food_name}（观察中）`);
+            });
+            return [...new Set(names)];
+        }
+
+        function refreshPreview() {
+            const start = adjustedStart();
+            const conflicts = conflictsFor(start);
+            const dayLabel = `${Number(start.slice(5, 7))}月${Number(start.slice(8))}日`;
+            preview.textContent = `从${dayLabel}开始` +
+                (start !== dateStr ? '（已避开暂停段）' : '') +
+                (conflicts.length ? `，与 ${conflicts.join('、')} 的观察期重叠` : '');
+            strategyGroup.replaceChildren();
+            if (conflicts.length) {
+                body.append(strategyGroup);
+                [['defer', '现有排敏顺延'], ['overlap', '保持重叠，稍后自行调整']].forEach(([value, label]) => {
+                    const option = button(label, () => {
+                        state.strategy = value;
+                        [...strategyGroup.children].forEach(child => child.classList.remove('active'));
+                        option.classList.add('active');
+                    }, 'planning-chip');
+                    if (state.strategy === value) option.classList.add('active');
+                    strategyGroup.append(option);
+                });
+            }
+        }
+
+        function syncDays() {
+            daysValue.textContent = `观察${state.days}天`;
+            refreshPreview();
+        }
+
+        function renderFoods() {
+            const query = (search.value || '').trim().toLocaleLowerCase();
+            foodList.replaceChildren();
+            const groups = new Map();
+            candidates.forEach(food => {
+                const key = `${food.category_emoji || '🍚'} ${food.category_name || '未分组'}${food.is_high_allergen ? ' ⚠️' : ''}`;
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(food);
+            });
+            let matched = 0;
+            groups.forEach((foods, groupName) => {
+                const filtered = foods.filter(food =>
+                    `${food.name} ${groupName}`.toLocaleLowerCase().includes(query));
+                if (!filtered.length) return;
+                matched += filtered.length;
+                foodList.append(node('h3', groupName, 'planning-group-title'));
+                const group = node('div', '', 'planning-chip-group');
+                filtered.forEach(food => {
+                    const option = button(food.name + (food.in_queue ? ' · 队列中' : ''), () => {
+                        state.food = food;
+                        [...group.children].forEach(child => child.classList.remove('active'));
+                        option.classList.add('active');
+                        refreshPreview();
+                    }, 'planning-chip');
+                    if (state.food && state.food.id === food.id) option.classList.add('active');
+                    group.append(option);
+                });
+                foodList.append(group);
+            });
+            if (!matched) foodList.append(node('p', '没有匹配的未排敏食物，可到辅食库添加。', 'planning-hint'));
+        }
+
+        const footer = node('div', '', 'planning-actions');
+        footer.append(button('取消', closeDialog));
+        footer.append(button('插入排敏', async () => {
+            if (!state.food) {
+                message('请先选择食物', true);
+                return;
+            }
+            try {
+                const result = await api('blocks/insert', 'POST', {
+                    food_id: state.food.id,
+                    start_date: adjustedStart(),
+                    days: state.days,
+                    strategy: state.strategy
+                });
+                applySchedule(result);
+                closeDialog();
+                toast(`已插入排敏：${state.food.name}`);
+            } catch (error) {
+                message(`插入失败：${error.message}`, true);
+            }
+        }, 'planning-btn primary'));
+        body.append(footer);
+        openDialog('插入排敏', body);
+        renderFoods();
+        syncDays();
     }
 
     function pauseDialog(dateStr) {
