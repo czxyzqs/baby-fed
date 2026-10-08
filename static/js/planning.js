@@ -549,15 +549,43 @@
                 edit: { type: 'round', item }
             });
         });
+        // 常规计划与排期块日期段完全一致时合并成一行展示：排敏食物在前并加底色标记
+        const blockRows = [];
         schedule.blocks.filter(block => !block.live).forEach(block => {
-            rows.push({
-                sort: block.start_date,
+            blockRows.push({
+                sort: block.start_date, days: block.days, block,
                 color: paletteMap[block.food_id] || 'seg-0',
-                text: `${dateRange(block.start_date, block.days)} ${foodName(block.food_id)} · 观察${block.days}天${block.pinned ? ' · 已固定📌' : ''}${block.stale ? ' · 已失效' : ''}`,
-                edit: block.stale ? null : { type: 'block', block },
+                suffix: `${block.pinned ? ' · 已固定📌' : ''}${block.stale ? ' · 已失效' : ''}`,
+                merged: []
+            });
+        });
+        schedule.normals.forEach(plan => {
+            const host = blockRows.find(row => row.sort === plan.start_date && row.days === plan.days);
+            if (host) host.merged.push(plan);
+            else rows.push({
+                sort: plan.start_date, color: 'normal',
+                text: `${dateRange(plan.start_date, plan.days)} ${foodName(plan.food_id)} · 常规计划`,
+                del: { path: `normals/${plan.id}`, confirm: `删除「${foodName(plan.food_id)}」的常规计划？` }
+            });
+        });
+        blockRows.forEach(row => {
+            const label = row.merged.length
+                ? [foodName(row.block.food_id), ...row.merged.map(plan => foodName(plan.food_id))].join('/')
+                : `${foodName(row.block.food_id)} · 观察${row.block.days}天`;
+            rows.push({
+                sort: row.sort, color: row.color, label,
+                rangeText: dateRange(row.sort, row.days), suffix: row.suffix,
+                parts: row.merged.length
+                    ? [{ name: foodName(row.block.food_id), mark: true },
+                       ...row.merged.map(plan => ({ name: foodName(plan.food_id) }))]
+                    : null,
+                text: `${dateRange(row.sort, row.days)} ${foodName(row.block.food_id)} · 观察${row.block.days}天${row.suffix}`,
+                edit: row.block.stale ? null : { type: 'block', block: row.block },
                 del: {
-                    path: `blocks/${block.id}`,
-                    confirm: `删除「${foodName(block.food_id)}」的计划？食物将回到排敏队列末尾。`
+                    path: `blocks/${row.block.id}`,
+                    confirm: row.merged.length
+                        ? `删除「${foodName(row.block.food_id)}」的排敏计划？食物将回到排敏队列末尾，常规计划不受影响。`
+                        : `删除「${foodName(row.block.food_id)}」的计划？食物将回到排敏队列末尾。`
                 }
             });
         });
@@ -567,13 +595,6 @@
                 sort: pause.start_date, color: 'pause',
                 text: `${dateRange(pause.start_date, days)} ⏸ 暂停排敏${pause.reason ? ` · ${pause.reason}` : ''}`,
                 del: { path: `pauses/${pause.id}`, confirm: '删除这个暂停段？' }
-            });
-        });
-        schedule.normals.forEach(plan => {
-            rows.push({
-                sort: plan.start_date, color: 'normal',
-                text: `${dateRange(plan.start_date, plan.days)} ${foodName(plan.food_id)} · 常规计划`,
-                del: { path: `normals/${plan.id}`, confirm: `删除「${foodName(plan.food_id)}」的常规计划？` }
             });
         });
         (schedule.history || []).forEach(item => {
@@ -591,11 +612,26 @@
         rows.forEach(row => {
             const line = node('div', '', 'planning-agenda-row');
             line.append(node('span', '', 'planning-agenda-dot ' + row.color));
-            line.append(node('span', row.text, 'planning-agenda-text'));
+            const labelText = row.parts
+                ? `${row.rangeText} ${[row.parts[0].name, ...row.parts.slice(1).map(part => part.name)].join('/')}${row.suffix || ''}`
+                : row.text;
+            const textSpan = node('span', '', 'planning-agenda-text');
+            if (row.parts) {
+                textSpan.append(document.createTextNode(`${row.rangeText} `));
+                row.parts.forEach((part, index) => {
+                    if (index) textSpan.append(document.createTextNode('/'));
+                    if (part.mark) textSpan.append(node('span', part.name, 'planning-agenda-mark'));
+                    else textSpan.append(document.createTextNode(part.name));
+                });
+                if (row.suffix) textSpan.append(document.createTextNode(row.suffix));
+            } else {
+                textSpan.textContent = row.text;
+            }
+            line.append(textSpan);
             if (row.edit) {
                 const edit = node('button', '改', 'planning-agenda-edit');
                 edit.type = 'button';
-                edit.setAttribute('aria-label', `修改日期段：${row.text}`);
+                edit.setAttribute('aria-label', `修改日期段：${labelText}`);
                 edit.addEventListener('click', () =>
                     row.edit.type === 'round' ? editRoundDialog(row.edit.item) : editBlockDialog(row.edit.block));
                 line.append(edit);
@@ -603,7 +639,7 @@
             if (row.del) {
                 const del = node('button', '✕', 'planning-agenda-del');
                 del.type = 'button';
-                del.setAttribute('aria-label', `删除：${row.text}`);
+                del.setAttribute('aria-label', `删除：${labelText}`);
                 del.addEventListener('click', () => run(row.del.confirm, () => api(row.del.path, 'DELETE')));
                 line.append(del);
             }

@@ -305,3 +305,12 @@ body.elder .planning-queue-chevron { font-size: 24px; }
 
 /* 队列行内 ↑↓ 排序按钮 */
 .planning-queue-arrows { display: flex; gap: 6px; flex: none; }
+
+/* 排期一览合并行中，排敏食物的底色标记 */
+.planning-agenda-mark {
+    background: rgba(232, 162, 61, 0.25);
+    color: #f0b45e;
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-weight: 700;
+}
