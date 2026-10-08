@@ -99,7 +99,15 @@
                 down.setAttribute('aria-label', `${item.food_name}靠后一位`);
                 arrows.append(down);
             }
-            row.append(handle, main, arrows);
+            const remove = node('button', '✕', 'planning-agenda-del');
+            remove.type = 'button';
+            remove.setAttribute('aria-label', `移出队列：${item.food_name}`);
+            remove.addEventListener('click', () => {
+                if (window.confirm(`把「${item.food_name}」移出排敏队列？`)) {
+                    actAndReload(() => api(`queue/${item.id}`, 'DELETE'));
+                }
+            });
+            row.append(handle, main, arrows, remove);
             enableDrag(row, list, item);
             list.append(row);
         });
