@@ -421,6 +421,14 @@ class FoodScreeningStore(FoodLibraryStore):
         )]
         for item in rounds:
             item['end_date'] = add_days(date.fromisoformat(item['start_date']), item['observe_days'] - 1)
+        # 已完成的排敏轮次（通过/过敏）作为历史展示在排期页，不再凭空消失
+        history = [dict(row) for row in connection.execute(
+            'SELECT r.id, r.food_id, r.start_date, r.observe_days, r.status, f.name AS food_name '
+            'FROM food_rounds r JOIN foods f ON f.id = r.food_id '
+            "WHERE r.status != 'active' ORDER BY r.start_date, r.id"
+        )]
+        for item in history:
+            item['end_date'] = add_days(date.fromisoformat(item['start_date']), item['observe_days'] - 1)
         normals = []
         for row in connection.execute('SELECT * FROM food_normal_plans ORDER BY start_date, id'):
             item = dict(row)
@@ -429,6 +437,7 @@ class FoodScreeningStore(FoodLibraryStore):
         return {
             'today': today,
             'blocks': blocks, 'pauses': pauses, 'normals': normals, 'rounds': rounds,
+            'history': history,
             'queue': self.queue_in(connection),
             'conflicts': self.conflicts_in(connection),
             'foods': {str(row['id']): row['name'] for row in connection.execute('SELECT id, name FROM foods')},

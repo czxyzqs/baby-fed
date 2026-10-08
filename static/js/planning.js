@@ -376,7 +376,10 @@
         const normals = schedule.normals
             .filter(item => day >= item.start_date && day <= addDays(item.start_date, item.days - 1))
             .map(plan => ({ kind: 'normal', plan }));
-        return [...rounds, ...blocks, ...pauses, ...normals];
+        const history = (schedule.history || [])
+            .filter(item => day >= item.start_date && day <= addDays(item.start_date, item.observe_days - 1))
+            .map(item => ({ kind: 'history', item }));
+        return [...rounds, ...blocks, ...pauses, ...normals, ...history];
     }
 
     function renderCalendar() {
@@ -449,6 +452,9 @@
             if (item.kind === 'round') {
                 dot.classList.add('round');
                 text = `${item.item.food_name} · 排敏观察中 · 第${item.offset + 1}/${item.item.observe_days}天（${item.item.start_date.slice(5).replace('-', '/')} 起）`;
+            } else if (item.kind === 'history') {
+                dot.classList.add(item.item.status === 'normal' ? 'done-normal' : 'done-allergic');
+                text = `${item.item.food_name} · 排敏${item.item.status === 'normal' ? '已通过' : '过敏'}（${item.item.start_date.slice(5).replace('-', '/')} 起）`;
             } else if (item.kind === 'block') {
                 dot.classList.add(paletteMap[item.block.food_id] || 'seg-0');
                 text = `${foodName(item.block.food_id)} · 第${item.offset + 1}/${item.block.days}天` +
@@ -568,6 +574,13 @@
                 sort: plan.start_date, color: 'normal',
                 text: `${dateRange(plan.start_date, plan.days)} ${foodName(plan.food_id)} · 常规计划`,
                 del: { path: `normals/${plan.id}`, confirm: `删除「${foodName(plan.food_id)}」的常规计划？` }
+            });
+        });
+        (schedule.history || []).forEach(item => {
+            rows.push({
+                sort: item.start_date,
+                color: item.status === 'normal' ? 'done-normal' : 'done-allergic',
+                text: `${dateRange(item.start_date, item.observe_days)} ${item.food_name} · 排敏${item.status === 'normal' ? '已通过' : '过敏'}`
             });
         });
         rows.sort((first, second) => first.sort.localeCompare(second.sort));

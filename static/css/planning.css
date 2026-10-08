@@ -248,6 +248,12 @@ body.elder .planning-day-actions button { font-size: 17px; padding: 10px 14px; m
 .planning-dot.round { background: #e8a23d; }
 .planning-agenda-dot.round { background: #e8a23d; }
 
+/* 已完成的排敏轮次（历史）：绿=通过，红=过敏 */
+.planning-dot.done-normal { background: #2e9464; }
+.planning-dot.done-allergic { background: #d35445; }
+.planning-agenda-dot.done-normal { background: #2e9464; }
+.planning-agenda-dot.done-allergic { background: #d35445; }
+
 /* 队列天数步进器：－ 观察3天 ＋ */
 .planning-queue-days {
     display: flex; align-items: center; gap: 4px;
