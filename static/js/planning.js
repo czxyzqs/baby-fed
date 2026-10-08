@@ -458,7 +458,7 @@
             } else if (item.kind === 'block') {
                 dot.classList.add(paletteMap[item.block.food_id] || 'seg-0');
                 text = `${foodName(item.block.food_id)} · 第${item.offset + 1}/${item.block.days}天` +
-                    `${item.block.pinned ? ' · 已固定📌' : ''}${item.block.stale ? ' · 已失效' : ''}`;
+                    `${item.block.stale ? ' · 已失效' : ''}`;
             } else if (item.kind === 'pause') {
                 dot.classList.add('pause');
                 text = `⏸ 暂停排敏${item.pause.reason ? ` · ${item.pause.reason}` : ''}`;
@@ -477,7 +477,6 @@
                 }));
                 actions.append(button('天数+', () => changeBlock(item.block, { days: Math.min(14, item.block.days + 1) })));
                 if (item.block.days > 1) actions.append(button('天数-', () => changeBlock(item.block, { days: item.block.days - 1 })));
-                if (item.block.pinned) actions.append(button('取消固定', () => changeBlock(item.block, { pinned: false })));
                 actions.append(button('删除', () => run(`删除「${foodName(item.block.food_id)}」的计划？食物将回到排敏队列末尾。`, () => api(`blocks/${item.block.id}`, 'DELETE'))));
             } else if (item.kind === 'pause') {
                 actions.append(button('删除', () => run('删除这个暂停段？', () => api(`pauses/${item.pause.id}`, 'DELETE'))));
@@ -518,7 +517,7 @@
             renderCalendar();
             renderDayDetail();
             renderMovebar();
-            toast(schedule.conflicts.length ? '已移动并固定 📌（存在观察期重叠，可一键重排）' : '已移动并固定 📌');
+            toast(schedule.conflicts.length ? '已移动（存在观察期重叠，可一键重排）' : '已移动');
         } catch (error) {
             message(`移动失败：${error.message}`, true);
         }
@@ -555,7 +554,7 @@
             blockRows.push({
                 sort: block.start_date, days: block.days, block,
                 color: paletteMap[block.food_id] || 'seg-0',
-                suffix: `${block.pinned ? ' · 已固定📌' : ''}${block.stale ? ' · 已失效' : ''}`,
+                suffix: `${block.stale ? ' · 已失效' : ''}`,
                 merged: []
             });
         });
@@ -710,7 +709,6 @@
         const daysLabel = node('label', '观察天数（1–14 天）');
         daysLabel.append(daysStepper(state, 1, 14));
         body.append(daysLabel);
-        body.append(node('p', '改开始日期后排期会固定 📌，不再被自动顺延挪动。', 'planning-hint'));
         const actions = node('div', '', 'planning-actions');
         actions.append(button('取消', closeDialog));
         actions.append(button('保存', async () => {
@@ -730,7 +728,7 @@
                 const moved = data.start_date !== block.start_date;
                 toast(result.conflicts.length
                     ? '排期已修改（存在观察期重叠，可一键重排）'
-                    : (moved ? `「${foodName(block.food_id)}」已改到 ${start.value.slice(5).replace('-', '/')} 并固定 📌` : `「${foodName(block.food_id)}」排期已修改`));
+                    : (moved ? `「${foodName(block.food_id)}」已改到 ${start.value.slice(5).replace('-', '/')}` : `「${foodName(block.food_id)}」排期已修改`));
             } catch (error) {
                 message(`保存失败：${error.message}`, true);
             }
@@ -1082,7 +1080,7 @@
 
     element('auto').addEventListener('click', () => run('按队列顺序自动生成排期？将接在现有排期之后，绕开暂停段。', () => api('schedule/auto', 'POST')));
     element('repack').addEventListener('click', async () => {
-        if (!window.confirm('把未固定的未来排期恢复为首尾相接？固定📌的计划和暂停段不会被移动。')) return;
+        if (!window.confirm('把未来的排期恢复为首尾相接？进行中的观察和暂停段不会被移动。')) return;
         const before = schedule.blocks.map(block => `${block.id}:${block.start_date}`).join('|');
         try {
             const result = await api('schedule/repack', 'POST');
