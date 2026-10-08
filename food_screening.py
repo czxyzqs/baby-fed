@@ -365,7 +365,41 @@ class FoodScreeningStore(FoodLibraryStore):
         with self.connect() as connection:
             return self.schedule_in(connection)
 
+    def merge_normal_plans(self, connection):
+        """同食物相邻或重叠的常规计划合并成一条：展示/删除/编辑天然一体。幂等，可重复调用。"""
+        by_food = {}
+        for row in connection.execute('SELECT * FROM food_normal_plans ORDER BY food_id, start_date, id'):
+            by_food.setdefault(row['food_id'], []).append(dict(row))
+        for plans in by_food.values():
+            runs = []
+            for plan in plans:
+                start = date.fromisoformat(plan['start_date'])
+                end = start + timedelta(days=plan['days'] - 1)
+                if runs and start <= runs[-1]['end'] + timedelta(days=1):
+                    run = runs[-1]
+                    run['end'] = max(run['end'], end)
+                    run['ids'].append(plan['id'])
+                else:
+                    runs.append({'start': start, 'end': end, 'ids': [plan['id']], 'keep': plan})
+            for run in runs:
+                days = (run['end'] - run['start']).days + 1
+                keep_id = min(run['ids'])
+                if run['keep']['id'] == keep_id and run['keep']['days'] == days:
+                    # 保留的记录已是合并结果，只需清掉其余记录
+                    for plan_id in run['ids']:
+                        if plan_id != keep_id:
+                            connection.execute('DELETE FROM food_normal_plans WHERE id = ?', (plan_id,))
+                else:
+                    connection.execute(
+                        'UPDATE food_normal_plans SET start_date = ?, days = ? WHERE id = ?',
+                        (run['start'].isoformat(), days, keep_id),
+                    )
+                    for plan_id in run['ids']:
+                        if plan_id != keep_id:
+                            connection.execute('DELETE FROM food_normal_plans WHERE id = ?', (plan_id,))
+
     def schedule_in(self, connection):
+        self.merge_normal_plans(connection)
         today = today_cn().isoformat()
         rounds = self.latest_round_map(connection)
         status_by_food = {food_id: self.food_status(None, item) for food_id, item in rounds.items()}
