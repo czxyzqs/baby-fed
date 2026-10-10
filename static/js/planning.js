@@ -652,17 +652,17 @@
         return iso(date);
     }
 
-    // 观察天数步进器（弹窗内复用）：limit 传 [min, max]
-    function daysStepper(state, min, max) {
+    // 天数步进器（弹窗内复用）：format 自定义文案，默认排敏观察
+    function daysStepper(state, min, max, format = days => `观察${days}天`) {
         const row = node('div', '', 'planning-queue-days planning-queue-days-dialog');
         const minus = button('－', () => {
             state.days = Math.max(min, state.days - 1);
-            value.textContent = `观察${state.days}天`;
+            value.textContent = format(state.days);
         });
-        const value = node('span', `观察${state.days}天`, 'planning-queue-days-value');
+        const value = node('span', format(state.days), 'planning-queue-days-value');
         const plus = button('＋', () => {
             state.days = Math.min(max, state.days + 1);
-            value.textContent = `观察${state.days}天`;
+            value.textContent = format(state.days);
         });
         row.append(minus, value, plus);
         return row;
@@ -984,18 +984,9 @@
         });
         body.append(node('p', '可一次点选多种「正常」食物，未排敏食物请加入排敏队列。', 'planning-hint'));
         body.append(group);
-        const daysLabel = node('label', '连续天数');
-        const daysGroup = node('div', '', 'planning-chip-group');
+        const daysLabel = node('label', '连续天数（1–14 天）');
         const chosenDays = { days: 1 };
-        [1, 2, 3].forEach(days => {
-            const chip = button(`${days} 天`, () => {
-                chosenDays.days = days;
-                [...daysGroup.children].forEach(child => child.classList.remove('active'));
-                chip.classList.add('active');
-            }, 'planning-chip' + (days === 1 ? ' active' : ''));
-            daysGroup.append(chip);
-        });
-        daysLabel.append(daysGroup);
+        daysLabel.append(daysStepper(chosenDays, 1, 14, days => `连续${days}天`));
         body.append(daysLabel);
         const actions = node('div', '', 'planning-actions');
         actions.append(button('取消', closeDialog));
