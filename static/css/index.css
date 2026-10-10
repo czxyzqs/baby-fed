@@ -272,6 +272,12 @@
         gap: 12px;
     }
 
+    .data-dashboard-menu {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
     .health-management-item {
         text-decoration: none;
         display: flex;
