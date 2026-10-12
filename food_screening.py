@@ -505,6 +505,7 @@ class FoodScreeningStore(FoodLibraryStore):
         order = [dict(row) for row in connection.execute(
             "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' ORDER BY start_date, id"
         )]
+        companions = self.snapshot_segment_companions(connection, order)
         for block in order:
             start = cursor + timedelta(days=1)
             end = start + timedelta(days=block['days'] - 1)
@@ -522,6 +523,7 @@ class FoodScreeningStore(FoodLibraryStore):
                     'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
                     (start.isoformat(), now, block['id']),
                 )
+                self.move_segment_companions(connection, companions, block['id'], start.isoformat())
 
     def repack_schedule(self, start_date=None):
         start = None
@@ -595,10 +597,15 @@ class FoodScreeningStore(FoodLibraryStore):
                 (*updates.values(), identifier),
             )
             if 'start_date' in updates and updates['start_date'] != block['start_date']:
-                # 移动排期块时，同日起、不超出本段的常规计划（搭配食物）一起移动；跨段连续计划不动
+                # 移动排期块时，同日起的常规计划（搭配食物）一起移动；跨段连续计划起始于更早日期，不受影响
+                companions = self.snapshot_segment_companions(connection, [block])
+                self.move_segment_companions(connection, companions, block['id'], updates['start_date'])
+            if 'days' in updates and updates['days'] != block['days']:
+                # 与本段同起同止的搭配计划跟随天数调整
+                new_start = updates.get('start_date', block['start_date'])
                 connection.execute(
-                    'UPDATE food_normal_plans SET start_date = ? WHERE start_date = ? AND days <= ?',
-                    (updates['start_date'], block['start_date'], block['days']),
+                    'UPDATE food_normal_plans SET days = ? WHERE start_date = ? AND days = ?',
+                    (updates['days'], new_start, block['days']),
                 )
             return self.schedule_in(connection)
 
@@ -660,6 +667,7 @@ class FoodScreeningStore(FoodLibraryStore):
         blocks = [dict(row) for row in connection.execute(
             "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' ORDER BY start_date, id"
         )]
+        companions = self.snapshot_segment_companions(connection, blocks)
         now = datetime.now(CN_TZ).isoformat()
         chain_end = None
         settled = None        # 最后一个未移动的排期（含其结束日）
@@ -690,6 +698,7 @@ class FoodScreeningStore(FoodLibraryStore):
                     'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
                     (start.isoformat(), now, block['id']),
                 )
+                self.move_segment_companions(connection, companions, block['id'], start.isoformat())
                 # 首个因暂停挪走的排期：把它空出的暂停前日子补给前一个未移动的排期
                 next_pauses = [p[0] for p in pauses if p[0] > settled_end] if settled_end else []
                 if (first_pause is not None and settled is not None
@@ -856,6 +865,21 @@ class FoodScreeningStore(FoodLibraryStore):
                 self.close_gap(connection, old_start, old_end)
             return self.schedule_in(connection)
 
+    def snapshot_segment_companions(self, connection, blocks):
+        """在块被移动前预记录各自的搭配常规计划（同日起）；先取快照，避免块移动后起始日互相污染。"""
+        plans = [dict(row) for row in connection.execute('SELECT id, start_date FROM food_normal_plans')]
+        return {
+            block['id']: [plan['id'] for plan in plans if plan['start_date'] == block['start_date']]
+            for block in blocks
+        }
+
+    def move_segment_companions(self, connection, companions, block_id, new_start):
+        """把某个排期块名下的搭配常规计划一起挪到新的起始日。"""
+        for plan_id in companions.get(block_id, []):
+            connection.execute(
+                'UPDATE food_normal_plans SET start_date = ? WHERE id = ?', (new_start, plan_id)
+            )
+
     def delete_pause(self, identifier, close_gap=False):
         with self.connect() as connection:
             row = connection.execute('SELECT * FROM food_pauses WHERE id = ?', (identifier,)).fetchone()
@@ -881,6 +905,7 @@ class FoodScreeningStore(FoodLibraryStore):
             "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' AND start_date > ? ORDER BY start_date, id",
             (gap_end.isoformat(),)
         )]
+        companions = self.snapshot_segment_companions(connection, movable)
         for block in movable:
             original = date.fromisoformat(block['start_date'])
             start = cursor + timedelta(days=1)
@@ -901,6 +926,7 @@ class FoodScreeningStore(FoodLibraryStore):
                 'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
                 (start.isoformat(), now, block['id'])
             )
+            self.move_segment_companions(connection, companions, block['id'], start.isoformat())
             cursor = end
 
     def add_normal(self, data):
