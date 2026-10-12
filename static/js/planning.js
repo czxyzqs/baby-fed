@@ -544,17 +544,18 @@
         const rows = [];
         const dayDiff = (first, second) =>
             Math.round((new Date(first + 'T00:00:00') - new Date(second + 'T00:00:00')) / 86400000);
+        // 进行中的观察轮次也作为合并宿主：排敏开始观察后，同日期段的常规计划照样并入观察行
+        const roundRows = [];
         (schedule.rounds || []).forEach(item => {
             // 已开始的排敏由观察行代表，不再重复画排期块；实际晚于计划时标注
             const block = schedule.blocks.find(entry => entry.live && entry.food_id === item.food_id);
-            const delay = block ? dayDiff(item.start_date, block.start_date) : 0;
-            rows.push({
-                sort: item.start_date, color: 'round',
-                text: `${dateRange(item.start_date, item.observe_days)} ${item.food_name} · 排敏观察中${delay > 0 ? ` · 比计划晚${delay}天` : ''}`,
-                edit: { type: 'round', item }
+            roundRows.push({
+                sort: item.start_date, days: item.observe_days, item,
+                delay: block ? dayDiff(item.start_date, block.start_date) : 0,
+                merged: []
             });
         });
-        // 常规计划与排期块日期段完全一致时合并成一行展示：排敏食物在前并加底色标记
+        // 常规计划与排期块/观察轮次日期段完全一致时合并成一行展示：排敏食物在前并加底色标记
         const blockRows = [];
         schedule.blocks.filter(block => !block.live).forEach(block => {
             blockRows.push({
@@ -565,12 +566,28 @@
             });
         });
         schedule.normals.forEach(plan => {
-            const host = blockRows.find(row => row.sort === plan.start_date && row.days === plan.days);
+            const host = blockRows.find(row => row.sort === plan.start_date && row.days === plan.days)
+                || roundRows.find(row => row.sort === plan.start_date && row.days === plan.days);
             if (host) host.merged.push(plan);
             else rows.push({
                 sort: plan.start_date, color: 'normal',
                 text: `${dateRange(plan.start_date, plan.days)} ${foodName(plan.food_id)} · 常规计划`,
                 del: { path: `normals/${plan.id}`, confirm: `删除「${foodName(plan.food_id)}」的常规计划？` }
+            });
+        });
+        roundRows.forEach(row => {
+            const suffix = ` · 排敏观察中${row.delay > 0 ? ` · 比计划晚${row.delay}天` : ''}`;
+            rows.push(row.merged.length ? {
+                sort: row.sort, color: 'round',
+                rangeText: dateRange(row.sort, row.days), suffix,
+                parts: [{ name: row.item.food_name, mark: true },
+                        ...row.merged.map(plan => ({ name: foodName(plan.food_id) }))],
+                text: `${dateRange(row.sort, row.days)} ${row.item.food_name}${suffix}`,
+                edit: { type: 'round', item: row.item }
+            } : {
+                sort: row.sort, color: 'round',
+                text: `${dateRange(row.sort, row.days)} ${row.item.food_name}${suffix}`,
+                edit: { type: 'round', item: row.item }
             });
         });
         blockRows.forEach(row => {
