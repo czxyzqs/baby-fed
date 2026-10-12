@@ -486,33 +486,51 @@ class FoodScreeningStore(FoodLibraryStore):
                 connection.execute('DELETE FROM food_queue WHERE id = ?', (item['id'],))
             return self.schedule_in(connection)
 
-    def repack(self, connection):
-        fixed = [interval for interval in self.block_intervals_in(connection, include_rounds=True)
-                 if interval['kind'] == 'round']
+    def repack(self, connection, start_from=None):
+        """把未来的排期块从指定日期（默认今天）起依次排开；进行中的观察不可压，撞到暂停段就跳到暂停结束后继续。"""
         cursor = today_cn()
-        for interval in fixed:
+        if start_from is not None and start_from - timedelta(days=1) > cursor:
+            cursor = start_from - timedelta(days=1)
+        for interval in self.block_intervals_in(connection, include_rounds=True):
+            if interval['kind'] != 'round':
+                continue
             end = date.fromisoformat(interval['end'])
             if end > cursor:
                 cursor = end
-        for row in connection.execute('SELECT end_date FROM food_pauses'):
-            candidate = date.fromisoformat(row['end_date'])
-            if candidate > cursor:
-                cursor = candidate
+        pauses = [
+            (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
+            for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
+        ]
         now = datetime.now(CN_TZ).isoformat()
         order = [dict(row) for row in connection.execute(
             "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' ORDER BY start_date, id"
         )]
         for block in order:
-            cursor = cursor + timedelta(days=1)
-            connection.execute(
-                'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
-                (cursor.isoformat(), now, block['id']),
-            )
-            cursor = cursor + timedelta(days=block['days'] - 1)
+            start = cursor + timedelta(days=1)
+            end = start + timedelta(days=block['days'] - 1)
+            overlap = True
+            while overlap:
+                overlap = False
+                for pause_start, pause_end in pauses:
+                    if start <= pause_end and end >= pause_start:
+                        start = pause_end + timedelta(days=1)
+                        end = start + timedelta(days=block['days'] - 1)
+                        overlap = True
+            cursor = end
+            if start.isoformat() != block['start_date']:
+                connection.execute(
+                    'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
+                    (start.isoformat(), now, block['id']),
+                )
 
-    def repack_schedule(self):
+    def repack_schedule(self, start_date=None):
+        start = None
+        if start_date:
+            start = parse_date(start_date, '重排开始日期', allow_future=True)
+            if start < today_cn():
+                raise FoodLibraryError('只能从今天或之后的日期开始重排')
         with self.connect() as connection:
-            self.repack(connection)
+            self.repack(connection, start)
             return self.schedule_in(connection)
 
     def update_round(self, identifier, data):
@@ -1105,7 +1123,8 @@ def register_food_screening(app, data_dir):
 
     @blueprint.post('/schedule/repack')
     def repack_blocks():
-        return jsonify({'success': True, **store.repack_schedule()})
+        data = request.get_json(silent=True) or {}
+        return jsonify({'success': True, **store.repack_schedule(data.get('start_date'))})
 
     @blueprint.route('/blocks/<int:block_id>', methods=['PUT', 'DELETE'])
     def change_block(block_id):

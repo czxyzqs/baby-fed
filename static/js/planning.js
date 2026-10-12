@@ -493,7 +493,13 @@
             const addRow = node('div', '', 'planning-day-add');
             addRow.append(button('＋ 插入排敏（新食物）', () => insertDialog(selectedDay)));
             addRow.append(button('＋ 常规计划（正常食物）', () => normalDialog(selectedDay)));
-            if (future) addRow.append(button('⏸ 划暂停段', () => pauseDialog(selectedDay)));
+            if (future) {
+                addRow.append(button('⏸ 划暂停段', () => pauseDialog(selectedDay)));
+                addRow.append(button('⇄ 从这天起重排', () => run(
+                    `把未来的排期从 ${selectedDay} 起重新排开？会自动避开暂停段和进行中的观察。`,
+                    () => api('schedule/repack', 'POST', { start_date: selectedDay })
+                )));
+            }
             container.append(addRow);
         }
     }
