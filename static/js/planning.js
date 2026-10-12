@@ -632,13 +632,22 @@
             });
         });
         rows.sort((first, second) => first.sort.localeCompare(second.sort));
-        if (!rows.length) {
-            container.append(node('p', '还没有任何排期。可先在上方维护队列，然后自动生成排期。', 'planning-hint'));
+        // 与上方月历联动：只展示和当前查看月份有日期重叠的行
+        const viewMonth = monthCursor || schedule.today.slice(0, 7);
+        const [year, month] = viewMonth.split('-').map(Number);
+        const monthStart = `${viewMonth}-01`;
+        const nextMonth = month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, '0')}`;
+        const monthEnd = addDays(`${nextMonth}-01`, -1);
+        const monthRows = rows.filter(row => row.sort <= monthEnd && row.end >= monthStart);
+        const title = element('agenda-title');
+        if (title) title.textContent = `排期一览 · ${year}年${month}月`;
+        if (!monthRows.length) {
+            container.append(node('p', `${year}年${month}月 没有排期。切到其他月份，或点上方日历翻页。`, 'planning-hint'));
             return;
         }
         // 结束日期早于今天的行默认收起，让看板聚焦正在观察与未来的排期
-        const pastRows = rows.filter(row => row.end < schedule.today);
-        const currentRows = rows.filter(row => row.end >= schedule.today);
+        const pastRows = monthRows.filter(row => row.end < schedule.today);
+        const currentRows = monthRows.filter(row => row.end >= schedule.today);
         const appendRow = (row, target) => {
             const line = node('div', '', 'planning-agenda-row');
             line.append(node('span', '', 'planning-agenda-dot ' + row.color));
@@ -1126,8 +1135,8 @@
         }
     });
     element('queue-add').addEventListener('click', openQueuePicker);
-    element('prev').addEventListener('click', () => { monthCursor = shiftMonth(-1); renderCalendar(); });
-    element('next').addEventListener('click', () => { monthCursor = shiftMonth(1); renderCalendar(); });
+    element('prev').addEventListener('click', () => { monthCursor = shiftMonth(-1); renderCalendar(); renderAgenda(); });
+    element('next').addEventListener('click', () => { monthCursor = shiftMonth(1); renderCalendar(); renderAgenda(); });
     element('overlay').addEventListener('click', event => {
         if (event.target === element('overlay')) closeDialog();
     });
