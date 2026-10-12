@@ -190,6 +190,14 @@
 
 body.elder .food-library-tab { font-size: 19px; padding: 13px 18px; border-radius: 22px; min-height: 60px; }
 
+/* 视图切换（按科属 / 按品类）与编辑表单的科属输入 */
+.food-library-view-toggle {
+    display: flex; gap: 4px; flex: none;
+    padding-right: 8px; margin-right: 4px;
+    border-right: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+}
+.food-library-family-label { display: block; margin-top: 12px; }
+
 /* 拍照导入：识别结果确认面板 */
 #food-library-ocr-panel h2 {
     margin-bottom: 10px;

@@ -6,7 +6,22 @@
     let ocrState = null;
     let requestVersion = 0;
     let activeCategory = '';
+    let groupByFamily = localStorage.getItem('food-library-group') !== 'category';
     const element = id => document.getElementById(`food-library-${id}`);
+
+    // 科属展示顺序与图标（未收录的科排在最后，按名称排序）
+    const FAMILY_ORDER = ['十字花科', '伞形科', '苋科', '菊科', '茄科', '葫芦科', '豆科', '百合科', '禾本科',
+        '薯蓣科', '旋花科', '天南星科', '蔷薇科', '芸香科', '葡萄科', '猕猴桃科', '杜鹃花科', '芭蕉科',
+        '凤梨科', '仙人掌科', '番木瓜科', '柿科', '石榴科', '鼠李科', '无患子科', '漆树科', '樟科',
+        '西番莲科', '棕榈科', '胡桃科', '胡麻科', '亚麻科', '木樨科', '桦木科', '壳斗科', '松科'];
+    const FAMILY_EMOJI = {
+        '十字花科': '🥦', '伞形科': '🥕', '苋科': '🌿', '菊科': '🥬', '茄科': '🍅', '葫芦科': '🎃',
+        '豆科': '🫘', '百合科': '🧅', '禾本科': '🌾', '薯蓣科': '🍠', '旋花科': '🍠', '天南星科': '🥔',
+        '蔷薇科': '🍎', '芸香科': '🍊', '葡萄科': '🍇', '猕猴桃科': '🥝', '杜鹃花科': '🫐', '芭蕉科': '🍌',
+        '凤梨科': '🍍', '仙人掌科': '🌵', '番木瓜科': '🍈', '柿科': '🍊', '石榴科': '🍎', '鼠李科': '🌰',
+        '无患子科': '🥭', '漆树科': '🥭', '樟科': '🥑', '西番莲科': '🍈', '棕榈科': '🥥', '胡桃科': '🌰',
+        '胡麻科': '🫘', '亚麻科': '🌾', '木樨科': '🫒', '桦木科': '🌰', '壳斗科': '🌰', '松科': '🌲'
+    };
 
     function message(text = '', error = false) {
         element('message').textContent = text;
@@ -77,6 +92,23 @@
         }
         const nav = element('tabs');
         nav.replaceChildren();
+        // 视图切换：按科属 / 按品类
+        const toggle = document.createElement('div');
+        toggle.className = 'food-library-view-toggle';
+        [['family', '🌿 按科属'], ['category', '🗂 按品类']].forEach(([value, label]) => {
+            const tab = action(label, () => {
+                if (busy) return;
+                groupByFamily = value === 'family';
+                localStorage.setItem('food-library-group', groupByFamily ? 'family' : 'category');
+                render();
+            }, 'food-library-tab');
+            tab.setAttribute('role', 'tab');
+            tab.setAttribute('aria-selected', String((value === 'family') === groupByFamily));
+            if ((value === 'family') === groupByFamily) tab.classList.add('active');
+            toggle.append(tab);
+        });
+        nav.append(toggle);
+        if (groupByFamily) return;
         const tabs = [['', `全部 · ${library.foods.length} 种`]].concat(library.categories.map(
             category => [String(category.id), `${category.emoji} ${category.name}${category.is_high_allergen ? ' ⚠️' : ''}`]
         ));
@@ -93,19 +125,54 @@
         });
     }
 
-    function render() {
-        renderTabs();
-        const query = element('search').value.trim().toLocaleLowerCase();
-        const selected = activeCategory;
-        const list = element('list');
-        list.replaceChildren();
+    function foodRow(food) {
+        const row = document.createElement('div');
+        row.className = 'food-library-row';
+        const name = document.createElement('strong');
+        name.textContent = food.name;
+        const buttons = document.createElement('div');
+        buttons.className = 'food-library-actions';
+        buttons.append(
+            action('编辑', () => openEditor('food', food)),
+            action('删除', () => removeItem('food', food), 'food-library-danger')
+        );
+        row.append(name, buttons);
+        return row;
+    }
+
+    function renderFamilyGroups(list, query) {
+        const familyFoods = new Map();
+        const restFoods = new Map();
+        library.foods.forEach(food => {
+            if (query && !fuzzyMatch(food.name, query)) return;
+            const target = food.family ? familyFoods : restFoods;
+            const key = food.family || food.category_id;
+            if (!target.has(key)) target.set(key, []);
+            target.get(key).push(food);
+        });
+        const known = FAMILY_ORDER.filter(family => familyFoods.has(family));
+        const extra = [...familyFoods.keys()].filter(family => !FAMILY_ORDER.includes(family))
+            .sort((first, second) => first.localeCompare(second, 'zh'));
         let visibleCount = 0;
+        [...known, ...extra].forEach(family => {
+            const foods = familyFoods.get(family);
+            visibleCount += foods.length;
+            const group = document.createElement('section');
+            group.className = 'food-library-group';
+            const header = document.createElement('div');
+            header.className = 'food-library-group-header';
+            const title = document.createElement('h3');
+            title.textContent = `${FAMILY_EMOJI[family] || '🌿'} ${family} · ${foods.length} 种`;
+            header.append(title);
+            group.append(header);
+            foods.forEach(food => group.append(foodRow(food)));
+            list.append(group);
+        });
+        // 未标科属的食物（肉、蛋、鱼、奶等）仍按品类分组展示
         library.categories.forEach(category => {
-            if (selected && String(category.id) !== selected) return;
-            const foods = library.foods.filter(food => food.category_id === category.id);
-            const matches = query ? foods.filter(food => fuzzyMatch(food.name, query)) : foods;
-            if (query && !matches.length) return;
-            visibleCount += matches.length;
+            const foods = restFoods.get(category.id);
+            if (!foods) return;
+            visibleCount += foods.length;
             const group = document.createElement('section');
             group.className = 'food-library-group';
             const header = document.createElement('div');
@@ -118,37 +185,60 @@
                 warning.textContent = '⚠️ 高致敏品类';
                 header.append(warning);
             }
-            const controls = document.createElement('div');
-            controls.className = 'food-library-actions';
-            controls.append(
-                action('＋ 食物', () => openEditor('food', null, category.id)),
-                action('编辑品类', () => openEditor('category', category)),
-                action('删除品类', () => removeItem('category', category), 'food-library-danger')
-            );
-            header.append(controls);
             group.append(header);
-            matches.forEach(food => {
-                const row = document.createElement('div');
-                row.className = 'food-library-row';
-                const name = document.createElement('strong');
-                name.textContent = food.name;
-                const buttons = document.createElement('div');
-                buttons.className = 'food-library-actions';
-                buttons.append(
-                    action('编辑', () => openEditor('food', food)),
-                    action('删除', () => removeItem('food', food), 'food-library-danger')
-                );
-                row.append(name, buttons);
-                group.append(row);
-            });
-            if (!foods.length) {
-                const empty = document.createElement('p');
-                empty.className = 'food-library-hint';
-                empty.textContent = '这个品类还没有食物，点击“＋ 食物”添加。';
-                group.append(empty);
-            }
+            foods.forEach(food => group.append(foodRow(food)));
             list.append(group);
         });
+        return visibleCount;
+    }
+
+    function render() {
+        renderTabs();
+        const query = element('search').value.trim().toLocaleLowerCase();
+        const list = element('list');
+        list.replaceChildren();
+        let visibleCount = 0;
+        if (groupByFamily) {
+            visibleCount = renderFamilyGroups(list, query);
+        } else {
+            const selected = activeCategory;
+            library.categories.forEach(category => {
+                if (selected && String(category.id) !== selected) return;
+                const foods = library.foods.filter(food => food.category_id === category.id);
+                const matches = query ? foods.filter(food => fuzzyMatch(food.name, query)) : foods;
+                if (query && !matches.length) return;
+                visibleCount += matches.length;
+                const group = document.createElement('section');
+                group.className = 'food-library-group';
+                const header = document.createElement('div');
+                header.className = 'food-library-group-header';
+                const title = document.createElement('h3');
+                title.textContent = `${category.emoji} ${category.name} · ${foods.length} 种`;
+                header.append(title);
+                if (category.is_high_allergen) {
+                    const warning = document.createElement('p');
+                    warning.textContent = '⚠️ 高致敏品类';
+                    header.append(warning);
+                }
+                const controls = document.createElement('div');
+                controls.className = 'food-library-actions';
+                controls.append(
+                    action('＋ 食物', () => openEditor('food', null, category.id)),
+                    action('编辑品类', () => openEditor('category', category)),
+                    action('删除品类', () => removeItem('category', category), 'food-library-danger')
+                );
+                header.append(controls);
+                group.append(header);
+                matches.forEach(food => group.append(foodRow(food)));
+                if (!foods.length) {
+                    const empty = document.createElement('p');
+                    empty.className = 'food-library-hint';
+                    empty.textContent = '这个品类还没有食物，点击“＋ 食物”添加。';
+                    group.append(empty);
+                }
+                list.append(group);
+            });
+        }
         element('count').textContent = `共 ${library.categories.length}/20 个品类 · ${library.foods.length} 种食物 · 当前显示 ${visibleCount} 种`;
         if (!list.children.length) {
             const empty = document.createElement('p');
@@ -185,6 +275,18 @@
         window.scrollTo(0, 0);
     }
 
+    function fillFamilyOptions(selected) {
+        const datalist = element('family-options');
+        datalist.replaceChildren();
+        const families = new Set(FAMILY_ORDER);
+        library.foods.forEach(food => { if (food.family) families.add(food.family); });
+        [...families].sort((first, second) => {
+            const left = FAMILY_ORDER.indexOf(first), right = FAMILY_ORDER.indexOf(second);
+            return (left === -1 ? FAMILY_ORDER.length : left) - (right === -1 ? FAMILY_ORDER.length : right)
+                || first.localeCompare(second, 'zh');
+        }).forEach(family => datalist.append(new Option(family)));
+    }
+
     function openEditor(kind, item = null, categoryId = null) {
         if (busy || !loaded) return;
         editor = { kind, id: item?.id ?? null };
@@ -200,6 +302,8 @@
         element('category').required = kind === 'food';
         element('emoji').required = kind === 'category';
         fillCategories(element('category'), item?.category_id ?? categoryId ?? (Number(activeCategory) || undefined));
+        fillFamilyOptions();
+        element('family').value = item?.family || '';
         element('emoji').value = item?.emoji || '🥣';
         element('allergen').checked = item?.is_high_allergen === true;
         window.scrollTo(0, 0);
@@ -238,6 +342,7 @@
         }
         if (kind === 'food') {
             data.category_id = Number(element('category').value);
+            data.family = element('family').value.trim();
         } else {
             data.emoji = element('emoji').value.trim();
             data.is_high_allergen = element('allergen').checked;

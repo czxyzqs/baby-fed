@@ -21,6 +21,50 @@ PRESET_CATEGORIES = (
     ('油脂类', '🫒', False, ('菜籽油', '橄榄油', '核桃油')),
 )
 
+# 常见辅食的植物科属（科名 -> 同科食物）；用于辅食库「按科属」展示和新增食物的自动归科
+FAMILY_PRESETS = {
+    '十字花科': ('西兰花', '菜花', '花菜', '卷心菜', '圆白菜', '包菜', '芥蓝', '萝卜', '白萝卜', '油菜',
+               '白菜', '大白菜', '娃娃菜', '羽衣甘蓝', '紫甘蓝', '芥菜', '大头菜', '苤蓝', '菜籽油'),
+    '伞形科': ('胡萝卜', '芹菜', '香菜', '茴香'),
+    '苋科': ('菠菜', '苋菜', '红苋菜'),
+    '菊科': ('生菜', '油麦菜', '莴笋', '菊苣'),
+    '茄科': ('番茄', '西红柿', '辣椒', '彩椒', '青椒', '土豆', '马铃薯', '茄子'),
+    '葫芦科': ('南瓜', '冬瓜', '黄瓜', '丝瓜', '苦瓜', '西葫芦', '西瓜', '甜瓜', '哈密瓜'),
+    '豆科': ('菜豆', '四季豆', '豇豆', '刀豆', '毛豆', '蚕豆', '扁豆', '荷兰豆', '豌豆', '绿豆', '红豆',
+            '黄豆', '大豆', '豆腐', '豆浆', '豆芽', '花生', '花生酱', '鹰嘴豆'),
+    '百合科': ('洋葱', '大葱', '小葱', '香葱', '韭菜', '大蒜', '蒜', '蒜苗', '韭黄'),
+    '禾本科': ('大米', '稻米', '小米', '燕麦', '婴儿米粉', '玉米', '小麦', '面粉', '面条', '藜麦'),
+    '薯蓣科': ('山药',),
+    '旋花科': ('红薯', '地瓜', '空心菜'),
+    '天南星科': ('芋头',),
+    '蔷薇科': ('苹果', '梨', '山楂', '海棠', '桃', '桃子', '杏', '李', '李子', '樱桃', '草莓', '枇杷', '梅'),
+    '芸香科': ('橙子', '甜橙', '橘子', '柑橘', '柚子', '柠檬'),
+    '葡萄科': ('葡萄',),
+    '猕猴桃科': ('猕猴桃',),
+    '杜鹃花科': ('蓝莓',),
+    '芭蕉科': ('香蕉',),
+    '凤梨科': ('菠萝', '凤梨'),
+    '仙人掌科': ('火龙果',),
+    '番木瓜科': ('木瓜',),
+    '柿科': ('柿子',),
+    '石榴科': ('石榴',),
+    '鼠李科': ('枣', '冬枣'),
+    '无患子科': ('荔枝', '龙眼', '桂圆'),
+    '漆树科': ('芒果',),
+    '樟科': ('牛油果',),
+    '西番莲科': ('百香果',),
+    '棕榈科': ('椰子',),
+    '胡桃科': ('核桃', '核桃酱', '核桃油'),
+    '胡麻科': ('芝麻', '芝麻酱'),
+    '亚麻科': ('亚麻籽', '亚麻籽油'),
+    '木樨科': ('橄榄油',),
+    '桦木科': ('榛子',),
+    '壳斗科': ('板栗', '栗子'),
+    '松科': ('松子',),
+}
+
+FOOD_FAMILY = {food: family for family, foods in FAMILY_PRESETS.items() for food in foods}
+
 
 class FoodLibraryError(ValueError):
     def __init__(self, message, status=400):
@@ -163,7 +207,16 @@ class FoodLibraryStore:
                     value TEXT NOT NULL
                 )''')
                 connection.execute('PRAGMA user_version = 3')
-            elif version != 3:
+                version = 3
+            elif version not in (3, 4):
+                raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
+            if version == 3:
+                connection.execute('ALTER TABLE foods ADD COLUMN family TEXT')
+                for food, family in FOOD_FAMILY.items():
+                    connection.execute(
+                        'UPDATE foods SET family = ? WHERE name = ? AND family IS NULL', (family, food))
+                connection.execute('PRAGMA user_version = 4')
+            elif version != 4:
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             yield connection
             connection.commit()
@@ -230,6 +283,13 @@ class FoodLibraryStore:
         category_id = data.get('category_id')
         if type(category_id) is not int or not 0 < category_id <= 9223372036854775807:
             raise FoodLibraryError('请选择有效的食物品类')
+        family = data.get('family')
+        if family is not None:
+            if not isinstance(family, str) or len(family.strip()) > 20:
+                raise FoodLibraryError('科属最多 20 个字符')
+            family = family.strip() or None
+        if family is None:
+            family = FOOD_FAMILY.get(name)
         with self.connect() as connection:
             self.require_item(connection, 'category', category_id)
             if identifier is not None:
@@ -238,9 +298,12 @@ class FoodLibraryStore:
             if duplicate is not None and duplicate['id'] != identifier:
                 raise FoodLibraryError('已存在同名食物，请搜索后编辑', 409)
             if identifier is None:
-                cursor = connection.execute('INSERT INTO foods (name, category_id) VALUES (?, ?)', (name, category_id))
+                cursor = connection.execute(
+                    'INSERT INTO foods (name, category_id, family) VALUES (?, ?, ?)', (name, category_id, family))
                 return cursor.lastrowid
-            connection.execute('UPDATE foods SET name = ?, category_id = ? WHERE id = ?', (name, category_id, identifier))
+            connection.execute(
+                'UPDATE foods SET name = ?, category_id = ?, family = ? WHERE id = ?',
+                (name, category_id, family, identifier))
             return identifier
 
     def delete_food(self, identifier):

@@ -48,6 +48,9 @@
             <div id="food-library-food-fields" class="form-group">
                 <label for="food-library-category">所属品类</label>
                 <select id="food-library-category" class="form-input"></select>
+                <label for="food-library-family" class="food-library-family-label">科属（选填，用于按科展示）</label>
+                <input id="food-library-family" class="form-input" maxlength="20" list="food-library-family-options" autocomplete="off" placeholder="例如：十字花科">
+                <datalist id="food-library-family-options"></datalist>
             </div>
             <div id="food-library-category-fields" hidden>
                 <div class="form-group">
