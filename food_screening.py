@@ -6,7 +6,7 @@ import sqlite3
 
 from flask import Blueprint, current_app, jsonify, request
 
-from food_library import FoodLibraryError, FoodLibraryStore
+from food_library import FAMILY_PRESETS, FoodLibraryError, FoodLibraryStore
 
 
 SYMPTOMS = ('口周红疹', '荨麻疹', '呕吐', '腹泻', '便秘', '湿疹加重', '其他')
@@ -1099,14 +1099,19 @@ class FoodScreeningStore(FoodLibraryStore):
                 status = self.food_status(food, rounds.get(food['id']))
                 food['status'] = status
                 counts[status] += 1
+                # 覆盖统计按科属（同科过敏原相近更有参考意义）；未归科的按品类
+                name = food.get('family') or food['category_name'] or '未分组'
                 entry = coverage.setdefault(
-                    food['category_name'] or '未分组',
-                    {'name': food['category_name'] or '未分组', 'emoji': food['category_emoji'] or '🍚',
-                     'high_allergen': bool(food['is_high_allergen']), 'total': 0, 'tried': 0},
+                    name,
+                    {'name': name, 'emoji': food['category_emoji'] or '🍚',
+                     'high_allergen': False, 'total': 0, 'tried': 0},
                 )
                 entry['total'] += 1
+                entry['high_allergen'] = entry['high_allergen'] or bool(food['is_high_allergen'])
                 if status != 'untouched':
                     entry['tried'] += 1
+            ordered_coverage = [coverage.pop(family) for family in FAMILY_PRESETS if family in coverage]
+            ordered_coverage.extend(coverage.values())
             month_prefix = today_cn().strftime('%Y-%m')
             monthly = []
             seen = set()
@@ -1140,7 +1145,7 @@ class FoodScreeningStore(FoodLibraryStore):
             return {
                 'counts': counts,
                 'tried': counts['screening'] + counts['normal'] + counts['allergic'],
-                'coverage': list(coverage.values()),
+                'coverage': ordered_coverage,
                 'monthly': monthly,
                 'taste': {'like': taste['like'][:5], 'reject': taste['reject']},
                 'allergic': allergic,

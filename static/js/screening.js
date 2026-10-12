@@ -183,10 +183,11 @@
                 summary.append(item);
             });
         panel.append(summary);
-        panel.append(node('h3', '品类覆盖（已尝试 / 该类总数）'));
+        panel.append(node('h3', '科属覆盖（已尝试 / 该科总数）'));
         stats.coverage.forEach(entry => {
             const row = node('div', '', 'screening-bar-row');
-            row.append(node('span', `${entry.emoji} ${entry.name}${entry.high_allergen ? ' ⚠️' : ''}`, 'screening-bar-name'));
+            const emoji = window.FOOD_FAMILIES.emoji[entry.name] || entry.emoji;
+            row.append(node('span', `${emoji} ${entry.name}${entry.high_allergen ? ' ⚠️' : ''}`, 'screening-bar-name'));
             const bar = node('div', '', 'screening-bar');
             const fill = node('i', '', '');
             fill.style.width = `${entry.total ? Math.round(entry.tried / entry.total * 100) : 0}%`;
