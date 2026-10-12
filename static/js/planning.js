@@ -480,6 +480,7 @@
                 if (item.block.days > 1) actions.append(button('天数-', () => changeBlock(item.block, { days: item.block.days - 1 })));
                 actions.append(button('删除', () => run(`删除「${foodName(item.block.food_id)}」的计划？食物将回到排敏队列末尾。`, () => api(`blocks/${item.block.id}`, 'DELETE'))));
             } else if (item.kind === 'pause') {
+                actions.append(button('修改', () => editPauseDialog(item.pause)));
                 actions.append(button('删除', () => pauseDeleteDialog(item.pause)));
             } else if (item.kind === 'normal') {
                 actions.append(button('删除', () => run('删除这条常规计划？', () => api(`normals/${item.plan.id}`, 'DELETE'))));
@@ -629,6 +630,7 @@
                 text: row.merged.length
                     ? `${base} ${row.merged.map(plan => foodName(plan.food_id)).join('/')}`
                     : base,
+                edit: { type: 'pause', pause: row.pause },
                 del: { path: `pauses/${row.pause.id}`, confirm: '删除这个暂停段？', pause: row.pause }
             });
         });
@@ -679,8 +681,11 @@
                 const edit = node('button', '改', 'planning-agenda-edit');
                 edit.type = 'button';
                 edit.setAttribute('aria-label', `修改日期段：${labelText}`);
-                edit.addEventListener('click', () =>
-                    row.edit.type === 'round' ? editRoundDialog(row.edit.item) : editBlockDialog(row.edit.block));
+                edit.addEventListener('click', () => {
+                    if (row.edit.type === 'round') editRoundDialog(row.edit.item);
+                    else if (row.edit.type === 'pause') editPauseDialog(row.edit.pause);
+                    else editBlockDialog(row.edit.block);
+                });
                 line.append(edit);
             }
             if (row.del) {
@@ -1018,6 +1023,45 @@
         }, 'planning-btn primary'));
         body.append(actions);
         openDialog('划暂停段', body);
+    }
+
+    function editPauseDialog(pause) {
+        const body = node('div', '', 'planning-dialog-body');
+        const startLabel = node('label', '开始日期');
+        const start = node('input', '', 'form-input');
+        start.type = 'date';
+        start.value = pause.start_date;
+        startLabel.append(start);
+        const endLabel = node('label', '结束日期');
+        const end = node('input', '', 'form-input');
+        end.type = 'date';
+        end.value = pause.end_date;
+        endLabel.append(end);
+        const reasonLabel = node('label', '原因（选填）');
+        const reason = node('input', '', 'form-input');
+        reason.maxLength = 50;
+        reason.value = pause.reason || '';
+        reasonLabel.append(reason);
+        body.append(startLabel, endLabel, reasonLabel);
+        body.append(node('p', '与新时间段冲突的排期会自动顺延；改短或前移腾出的空档，可保留或让后续排敏前移补上。', 'planning-hint'));
+        const actions = node('div', '', 'planning-actions');
+        actions.append(button('取消', closeDialog));
+        const save = async closeGap => {
+            try {
+                const result = await api(`pauses/${pause.id}`, 'PUT', {
+                    start_date: start.value, end_date: end.value, reason: reason.value, close_gap: closeGap
+                });
+                applySchedule(result);
+                closeDialog();
+                toast(closeGap ? '暂停段已修改，后续排敏已前移' : '暂停段已修改');
+            } catch (error) {
+                message(`保存失败：${error.message}`, true);
+            }
+        };
+        actions.append(button('保留空档保存', () => save(false)));
+        actions.append(button('保存并前移排期', () => save(true), 'planning-btn primary'));
+        body.append(actions);
+        openDialog('修改暂停段', body);
     }
 
     function pauseDeleteDialog(pause) {

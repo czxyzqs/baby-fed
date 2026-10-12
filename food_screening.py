@@ -811,6 +811,40 @@ class FoodScreeningStore(FoodLibraryStore):
                 )
             cursor = end
 
+    def update_pause(self, identifier, data):
+        with self.connect() as connection:
+            row = connection.execute('SELECT * FROM food_pauses WHERE id = ?', (identifier,)).fetchone()
+            if row is None:
+                raise FoodLibraryError('暂停段已不存在，请刷新后重试', 404)
+            start = parse_date(data.get('start_date'), '暂停开始日期', allow_future=True)
+            end_value = data.get('end_date')
+            try:
+                end = date.fromisoformat(end_value) if isinstance(end_value, str) else None
+            except ValueError:
+                end = None
+            if end is None or end.isoformat() != end_value:
+                raise FoodLibraryError('请选择有效的暂停结束日期')
+            if end < start:
+                raise FoodLibraryError('暂停结束日期不能早于开始日期')
+            reason = data.get('reason', '')
+            if not isinstance(reason, str) or len(reason) > 50:
+                raise FoodLibraryError('暂停原因最多 50 个字符')
+            if (start.isoformat() == row['start_date'] and end.isoformat() == row['end_date']
+                    and reason.strip() == row['reason']):
+                raise FoodLibraryError('没有需要修改的内容')
+            old_start = date.fromisoformat(row['start_date'])
+            old_end = date.fromisoformat(row['end_date'])
+            connection.execute(
+                'UPDATE food_pauses SET start_date = ?, end_date = ?, reason = ? WHERE id = ?',
+                (start.isoformat(), end.isoformat(), reason.strip(), identifier),
+            )
+            # 与新时间段冲突的排期自动顺延（更早的排期不动），行为与新增暂停段一致
+            self.shift_blocks_after_pauses(connection)
+            if data.get('close_gap'):
+                # 腾出的空档让后续排敏前移补上
+                self.close_gap(connection, old_start, old_end)
+            return self.schedule_in(connection)
+
     def delete_pause(self, identifier, close_gap=False):
         with self.connect() as connection:
             row = connection.execute('SELECT * FROM food_pauses WHERE id = ?', (identifier,)).fetchone()
@@ -1186,9 +1220,11 @@ def register_food_screening(app, data_dir):
     def add_pause_segment():
         return jsonify({'success': True, **store.add_pause(payload())})
 
-    @blueprint.route('/pauses/<int:pause_id>', methods=['DELETE'])
+    @blueprint.route('/pauses/<int:pause_id>', methods=['PUT', 'DELETE'])
     def remove_pause(pause_id):
         identifier(pause_id)
+        if request.method == 'PUT':
+            return jsonify({'success': True, **store.update_pause(pause_id, request.get_json(silent=True) or {})})
         close_gap = request.args.get('close_gap') == '1'
         return jsonify({'success': True, **store.delete_pause(pause_id, close_gap)})
 
