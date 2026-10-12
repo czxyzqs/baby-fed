@@ -165,7 +165,7 @@
         sections.forEach(({ title, foods, passed }) => {
             const head = node('h3', title + (foods.some(food => food.is_high_allergen) ? ' ⚠️' : ''), 'screening-group-title');
             if (status === 'untouched' && passed) {
-                const badge = node('span', '⚑', 'screening-family-pass');
+                const badge = node('span', `✓${passed}`, 'screening-family-pass');
                 badge.title = `这组已有 ${passed} 种食物通过排敏`;
                 badge.setAttribute('aria-label', `这组已有 ${passed} 种食物通过排敏`);
                 head.append(badge);

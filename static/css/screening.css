@@ -136,10 +136,10 @@ body.elder .form-input { font-size: 20px; }
 
 .screening-overlay[hidden] { display: none !important; }
 
-/* 未排敏 Tab 里组标题后的“已有食物通过排敏”绿底白旗徽标 */
+/* 未排敏 Tab 里组标题后的“已通过 N 种”绿底白勾胶囊徽标 */
 .screening-family-pass {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 18px; height: 18px; margin-left: 6px; vertical-align: -3px;
-    border-radius: 50%; background: #2e9464; color: #fff;
-    font-size: 12px; line-height: 1; cursor: help;
+    min-width: 18px; height: 18px; margin-left: 6px; vertical-align: -3px;
+    padding: 0 5px; border-radius: 999px; background: #2e9464; color: #fff;
+    font-size: 11px; font-weight: 700; line-height: 1; cursor: help;
 }
