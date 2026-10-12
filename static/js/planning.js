@@ -1029,6 +1029,18 @@
 
     function editPauseDialog(pause) {
         const body = node('div', '', 'planning-dialog-body');
+        const vacLabel = node('label', '💉 疫苗接种日（自动前后3天）');
+        const vac = node('input', '', 'form-input');
+        vac.type = 'date';
+        const spanDays = Math.round((new Date(pause.end_date) - new Date(pause.start_date)) / 86400000);
+        if (spanDays === 6) vac.value = addDays(pause.start_date, 3);
+        vac.addEventListener('change', () => {
+            if (!vac.value) return;
+            start.value = addDays(vac.value, -3);
+            end.value = addDays(vac.value, 3);
+            if (!reason.value || reason.value === '疫苗日') reason.value = '疫苗日';
+        });
+        vacLabel.append(vac);
         const startLabel = node('label', '开始日期');
         const start = node('input', '', 'form-input');
         start.type = 'date';
@@ -1044,8 +1056,8 @@
         reason.maxLength = 50;
         reason.value = pause.reason || '';
         reasonLabel.append(reason);
-        body.append(startLabel, endLabel, reasonLabel);
-        body.append(node('p', '与新时间段冲突的排期会自动顺延；改短或前移腾出的空档，可保留或让后续排敏前移补上。', 'planning-hint'));
+        body.append(vacLabel, startLabel, endLabel, reasonLabel);
+        body.append(node('p', '改疫苗日直接选上面日期即可；也可手动调整起止。与新时间段冲突的排期会自动顺延；腾出的空档可保留或让后续排敏前移补上。', 'planning-hint'));
         const actions = node('div', '', 'planning-actions');
         actions.append(button('取消', closeDialog));
         const save = async closeGap => {
