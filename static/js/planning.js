@@ -555,7 +555,7 @@
                 merged: []
             });
         });
-        // 常规计划与排期块/观察轮次日期段完全一致时合并成一行展示：排敏食物在前并加底色标记
+        // 常规计划与排期块/观察轮次日期段重叠时合并进对应行展示：排敏食物在前并加底色标记
         const blockRows = [];
         schedule.blocks.filter(block => !block.live).forEach(block => {
             blockRows.push({
@@ -566,9 +566,13 @@
             });
         });
         schedule.normals.forEach(plan => {
-            const host = blockRows.find(row => row.sort === plan.start_date && row.days === plan.days)
-                || roundRows.find(row => row.sort === plan.start_date && row.days === plan.days);
-            if (host) host.merged.push(plan);
+            // 常规计划可能与多个排敏段重叠（如跨两段的连续主食计划），重叠的行各自并入展示
+            const planEnd = addDays(plan.start_date, plan.days - 1);
+            const hosts = [...blockRows, ...roundRows].filter(row => {
+                const rowEnd = addDays(row.sort, row.days - 1);
+                return plan.start_date <= rowEnd && row.sort <= planEnd;
+            });
+            if (hosts.length) hosts.forEach(host => host.merged.push(plan));
             else rows.push({
                 sort: plan.start_date, color: 'normal',
                 text: `${dateRange(plan.start_date, plan.days)} ${foodName(plan.food_id)} · 常规计划`,
