@@ -20,6 +20,13 @@
 }
 .planning-message { font-size: 13px; margin-bottom: 10px; }
 .planning-message[data-error='true'] { color: #ff8a70; }
+/* 弹窗遮罩(z-index:60)打开时，提示也要可见：浮层化置顶 */
+.planning-message:not([hidden]) {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 100;
+    max-width: min(92vw, 480px); text-align: center; margin: 0;
+    background: rgba(17, 23, 31, 0.94); border: 1px solid var(--border, #3a4453);
+    border-radius: 10px; padding: 8px 14px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
 .planning-card {
     background: var(--card-bg, rgba(255, 255, 255, 0.05)); border-radius: 14px;
     padding: 14px; margin-bottom: 14px;
