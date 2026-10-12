@@ -5,6 +5,7 @@
     let monthCursor = null;
     let selectedDay = null;
     let movingBlock = null;
+    let agendaPastExpanded = false;
     let paletteMap = {};
 
     // 按时间线出现顺序给食物轮换分配颜色：相邻排期必不同色，同一食物同色
@@ -574,7 +575,7 @@
             });
             if (hosts.length) hosts.forEach(host => host.merged.push(plan));
             else rows.push({
-                sort: plan.start_date, color: 'normal',
+                sort: plan.start_date, end: planEnd, color: 'normal',
                 text: `${dateRange(plan.start_date, plan.days)} ${foodName(plan.food_id)} · 常规计划`,
                 del: { path: `normals/${plan.id}`, confirm: `删除「${foodName(plan.food_id)}」的常规计划？` }
             });
@@ -582,14 +583,14 @@
         roundRows.forEach(row => {
             const suffix = ` · 排敏观察中${row.delay > 0 ? ` · 比计划晚${row.delay}天` : ''}`;
             rows.push(row.merged.length ? {
-                sort: row.sort, color: 'round',
+                sort: row.sort, end: addDays(row.sort, row.days - 1), color: 'round',
                 rangeText: dateRange(row.sort, row.days), suffix,
                 parts: [{ name: row.item.food_name, mark: true },
                         ...row.merged.map(plan => ({ name: foodName(plan.food_id) }))],
                 text: `${dateRange(row.sort, row.days)} ${row.item.food_name}${suffix}`,
                 edit: { type: 'round', item: row.item }
             } : {
-                sort: row.sort, color: 'round',
+                sort: row.sort, end: addDays(row.sort, row.days - 1), color: 'round',
                 text: `${dateRange(row.sort, row.days)} ${row.item.food_name}${suffix}`,
                 edit: { type: 'round', item: row.item }
             });
@@ -599,7 +600,7 @@
                 ? [foodName(row.block.food_id), ...row.merged.map(plan => foodName(plan.food_id))].join('/')
                 : `${foodName(row.block.food_id)} · 观察${row.block.days}天`;
             rows.push({
-                sort: row.sort, color: row.color, label,
+                sort: row.sort, end: addDays(row.sort, row.days - 1), color: row.color, label,
                 rangeText: dateRange(row.sort, row.days), suffix: row.suffix,
                 parts: row.merged.length
                     ? [{ name: foodName(row.block.food_id), mark: true },
@@ -618,14 +619,14 @@
         schedule.pauses.forEach(pause => {
             const days = Math.round((new Date(pause.end_date) - new Date(pause.start_date)) / 86400000) + 1;
             rows.push({
-                sort: pause.start_date, color: 'pause',
+                sort: pause.start_date, end: pause.end_date, color: 'pause',
                 text: `${dateRange(pause.start_date, days)} ⏸ 暂停排敏${pause.reason ? ` · ${pause.reason}` : ''}`,
                 del: { path: `pauses/${pause.id}`, confirm: '删除这个暂停段？' }
             });
         });
         (schedule.history || []).forEach(item => {
             rows.push({
-                sort: item.start_date,
+                sort: item.start_date, end: addDays(item.start_date, item.observe_days - 1),
                 color: item.status === 'normal' ? 'done-normal' : 'done-allergic',
                 text: `${dateRange(item.start_date, item.observe_days)} ${item.food_name} · 排敏${item.status === 'normal' ? '已通过' : '过敏'}`
             });
@@ -635,7 +636,10 @@
             container.append(node('p', '还没有任何排期。可先在上方维护队列，然后自动生成排期。', 'planning-hint'));
             return;
         }
-        rows.forEach(row => {
+        // 结束日期早于今天的行默认收起，让看板聚焦正在观察与未来的排期
+        const pastRows = rows.filter(row => row.end < schedule.today);
+        const currentRows = rows.filter(row => row.end >= schedule.today);
+        const appendRow = (row, target) => {
             const line = node('div', '', 'planning-agenda-row');
             line.append(node('span', '', 'planning-agenda-dot ' + row.color));
             const labelText = row.parts
@@ -669,8 +673,20 @@
                 del.addEventListener('click', () => run(row.del.confirm, () => api(row.del.path, 'DELETE')));
                 line.append(del);
             }
-            container.append(line);
-        });
+            target.append(line);
+        };
+        if (pastRows.length) {
+            const details = document.createElement('details');
+            details.className = 'planning-agenda-past';
+            details.open = agendaPastExpanded;
+            details.addEventListener('toggle', () => { agendaPastExpanded = details.open; });
+            const summary = document.createElement('summary');
+            summary.textContent = `今日之前的排期（${pastRows.length} 条）`;
+            details.append(summary);
+            pastRows.forEach(row => appendRow(row, details));
+            container.append(details);
+        }
+        currentRows.forEach(row => appendRow(row, container));
     }
 
     function addDays(value, count) {
