@@ -811,12 +811,52 @@ class FoodScreeningStore(FoodLibraryStore):
                 )
             cursor = end
 
-    def delete_pause(self, identifier):
+    def delete_pause(self, identifier, close_gap=False):
         with self.connect() as connection:
-            if connection.execute('SELECT 1 FROM food_pauses WHERE id = ?', (identifier,)).fetchone() is None:
+            row = connection.execute('SELECT * FROM food_pauses WHERE id = ?', (identifier,)).fetchone()
+            if row is None:
                 raise FoodLibraryError('暂停段已不存在，请刷新后重试', 404)
             connection.execute('DELETE FROM food_pauses WHERE id = ?', (identifier,))
+            if close_gap:
+                self.close_gap(connection, date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
             return self.schedule_in(connection)
+
+    def close_gap(self, connection, gap_start, gap_end):
+        """删除暂停段后把开始晚于空档的排期整体前移填补空档；更早的排期不动，途中避让剩余暂停段和进行中的观察。"""
+        obstacles = [
+            (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
+            for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
+        ]
+        for row in connection.execute("SELECT start_date, observe_days FROM food_rounds WHERE status = 'active'"):
+            start = date.fromisoformat(row['start_date'])
+            obstacles.append((start, start + timedelta(days=row['observe_days'] - 1)))
+        now = datetime.now(CN_TZ).isoformat()
+        cursor = max(gap_start, today_cn()) - timedelta(days=1)
+        movable = [dict(row) for row in connection.execute(
+            "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' AND start_date > ? ORDER BY start_date, id",
+            (gap_end.isoformat(),)
+        )]
+        for block in movable:
+            original = date.fromisoformat(block['start_date'])
+            start = cursor + timedelta(days=1)
+            end = start + timedelta(days=block['days'] - 1)
+            overlap = True
+            while overlap:
+                overlap = False
+                for ob_start, ob_end in obstacles:
+                    if start <= ob_end and end >= ob_start:
+                        start = ob_end + timedelta(days=1)
+                        end = start + timedelta(days=block['days'] - 1)
+                        overlap = True
+            if start >= original:
+                # 前移不允许晚于原位；这块保持原样，链从它的原位继续
+                cursor = original + timedelta(days=block['days'] - 1)
+                continue
+            connection.execute(
+                'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
+                (start.isoformat(), now, block['id'])
+            )
+            cursor = end
 
     def add_normal(self, data):
         raw_ids = data.get('food_ids')
@@ -1149,7 +1189,8 @@ def register_food_screening(app, data_dir):
     @blueprint.route('/pauses/<int:pause_id>', methods=['DELETE'])
     def remove_pause(pause_id):
         identifier(pause_id)
-        return jsonify({'success': True, **store.delete_pause(pause_id)})
+        close_gap = request.args.get('close_gap') == '1'
+        return jsonify({'success': True, **store.delete_pause(pause_id, close_gap)})
 
     @blueprint.post('/normals')
     def add_normal_plan():

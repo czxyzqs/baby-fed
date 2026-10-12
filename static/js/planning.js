@@ -480,7 +480,7 @@
                 if (item.block.days > 1) actions.append(button('天数-', () => changeBlock(item.block, { days: item.block.days - 1 })));
                 actions.append(button('删除', () => run(`删除「${foodName(item.block.food_id)}」的计划？食物将回到排敏队列末尾。`, () => api(`blocks/${item.block.id}`, 'DELETE'))));
             } else if (item.kind === 'pause') {
-                actions.append(button('删除', () => run('删除这个暂停段？', () => api(`pauses/${item.pause.id}`, 'DELETE'))));
+                actions.append(button('删除', () => pauseDeleteDialog(item.pause)));
             } else if (item.kind === 'normal') {
                 actions.append(button('删除', () => run('删除这条常规计划？', () => api(`normals/${item.plan.id}`, 'DELETE'))));
             }
@@ -629,7 +629,7 @@
                 text: row.merged.length
                     ? `${base} ${row.merged.map(plan => foodName(plan.food_id)).join('/')}`
                     : base,
-                del: { path: `pauses/${row.pause.id}`, confirm: '删除这个暂停段？' }
+                del: { path: `pauses/${row.pause.id}`, confirm: '删除这个暂停段？', pause: row.pause }
             });
         });
         (schedule.history || []).forEach(item => {
@@ -687,7 +687,9 @@
                 const del = node('button', '✕', 'planning-agenda-del');
                 del.type = 'button';
                 del.setAttribute('aria-label', `删除：${labelText}`);
-                del.addEventListener('click', () => run(row.del.confirm, () => api(row.del.path, 'DELETE')));
+                del.addEventListener('click', () =>
+                    row.del.pause ? pauseDeleteDialog(row.del.pause)
+                                  : run(row.del.confirm, () => api(row.del.path, 'DELETE')));
                 line.append(del);
             }
             target.append(line);
@@ -1016,6 +1018,27 @@
         }, 'planning-btn primary'));
         body.append(actions);
         openDialog('划暂停段', body);
+    }
+
+    function pauseDeleteDialog(pause) {
+        const range = dateRange(pause.start_date,
+            Math.round((new Date(pause.end_date) - new Date(pause.start_date)) / 86400000) + 1);
+        const body = node('div', '', 'planning-dialog-body');
+        body.append(node('p', `删除 ${range}${pause.reason ? ` · ${pause.reason}` : ''} 的暂停段后，被它顺延的排期怎么处理？`, 'planning-hint'));
+        const actions = node('div', '', 'planning-actions');
+        actions.append(button('取消', closeDialog));
+        actions.append(button('保留空档', async () => {
+            if (!await actAndReload(() => api(`pauses/${pause.id}`, 'DELETE'))) return;
+            closeDialog();
+            toast('已删除暂停段，排期保持原位');
+        }));
+        actions.append(button('删除并前移排期', async () => {
+            if (!await actAndReload(() => api(`pauses/${pause.id}?close_gap=1`, 'DELETE'))) return;
+            closeDialog();
+            toast('已删除暂停段，后续排期已前移');
+        }, 'planning-btn primary'));
+        body.append(actions);
+        openDialog('删除暂停段', body);
     }
 
     function normalDialog(dateStr) {
