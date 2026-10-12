@@ -566,11 +566,17 @@
                 merged: []
             });
         });
+        // 暂停段也作为合并宿主：暂停期间正常食物照常吃，重叠的常规计划并进暂停行
+        const pauseRows = [];
+        schedule.pauses.forEach(pause => {
+            const days = Math.round((new Date(pause.end_date) - new Date(pause.start_date)) / 86400000) + 1;
+            pauseRows.push({ sort: pause.start_date, end: pause.end_date, days, pause, merged: [] });
+        });
         schedule.normals.forEach(plan => {
             // 常规计划可能与多个排敏段重叠（如跨两段的连续主食计划），重叠的行各自并入展示
             const planEnd = addDays(plan.start_date, plan.days - 1);
-            const hosts = [...blockRows, ...roundRows].filter(row => {
-                const rowEnd = addDays(row.sort, row.days - 1);
+            const hosts = [...blockRows, ...roundRows, ...pauseRows].filter(row => {
+                const rowEnd = row.end || addDays(row.sort, row.days - 1);
                 return plan.start_date <= rowEnd && row.sort <= planEnd;
             });
             if (hosts.length) hosts.forEach(host => host.merged.push(plan));
@@ -616,12 +622,14 @@
                 }
             });
         });
-        schedule.pauses.forEach(pause => {
-            const days = Math.round((new Date(pause.end_date) - new Date(pause.start_date)) / 86400000) + 1;
+        pauseRows.forEach(row => {
+            const base = `${dateRange(row.pause.start_date, row.days)} ⏸ 暂停排敏${row.pause.reason ? ` · ${row.pause.reason}` : ''}`;
             rows.push({
-                sort: pause.start_date, end: pause.end_date, color: 'pause',
-                text: `${dateRange(pause.start_date, days)} ⏸ 暂停排敏${pause.reason ? ` · ${pause.reason}` : ''}`,
-                del: { path: `pauses/${pause.id}`, confirm: '删除这个暂停段？' }
+                sort: row.sort, end: row.end, color: 'pause',
+                text: row.merged.length
+                    ? `${base} ${row.merged.map(plan => foodName(plan.food_id)).join('/')}`
+                    : base,
+                del: { path: `pauses/${row.pause.id}`, confirm: '删除这个暂停段？' }
             });
         });
         (schedule.history || []).forEach(item => {
