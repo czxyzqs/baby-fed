@@ -135,3 +135,11 @@ body.elder .screening-message { font-size: 18px; }
 body.elder .form-input { font-size: 20px; }
 
 .screening-overlay[hidden] { display: none !important; }
+
+/* 未排敏 Tab 里组标题后的“已有食物通过排敏”绿底白旗徽标 */
+.screening-family-pass {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; margin-left: 6px; vertical-align: -3px;
+    border-radius: 50%; background: #2e9464; color: #fff;
+    font-size: 12px; line-height: 1; cursor: help;
+}

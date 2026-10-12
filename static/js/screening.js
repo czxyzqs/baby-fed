@@ -144,21 +144,33 @@
         const known = window.FOOD_FAMILIES.order.filter(family => familyGroups.has(family));
         const extra = [...familyGroups.keys()].filter(family => !window.FOOD_FAMILIES.order.includes(family))
             .sort((first, second) => first.localeCompare(second, 'zh'));
+        // 该组（科/品类）已有多少种食物通过排敏：未排敏 Tab 里作为“这科开过、安全”的参考标记
+        const passedCount = key => board.foods.filter(food =>
+            (food.family || food.category_name || '未分组') === key && food.status === 'normal').length;
         const sections = [];
         [...known, ...extra].forEach(family => sections.push({
             title: `${window.FOOD_FAMILIES.emoji[family] || '🌿'} ${family}`,
-            foods: familyGroups.get(family)
+            foods: familyGroups.get(family),
+            passed: passedCount(family)
         }));
         categoryGroups.forEach((foods, name) => sections.push({
             title: `${foods[0].category_emoji || '🍚'} ${name}`,
-            foods
+            foods,
+            passed: passedCount(name)
         }));
         if (!sections.length) {
             panel.append(node('p', status === 'untouched' ? '没有未排敏的食物。' : '还没有食物。', 'screening-line'));
             return panel;
         }
-        sections.forEach(({ title, foods }) => {
-            panel.append(node('h3', title + (foods.some(food => food.is_high_allergen) ? ' ⚠️' : ''), 'screening-group-title'));
+        sections.forEach(({ title, foods, passed }) => {
+            const head = node('h3', title + (foods.some(food => food.is_high_allergen) ? ' ⚠️' : ''), 'screening-group-title');
+            if (status === 'untouched' && passed) {
+                const badge = node('span', '⚑', 'screening-family-pass');
+                badge.title = `这组已有 ${passed} 种食物通过排敏`;
+                badge.setAttribute('aria-label', `这组已有 ${passed} 种食物通过排敏`);
+                head.append(badge);
+            }
+            panel.append(head);
             const group = node('div', '', 'screening-chip-group');
             foods.forEach(food => {
                 const chip = button(food.name, () => {
