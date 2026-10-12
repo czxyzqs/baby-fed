@@ -546,11 +546,16 @@ class FoodScreeningStore(FoodLibraryStore):
             if days == row['observe_days']:
                 raise FoodLibraryError('没有需要修改的内容')
             eaten = len(self.round_eaten_dates(connection, identifier))
-            if days < row['observe_days'] or days <= eaten:
-                raise FoodLibraryError('进行中的观察只能延长，且不能少于已吃天数')
+            if days <= eaten:
+                raise FoodLibraryError('观察天数不能少于已吃天数')
             connection.execute(
                 'UPDATE food_rounds SET observe_days = ? WHERE id = ?',
                 (days, identifier)
+            )
+            # 与轮次同起同止的常规计划（同段搭配食物）跟随一起调整天数；跨多段的连续计划不受影响
+            connection.execute(
+                'UPDATE food_normal_plans SET days = ? WHERE start_date = ? AND days = ?',
+                (days, row['start_date'], row['observe_days']),
             )
             return self.schedule_in(connection)
 

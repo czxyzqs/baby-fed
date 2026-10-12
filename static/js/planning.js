@@ -737,12 +737,12 @@
 
     function editRoundDialog(item) {
         const body = node('div', '', 'planning-dialog-body');
-        body.append(node('p', `「${item.food_name}」已于 ${item.start_date.slice(5).replace('-', '/')} 开始，开始日期不可改，只能延长观察期。`, 'planning-hint'));
+        body.append(node('p', `「${item.food_name}」已于 ${item.start_date.slice(5).replace('-', '/')} 开始，开始日期不可改，可延长或缩短搭配天数（不能少于已吃天数）。`, 'planning-hint'));
         const state = { days: item.observe_days };
-        const daysLabel = node('label', `观察天数（当前 ${item.observe_days} 天，只能延长）`);
-        daysLabel.append(daysStepper(state, item.observe_days, 14));
+        const daysLabel = node('label', `搭配天数（当前 ${item.observe_days} 天）`);
+        daysLabel.append(daysStepper(state, 1, 14, days => `搭配${days}天`));
         body.append(daysLabel);
-        body.append(node('p', '延长后判定日期顺延；与后续排期重叠时可用一键重排。', 'planning-hint'));
+        body.append(node('p', '与观察同起同止的常规计划（如搭配的牛肉）会一起调整；跨多段的连续计划（如米粉）不受影响。缩短后空出的日期可用「从这天起重排」收拢。', 'planning-hint'));
         const actions = node('div', '', 'planning-actions');
         actions.append(button('取消', closeDialog));
         actions.append(button('保存', async () => {
@@ -754,13 +754,15 @@
                 const result = await api(`rounds/${item.id}`, 'PUT', { observe_days: state.days });
                 applySchedule(result);
                 closeDialog();
-                toast(result.conflicts.length ? '观察期已延长（存在观察期重叠，可一键重排）' : `「${item.food_name}」观察期已延长到 ${state.days} 天`);
+                toast(result.conflicts.length
+                    ? '搭配天数已调整（存在观察期重叠，可一键重排）'
+                    : `「${item.food_name}」搭配已调整为 ${state.days} 天`);
             } catch (error) {
                 message(`保存失败：${error.message}`, true);
             }
         }, 'planning-btn primary'));
         body.append(actions);
-        openDialog(`修改观察期 · ${item.food_name}`, body);
+        openDialog(`修改搭配 · ${item.food_name}`, body);
     }
 
     function editBlockDialog(block) {
