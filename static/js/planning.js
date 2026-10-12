@@ -36,10 +36,14 @@
         return result;
     }
 
+    let messageTimer = null;
     function message(text = '', error = false) {
-        element('message').textContent = text;
-        element('message').hidden = !text;
-        element('message').dataset.error = String(error);
+        const box = element('message');
+        box.textContent = text;
+        box.hidden = !text;
+        box.dataset.error = String(error);
+        if (messageTimer) clearTimeout(messageTimer);
+        if (text) messageTimer = setTimeout(() => { box.hidden = true; }, 4000);
     }
 
     function toast(text) {
