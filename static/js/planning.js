@@ -336,7 +336,7 @@
             return;
         }
         bar.hidden = false;
-        bar.append(node('span', `正在移动「${foodName(block.food_id)}」（${block.start_date} 起 ${block.days} 天）：点击日历上的目标日期放下`, 'planning-line'));
+        bar.append(node('span', `正在移动「${foodName(block.food_id)}」（${block.start_date} 起 ${block.days} 天，同段搭配一起移动）：点击日历上的目标日期放下`, 'planning-line'));
         const actions = node('div', '', 'planning-actions');
         actions.append(button('取消移动', () => {
             movingBlock = null;
@@ -474,7 +474,7 @@
                 actions.append(button('移动', () => {
                     movingBlock = item.block.id;
                     renderMovebar();
-                    toast('已选中，请点击日历上的目标日期');
+                    toast('已选中，点日历选目标日期；同段搭配的常规计划会一起移动');
                 }));
                 actions.append(button('天数+', () => changeBlock(item.block, { days: Math.min(14, item.block.days + 1) })));
                 if (item.block.days > 1) actions.append(button('天数-', () => changeBlock(item.block, { days: item.block.days - 1 })));

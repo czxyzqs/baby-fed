@@ -594,6 +594,12 @@ class FoodScreeningStore(FoodLibraryStore):
                 f'UPDATE food_plan_blocks SET {assignments} WHERE id = ?',
                 (*updates.values(), identifier),
             )
+            if 'start_date' in updates and updates['start_date'] != block['start_date']:
+                # 移动排期块时，同日起、不超出本段的常规计划（搭配食物）一起移动；跨段连续计划不动
+                connection.execute(
+                    'UPDATE food_normal_plans SET start_date = ? WHERE start_date = ? AND days <= ?',
+                    (updates['start_date'], block['start_date'], block['days']),
+                )
             return self.schedule_in(connection)
 
     def delete_block(self, identifier):
