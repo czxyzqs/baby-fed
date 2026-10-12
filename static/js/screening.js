@@ -46,6 +46,14 @@
         return `${food.category_emoji || '🍚'} ${food.category_name || '未分组'}${food.is_high_allergen ? ' ⚠️ 高致敏' : ''}`;
     }
 
+    // 有科属的食物优先展示科（同科食物过敏原相近，比品类更有参考意义）
+    function originLabel(food) {
+        if (food.family) {
+            return `${window.FOOD_FAMILIES.emoji[food.family] || '🌿'} ${food.family}${food.is_high_allergen ? ' ⚠️ 高致敏' : ''}`;
+        }
+        return categoryLabel(food);
+    }
+
     function renderDaysOptions() {
         const container = element('days-options');
         container.replaceChildren();
@@ -79,7 +87,7 @@
         const card = node('article', '', 'screening-card' + (food.reactions?.length ? ' screening-alert' : ''));
         const head = node('div', '', 'screening-card-head');
         head.append(node('strong', food.name, 'screening-card-name'));
-        head.append(node('span', categoryLabel(food), 'screening-tag'));
+        head.append(node('span', originLabel(food), 'screening-tag'));
         card.append(head);
         card.append(node('p', `${dots(food.eaten_days, food.observe_days)} 第${food.eaten_days}/${food.observe_days}天 · 首次 ${food.start_date}`, 'screening-line'));
         if (!food.eaten_today) {
@@ -100,7 +108,7 @@
         const card = node('article', '', 'screening-card screening-allergic');
         const head = node('div', '', 'screening-card-head');
         head.append(node('strong', food.name, 'screening-card-name'));
-        head.append(node('span', categoryLabel(food), 'screening-tag'));
+        head.append(node('span', originLabel(food), 'screening-tag'));
         card.append(head);
         card.append(node('p', '就诊档案（按时间线）', 'screening-line'));
         food.rounds.filter(round => round.status === 'allergic' || round.reactions.length).forEach(round => {
@@ -125,24 +133,38 @@
 
     function poolTab(status) {
         const panel = node('div', '', 'screening-pool');
-        const groups = new Map();
+        const familyGroups = new Map();
+        const categoryGroups = new Map();
         board.foods.filter(food => food.status === status && !food.in_queue).forEach(food => {
-            const key = food.category_name || '未分组';
+            const groups = food.family ? familyGroups : categoryGroups;
+            const key = food.family || food.category_name || '未分组';
             if (!groups.has(key)) groups.set(key, []);
             groups.get(key).push(food);
         });
-        if (!groups.size) {
+        const known = window.FOOD_FAMILIES.order.filter(family => familyGroups.has(family));
+        const extra = [...familyGroups.keys()].filter(family => !window.FOOD_FAMILIES.order.includes(family))
+            .sort((first, second) => first.localeCompare(second, 'zh'));
+        const sections = [];
+        [...known, ...extra].forEach(family => sections.push({
+            title: `${window.FOOD_FAMILIES.emoji[family] || '🌿'} ${family}`,
+            foods: familyGroups.get(family)
+        }));
+        categoryGroups.forEach((foods, name) => sections.push({
+            title: `${foods[0].category_emoji || '🍚'} ${name}`,
+            foods
+        }));
+        if (!sections.length) {
             panel.append(node('p', status === 'untouched' ? '没有未排敏的食物。' : '还没有食物。', 'screening-line'));
             return panel;
         }
-        groups.forEach((foods, groupName) => {
-            panel.append(node('h3', groupName + (foods[0].is_high_allergen ? ' ⚠️' : ''), 'screening-group-title'));
+        sections.forEach(({ title, foods }) => {
+            panel.append(node('h3', title + (foods.some(food => food.is_high_allergen) ? ' ⚠️' : ''), 'screening-group-title'));
             const group = node('div', '', 'screening-chip-group');
             foods.forEach(food => {
                 const chip = button(food.name, () => {
                     if (status !== 'untouched') return;
                     confirmAction(`把「${food.name}」加入排敏队列？`, () => api('queue', 'POST', { food_id: food.id }));
-                }, 'screening-chip' + (foods[0].is_high_allergen ? ' allergen' : ''));
+                }, 'screening-chip' + (food.is_high_allergen ? ' allergen' : ''));
                 group.append(chip);
             });
             panel.append(group);
