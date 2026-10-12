@@ -90,7 +90,7 @@
             const main = button('', () => {}, 'planning-queue-main');
             main.append(node('strong', item.food_name, 'planning-queue-name'));
             main.append(node('span',
-                `${item.category_emoji || '🍚'}${item.category_name || ''}${item.is_high_allergen ? ' ⚠️' : ''} · 观察${item.observe_days}天`,
+                `${originTag(item)} · 观察${item.observe_days}天`,
                 'planning-queue-meta'));
             main.addEventListener('click', () => queueItemDialog(item));
             const arrows = node('div', '', 'planning-queue-arrows');
@@ -132,7 +132,7 @@
     function queueItemDialog(item) {
         const body = node('div', '', 'planning-dialog-body');
         body.append(node('p',
-            `${item.category_emoji || '🍚'}${item.category_name || ''}${item.is_high_allergen ? ' ⚠️ 高致敏品类' : ''}`,
+            `${originTag(item)}${item.is_high_allergen ? ' 高致敏品类' : ''}`,
             'planning-hint'));
         const state = { days: item.observe_days };
         const daysLabel = node('label', '观察天数（1–14 天）');
@@ -251,6 +251,39 @@
 
     // ---------- 食物池弹窗（连续添加，已加入置灰） ----------
 
+    // 食物池分组：有科属的按科（同科过敏原相近），未归科的按品类；科按既定顺序排列
+    function poolGroups(foods) {
+        const familyGroups = new Map();
+        const categoryGroups = new Map();
+        foods.forEach(food => {
+            const groups = food.family ? familyGroups : categoryGroups;
+            const key = food.family || food.category_name || '未分组';
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(food);
+        });
+        const order = window.FOOD_FAMILIES.order;
+        const known = order.filter(family => familyGroups.has(family));
+        const extra = [...familyGroups.keys()].filter(family => !order.includes(family))
+            .sort((first, second) => first.localeCompare(second, 'zh'));
+        const sections = [];
+        const push = (name, groupFoods, emoji) => sections.push({
+            label: `${emoji} ${name}${groupFoods.some(food => food.is_high_allergen) ? ' ⚠️' : ''}`,
+            foods: groupFoods
+        });
+        [...known, ...extra].forEach(family =>
+            push(family, familyGroups.get(family), window.FOOD_FAMILIES.emoji[family] || '🌿'));
+        categoryGroups.forEach((groupFoods, name) =>
+            push(name, groupFoods, groupFoods[0].category_emoji || '🍚'));
+        return sections;
+    }
+
+    function originTag(item) {
+        if (item.family) {
+            return `${window.FOOD_FAMILIES.emoji[item.family] || '🌿'}${item.family}${item.is_high_allergen ? ' ⚠️' : ''}`;
+        }
+        return `${item.category_emoji || '🍚'}${item.category_name || ''}${item.is_high_allergen ? ' ⚠️' : ''}`;
+    }
+
     function openQueuePicker() {
         const body = node('div', '', 'planning-dialog-body');
         const label = node('label', '搜索食物或品类');
@@ -277,18 +310,12 @@
     function renderQueuePicker(search, list) {
         const query = (search.value || '').trim().toLocaleLowerCase();
         list.replaceChildren();
-        const groups = new Map();
-        boardFoods().filter(food => food.status === 'untouched' && !food.in_queue).forEach(food => {
-            const key = `${food.category_emoji || '🍚'} ${food.category_name || '未分组'}${food.is_high_allergen ? ' ⚠️' : ''}`;
-            if (!groups.has(key)) groups.set(key, []);
-            groups.get(key).push(food);
-        });
         let matched = 0;
-        groups.forEach((foods, groupName) => {
-            const filtered = foods.filter(food => `${food.name} ${groupName}`.toLocaleLowerCase().includes(query));
+        poolGroups(boardFoods().filter(food => food.status === 'untouched' && !food.in_queue)).forEach(({ label, foods }) => {
+            const filtered = foods.filter(food => `${food.name} ${label}`.toLocaleLowerCase().includes(query));
             if (!filtered.length) return;
             matched += filtered.length;
-            list.append(node('h3', groupName, 'planning-group-title'));
+            list.append(node('h3', label, 'planning-group-title'));
             const group = node('div', '', 'planning-chip-group');
             filtered.forEach(food => {
                 group.append(button(food.name, async () => {
@@ -915,19 +942,13 @@
         function renderFoods() {
             const query = (search.value || '').trim().toLocaleLowerCase();
             foodList.replaceChildren();
-            const groups = new Map();
-            candidates.forEach(food => {
-                const key = `${food.category_emoji || '🍚'} ${food.category_name || '未分组'}${food.is_high_allergen ? ' ⚠️' : ''}`;
-                if (!groups.has(key)) groups.set(key, []);
-                groups.get(key).push(food);
-            });
             let matched = 0;
-            groups.forEach((foods, groupName) => {
+            poolGroups(candidates).forEach(({ label, foods }) => {
                 const filtered = foods.filter(food =>
-                    `${food.name} ${groupName}`.toLocaleLowerCase().includes(query));
+                    `${food.name} ${label}`.toLocaleLowerCase().includes(query));
                 if (!filtered.length) return;
                 matched += filtered.length;
-                foodList.append(node('h3', groupName, 'planning-group-title'));
+                foodList.append(node('h3', label, 'planning-group-title'));
                 const group = node('div', '', 'planning-chip-group');
                 filtered.forEach(food => {
                     const option = button(food.name + (food.in_queue ? ' · 队列中' : ''), () => {

@@ -240,7 +240,8 @@ class FoodScreeningStore(FoodLibraryStore):
         rounds = self.latest_round_map(connection)
         items = []
         for row in connection.execute('''
-            SELECT food_queue.*, foods.name AS food_name, categories.name AS category_name,
+            SELECT food_queue.*, foods.name AS food_name, foods.family,
+                   categories.name AS category_name,
                    categories.emoji AS category_emoji, categories.is_high_allergen
             FROM food_queue JOIN foods ON foods.id = food_queue.food_id
             LEFT JOIN categories ON categories.id = foods.category_id
