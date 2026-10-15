@@ -1137,6 +1137,26 @@
         await showDateAnalysis('sleep', sleepCalSelectedDate);
     }
 
+    // 近7日趋势 + 作息规律的独立弹窗，叠在睡眠分析之上，数据直接复用分析缓存
+    async function openSleepTrendModal(dateStr) {
+        openModal('sleep-trend');
+        const body = document.getElementById('sleep-trend-body');
+        const base = dateStr || formatSleepDate(new Date());
+        body.innerHTML = '<div style="text-align:center;padding:20px">加载中...</div>';
+        try {
+            const analysis = await loadDateAnalysis('sleep', base);
+            body.innerHTML = `
+                <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">基准日期：${formatSleepDateDisplay(analysis.date)}（含此前 7 天）</div>
+                ${buildSleepTrendHtml(analysis.date, analysis, new Date())}
+                ${buildSleepTimelineHtml(analysis.date, analysis)}`;
+        } catch (error) {
+            body.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted)">
+                <div style="margin-bottom:12px">加载失败：${error.message}</div>
+                <button class="stats-btn" onclick="openSleepTrendModal('${base}')">重新加载</button>
+            </div>`;
+        }
+    }
+
     function renderSleepAnalysisByDate(dateStr, allRecords) {
         const body = document.getElementById('sleep-analysis-body');
         const now = new Date();
@@ -1164,7 +1184,15 @@
                     </div>
                 </div>
                 ${buildSleepPositionHistoryHtml(allRecords, now)}
-                ${buildSleepTimelineHtml(dateStr, allRecords)}
+                <div class="stat-item clickable" onclick="openSleepTrendModal('${dateStr}')" style="margin-bottom:16px">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                        <div>
+                            <div style="font-size:15px;font-weight:600;color:var(--text-primary)">📈 睡眠趋势与作息规律</div>
+                            <div class="stat-lbl" style="margin-top:2px">近7天时长趋势 · 24小时作息图</div>
+                        </div>
+                        <div style="font-size:22px;color:var(--accent-sleep,#7c3aed)">›</div>
+                    </div>
+                </div>
                 <div style="text-align:center;padding:40px 20px;color:var(--text-muted)">
                     <div style="font-size:48px;margin-bottom:16px">🛏️</div>
                     <div style="font-size:16px;font-weight:500">当日暂无睡眠记录</div>
@@ -1206,13 +1234,22 @@
             </div>
         </div>`;
 
-        html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;margin-bottom:20px">`;
+        html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;margin-bottom:12px">`;
         html += `<div class="stat-item"><div class="stat-val">${sleepText}</div><div class="stat-lbl">当日总睡眠</div></div>`;
         html += `<div class="stat-item"><div class="stat-val">${sessions.length}<span style="font-size:14px;color:#888">次</span></div><div class="stat-lbl">睡眠次数</div></div>`;
         html += `</div>`;
 
-        html += buildSleepTrendHtml(dateStr, allRecords, now);
-        html += buildSleepTimelineHtml(dateStr, allRecords);
+        // 近7日趋势与作息规律拆到独立弹窗，主弹窗只留入口
+        html += `<div class="stat-item clickable" onclick="openSleepTrendModal('${dateStr}')" style="margin-bottom:20px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+                <div>
+                    <div style="font-size:15px;font-weight:600;color:var(--text-primary)">📈 睡眠趋势与作息规律</div>
+                    <div class="stat-lbl" style="margin-top:2px">近7天时长趋势 · 24小时作息图</div>
+                </div>
+                <div style="font-size:22px;color:var(--accent-sleep,#7c3aed)">›</div>
+            </div>
+        </div>`;
+
         html += buildSleepPositionHistoryHtml(allRecords, now);
 
         const sleepPositionLabels = { left: '左侧睡', right: '右侧睡', back: '平躺' };
@@ -1416,7 +1453,8 @@
     function closeModal(type) {
         const overlay = document.getElementById(`${type}-modal`);
         overlay.classList.remove('active');
-        document.body.style.overflow = '';
+        // 叠层弹窗：还有其他弹窗开着时保持锁定页面滚动
+        document.body.style.overflow = document.querySelector('.modal-overlay.active') ? 'hidden' : '';
         // Reset add forms (edit forms use different reset logic)
         if (!type.startsWith('edit-')) {
             const form = document.getElementById(`${type}-form`);
