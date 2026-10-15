@@ -914,7 +914,7 @@
                 return `<span class="sleep-tl-feed" style="top:${(offset / dayMs * 100).toFixed(3)}%" title="🍼 ${timeText(feed)}">🍼</span>`;
             }).join('');
             const date = new Date(`${day.date}T00:00:00`);
-            const label = `${day.date.slice(5).replace('-', '/')} ${weekdayLabels[date.getDay()]}`;
+            const label = `${day.date.slice(5).replace('-', '/')}<br>${weekdayLabels[date.getDay()]}`;
             return `<div class="sleep-tl-colwrap">
                 <div class="sleep-tl-col">${blocks}${feeds}</div>
                 <div class="sleep-tl-label${day.date === selectedDate ? ' selected' : ''}">${label}</div>
@@ -925,9 +925,11 @@
             .join('');
         return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
             <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">作息规律 · 近7天（🍼 喂奶时刻，斜纹 = 进行中）</div>
-            <div class="sleep-timeline">
-                <div class="sleep-tl-hours">${hourLabels}</div>
-                <div class="sleep-tl-grid">${columns}</div>
+            <div class="sleep-tl-scroll">
+                <div class="sleep-timeline">
+                    <div class="sleep-tl-hours">${hourLabels}</div>
+                    <div class="sleep-tl-grid">${columns}</div>
+                </div>
             </div>
         </div>`;
     }

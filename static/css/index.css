@@ -1598,7 +1598,9 @@
 }
 
 /* 睡眠分析 · 作息规律图（近7天 × 24小时） */
-.sleep-timeline { display: flex; gap: 6px; }
+#sleep-trend-modal .modal { max-width: min(720px, 94vw); }
+.sleep-tl-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sleep-timeline { display: flex; gap: 6px; min-width: 480px; }
 .sleep-tl-hours { position: relative; width: 24px; height: 360px; flex: none; font-size: 10px; color: var(--text-muted, #8a94a3); }
 .sleep-tl-hours span { position: absolute; right: 2px; transform: translateY(-50%); line-height: 1; }
 .sleep-tl-grid { display: flex; gap: 5px; flex: 1; min-width: 0; }
@@ -1624,7 +1626,11 @@
     position: absolute; left: 50%; transform: translate(-50%, -50%);
     font-size: 11px; line-height: 1; z-index: 2; cursor: default;
 }
-.sleep-tl-label { text-align: center; font-size: 10px; color: var(--text-muted, #8a94a3); white-space: nowrap; }
+.sleep-tl-label {
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    text-align: center; font-size: 10px; line-height: 1.2;
+    color: var(--text-muted, #8a94a3); white-space: nowrap;
+}
 .sleep-tl-label.selected { color: var(--accent-sleep, #7c3aed); font-weight: 700; }
 
 .supplement-switch-list {
