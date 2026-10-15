@@ -999,10 +999,17 @@ class FoodScreeningStore(FoodLibraryStore):
                     return None
                 return override if override is not None else meal
             names = {row['id']: row['name'] for row in connection.execute('SELECT id, name FROM foods')}
-            eaten_today_ids = {
-                row[0] for row in connection.execute(
-                    'SELECT DISTINCT food_id FROM food_entries WHERE date = ?', (today,))
-            }
+            eaten_today_meals = {}
+            for eaten_food_id, eaten_meal in connection.execute(
+                    'SELECT DISTINCT food_id, meal FROM food_entries WHERE date = ?', (today,)):
+                eaten_today_meals.setdefault(eaten_food_id, []).append(eaten_meal)
+
+            def eaten_fields(eaten_food_id):
+                meals = sorted(
+                    set(eaten_today_meals.get(eaten_food_id, ())),
+                    key=('breakfast', 'lunch', 'snack', 'dinner').index,
+                )
+                return {'eaten_today': bool(meals), 'eaten_meals': meals}
             for food_id, latest in rounds.items():
                 if latest['status'] != 'active':
                     continue
@@ -1023,7 +1030,7 @@ class FoodScreeningStore(FoodLibraryStore):
                         items.append({
                             'kind': 'screening', 'food_id': food_id, 'food': names.get(food_id),
                             'position': position, 'eaten_days': eaten_days, 'observe_days': observe_days,
-                            'eaten_today': food_id in eaten_today_ids, 'meal': meal,
+                            **eaten_fields(food_id), 'meal': meal,
                             'text': f'第{position}天/{observe_days}天',
                         })
             for row in connection.execute(
@@ -1040,7 +1047,7 @@ class FoodScreeningStore(FoodLibraryStore):
                     items.append({
                         'kind': 'planned', 'food_id': row['food_id'], 'food': row['food_name'],
                         'position': index, 'observe_days': row['days'],
-                        'eaten_today': row['food_id'] in eaten_today_ids, 'meal': meal,
+                        **eaten_fields(row['food_id']), 'meal': meal,
                         'text': f'第{index}天/{row["days"]}天',
                     })
             for row in connection.execute(
@@ -1052,7 +1059,7 @@ class FoodScreeningStore(FoodLibraryStore):
                 if meal is not None:
                     items.append({
                         'kind': 'normal', 'food_id': row['food_id'], 'food': row['food_name'],
-                        'eaten_today': row['food_id'] in eaten_today_ids, 'meal': meal, 'text': '',
+                        **eaten_fields(row['food_id']), 'meal': meal, 'text': '',
                     })
             tomorrow = add_days(date.fromisoformat(today), 1)
             acked = {
