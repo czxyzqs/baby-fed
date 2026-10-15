@@ -563,6 +563,7 @@
     }
 
     // ---------- 排期一览（日历的完整文字版） ----------
+    const mealTag = meal => (meal === 'dinner' ? '(晚)' : meal === 'lunch' ? '(午)' : '');
 
     function dateRange(start, days) {
         const end = addDays(start, days - 1);
@@ -623,13 +624,13 @@
             rows.push(row.merged.length ? {
                 sort: row.sort, end: addDays(row.sort, row.days - 1), color: 'round',
                 rangeText: dateRange(row.sort, row.days), suffix,
-                parts: [{ name: row.item.food_name, mark: true },
+                parts: [{ name: row.item.food_name + mealTag(row.item.meal), mark: true },
                         ...row.merged.map(plan => ({ name: foodName(plan.food_id) }))],
-                text: `${dateRange(row.sort, row.days)} ${row.item.food_name}${suffix}`,
+                text: `${dateRange(row.sort, row.days)} ${row.item.food_name}${mealTag(row.item.meal)}${suffix}`,
                 edit: { type: 'round', item: row.item }
             } : {
                 sort: row.sort, end: addDays(row.sort, row.days - 1), color: 'round',
-                text: `${dateRange(row.sort, row.days)} ${row.item.food_name}${suffix}`,
+                text: `${dateRange(row.sort, row.days)} ${row.item.food_name}${mealTag(row.item.meal)}${suffix}`,
                 edit: { type: 'round', item: row.item }
             });
         });
@@ -641,10 +642,10 @@
                 sort: row.sort, end: addDays(row.sort, row.days - 1), color: row.color, label,
                 rangeText: dateRange(row.sort, row.days), suffix: row.suffix,
                 parts: row.merged.length
-                    ? [{ name: foodName(row.block.food_id), mark: true },
+                    ? [{ name: foodName(row.block.food_id) + mealTag(row.block.meal), mark: true },
                        ...row.merged.map(plan => ({ name: foodName(plan.food_id) }))]
                     : null,
-                text: `${dateRange(row.sort, row.days)} ${foodName(row.block.food_id)} · 观察${row.block.days}天${row.suffix}`,
+                text: `${dateRange(row.sort, row.days)} ${foodName(row.block.food_id)}${mealTag(row.block.meal)} · 观察${row.block.days}天${row.suffix}`,
                 edit: row.block.stale ? null : { type: 'block', block: row.block },
                 del: {
                     path: `blocks/${row.block.id}`,
@@ -805,10 +806,22 @@
         start.min = addDays(schedule.today, 1);
         startLabel.append(start);
         body.append(startLabel);
-        const state = { days: block.days };
+        const state = { days: block.days, meal: block.meal || 'lunch' };
         const daysLabel = node('label', '观察天数（1–14 天）');
         daysLabel.append(daysStepper(state, 1, 14));
         body.append(daysLabel);
+        const mealLabel = node('label', '哪一顿吃');
+        const mealGroup = node('div', '', 'planning-chip-group');
+        [['lunch', '午餐'], ['dinner', '晚餐']].forEach(([value, label]) => {
+            const chip = button(label, () => {
+                state.meal = value;
+                [...mealGroup.children].forEach(child => child.classList.remove('active'));
+                chip.classList.add('active');
+            }, 'planning-chip' + (state.meal === value ? ' active' : ''));
+            mealGroup.append(chip);
+        });
+        mealLabel.append(mealGroup);
+        body.append(mealLabel);
         const actions = node('div', '', 'planning-actions');
         actions.append(button('取消', closeDialog));
         actions.append(button('保存', async () => {
@@ -816,7 +829,7 @@
                 message('请选择开始日期', true);
                 return;
             }
-            const data = { start_date: start.value, days: state.days };
+            const data = { start_date: start.value, days: state.days, meal: state.meal };
             if (data.start_date === block.start_date && data.days === block.days) {
                 closeDialog();
                 return;
@@ -876,6 +889,20 @@
             button('＋', () => { state.days = Math.min(14, state.days + 1); syncDays(); }));
         daysLabel.append(daysRow);
         body.append(daysLabel);
+
+        const mealLabel = node('label', '哪一顿吃');
+        const mealGroup = node('div', '', 'planning-chip-group');
+        const chosenMeal = { meal: 'lunch' };
+        [['lunch', '午餐'], ['dinner', '晚餐']].forEach(([value, label]) => {
+            const chip = button(label, () => {
+                chosenMeal.meal = value;
+                [...mealGroup.children].forEach(child => child.classList.remove('active'));
+                chip.classList.add('active');
+            }, 'planning-chip' + (value === 'lunch' ? ' active' : ''));
+            mealGroup.append(chip);
+        });
+        mealLabel.append(mealGroup);
+        body.append(mealLabel);
 
         const preview = node('p', '', 'planning-hint');
         const strategyGroup = node('div', '', 'planning-chip-group');
@@ -977,7 +1004,8 @@
                     food_id: state.food.id,
                     start_date: adjustedStart(),
                     days: state.days,
-                    strategy: state.strategy
+                    strategy: state.strategy,
+                    meal: chosenMeal.meal
                 });
                 applySchedule(result);
                 closeDialog();
@@ -1154,6 +1182,19 @@
         const chosenDays = { days: 1 };
         daysLabel.append(daysStepper(chosenDays, 1, 14, days => `连续${days}天`));
         body.append(daysLabel);
+        const mealLabel = node('label', '餐次');
+        const mealGroup = node('div', '', 'planning-chip-group');
+        const chosenMeal = { meal: 'all' };
+        [['all', '两餐都吃'], ['lunch', '仅午餐'], ['dinner', '仅晚餐']].forEach(([value, label]) => {
+            const chip = button(label, () => {
+                chosenMeal.meal = value;
+                [...mealGroup.children].forEach(child => child.classList.remove('active'));
+                chip.classList.add('active');
+            }, 'planning-chip' + (value === 'all' ? ' active' : ''));
+            mealGroup.append(chip);
+        });
+        mealLabel.append(mealGroup);
+        body.append(mealLabel);
         const actions = node('div', '', 'planning-actions');
         actions.append(button('取消', closeDialog));
         actions.append(button('保存常规计划', async () => {
@@ -1163,7 +1204,7 @@
             }
             try {
                 const result = await api('normals', 'POST', {
-                    food_ids: [...chosen], start_date: dateStr, days: chosenDays.days
+                    food_ids: [...chosen], start_date: dateStr, days: chosenDays.days, meal: chosenMeal.meal
                 });
                 applySchedule(result);
                 closeDialog();

@@ -209,7 +209,7 @@ class FoodLibraryStore:
                 )''')
                 connection.execute('PRAGMA user_version = 3')
                 version = 3
-            elif version not in (3, 4):
+            elif version not in (3, 4, 5):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 3:
                 connection.execute('ALTER TABLE foods ADD COLUMN family TEXT')
@@ -217,7 +217,22 @@ class FoodLibraryStore:
                     connection.execute(
                         'UPDATE foods SET family = ? WHERE name = ? AND family IS NULL', (family, food))
                 connection.execute('PRAGMA user_version = 4')
-            elif version != 4:
+                version = 4
+            elif version not in (3, 4, 5):
+                raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
+            if version == 4:
+                # 餐次规划：排敏块默认午餐，常规计划默认两餐都吃；当日覆盖支持临时调整
+                connection.execute("ALTER TABLE food_plan_blocks ADD COLUMN meal TEXT NOT NULL DEFAULT 'lunch'")
+                connection.execute("ALTER TABLE food_normal_plans ADD COLUMN meal TEXT NOT NULL DEFAULT 'all'")
+                connection.execute('''CREATE TABLE food_menu_overrides (
+                    date TEXT NOT NULL,
+                    food_id INTEGER NOT NULL REFERENCES foods(id) ON DELETE CASCADE,
+                    meal TEXT NOT NULL,
+                    PRIMARY KEY (date, food_id)
+                )''')
+                connection.execute('PRAGMA user_version = 5')
+                version = 5
+            elif version != 5:
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             yield connection
             connection.commit()

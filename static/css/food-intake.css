@@ -239,6 +239,18 @@
     line-height: 1.4;
 }
 /* 多种食物同一行：药丸（✓ 快捷勾选 + 点其余区域弹多选弹窗），放不下时横向滑动 */
+/* 今日餐单：按午餐/晚餐两列展示计划 */
+.food-banner-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px; }
+.food-banner-menu-col {
+    background: var(--bg-card, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+    border-radius: 12px; padding: 10px; min-width: 0;
+}
+.food-banner-menu-title { margin: 0 0 8px; font-size: 14px; color: var(--text-primary); }
+.food-banner-menu-col .food-banner-pill { margin: 0 4px 6px 0; display: inline-flex; }
+.food-banner-menu-empty { margin: 0; font-size: 12px; color: var(--text-muted); }
+.food-banner-menu-hint { margin: 0 0 4px; font-size: 11px; color: var(--text-muted); }
+
 .food-banner-pills {
     display: flex;
     flex-wrap: nowrap;

@@ -58,13 +58,14 @@
             const response = await fetch('/api/screening/banner', { cache: 'no-store' });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || '加载失败');
-            render(result.items || []);
+            render(result.items || [], result.overrides || {});
         } catch (error) {
             banner.hidden = true;
         }
     }
 
     let lastItems = [];
+    let lastOverrides = {};
     let todayContext = null;
 
     async function getContext() {
@@ -72,8 +73,9 @@
         return todayContext;
     }
 
-    function render(items) {
+    function render(items, overrides = {}) {
         lastItems = items;
+        lastOverrides = overrides;
         body.replaceChildren();
         if (!items.length) {
             banner.hidden = true;
@@ -112,28 +114,84 @@
             }
         });
         if (!foods.length) return;
-        // 多种食物排在同一行：药丸 = ✓ 快捷勾选 + 点其余区域弹多选弹窗
-        const pills = node('div', '', 'food-banner-pills');
-        foods.forEach(item => {
-            const eaten = !!item.eaten_today;
-            const pill = node('span', '', 'food-banner-pill' + (eaten ? ' eaten' : ''));
-            const check = node('button', eaten ? '✓' : '', 'banner-check' + (eaten ? ' checked' : ''));
-            check.type = 'button';
-            check.setAttribute('aria-pressed', String(eaten));
-            check.setAttribute('aria-label', `快速记录「${item.food}」今天${eaten ? '已吃（点按取消）' : '吃了'}`);
-            check.addEventListener('click', event => {
-                event.stopPropagation();
-                toggleEaten(item);
+        // 今日餐单：按计划绑定的餐次分两列；点名称可临时调整今天的餐次
+        const menu = node('div', '', 'food-banner-menu');
+        [['lunch', '☀️ 午餐'], ['dinner', '🌙 晚餐']].forEach(([meal, label]) => {
+            const column = node('div', '', 'food-banner-menu-col');
+            column.append(node('h4', label, 'food-banner-menu-title'));
+            const columnFoods = foods.filter(item => item.meal === meal || item.meal === 'both');
+            if (!columnFoods.length) {
+                column.append(node('p', '没有计划', 'food-banner-menu-empty'));
+            }
+            columnFoods.forEach(item => {
+                const eaten = !!item.eaten_today;
+                const pill = node('span', '', 'food-banner-pill' + (eaten ? ' eaten' : ''));
+                const check = node('button', eaten ? '✓' : '', 'banner-check' + (eaten ? ' checked' : ''));
+                check.type = 'button';
+                check.setAttribute('aria-pressed', String(eaten));
+                check.setAttribute('aria-label', `快速记录「${item.food}」今天${eaten ? '已吃（点按取消）' : '吃了'}`);
+                check.addEventListener('click', event => {
+                    event.stopPropagation();
+                    toggleEaten(item);
+                });
+                const name = node('button', '', 'food-banner-pill-name');
+                name.type = 'button';
+                name.append(node('span', item.food));
+                if (item.text) name.append(node('small', item.text));
+                name.addEventListener('click', () => adjustMealDialog(item));
+                pill.append(check, name);
+                column.append(pill);
             });
-            const name = node('button', '', 'food-banner-pill-name');
-            name.type = 'button';
-            name.append(node('span', item.food));
-            if (item.text) name.append(node('small', item.text));
-            name.addEventListener('click', () => openBatchDialog());
-            pill.append(check, name);
-            pills.append(pill);
+            menu.append(column);
         });
-        body.append(pills);
+        body.append(menu);
+        body.append(node('p', '点食物名可临时调整今天的餐次；✓ 快捷记录。', 'food-banner-menu-hint'));
+    }
+
+    // 临时调整某食物「今天」的餐次（不改长期计划）
+    function adjustMealDialog(item) {
+        closeDialog();
+        const overridden = Object.prototype.hasOwnProperty.call(lastOverrides, String(item.food_id))
+            || Object.prototype.hasOwnProperty.call(lastOverrides, item.food_id);
+        overlay = node('div', '', 'banner-dialog-overlay');
+        overlay.addEventListener('click', event => {
+            if (event.target === overlay) closeDialog();
+        });
+        const dialog = node('div', '', 'banner-dialog');
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        const head = node('div', '', 'banner-dialog-head');
+        head.append(node('h2', `${item.food} · 今天哪顿吃？`, 'banner-dialog-title'));
+        const close = node('button', '✕', 'banner-dialog-close');
+        close.type = 'button';
+        close.setAttribute('aria-label', '关闭');
+        close.addEventListener('click', closeDialog);
+        head.append(close);
+        dialog.append(head);
+        dialog.append(node('p', '只调整今天，不改长期计划。', 'banner-dialog-section'));
+        const group = node('div', '', 'banner-chip-group');
+        const options = [
+            ['lunch', '☀️ 午餐'], ['dinner', '🌙 晚餐'], ['both', '两餐都吃'], ['none', '今天不吃']
+        ];
+        if (overridden) options.push(['default', '恢复计划默认']);
+        options.forEach(([value, label]) => {
+            group.append(chip(label, async () => {
+                try {
+                    await api('screening/menu-override', 'POST', {
+                        date: today(), food_id: item.food_id, meal: value
+                    });
+                    closeDialog();
+                    toast(value === 'none' ? `今天不吃：${item.food}` : `已调整：${item.food}`);
+                    load();
+                } catch (error) {
+                    toast(`操作失败：${error.message}`);
+                }
+            }, value === item.meal));
+        });
+        dialog.append(group);
+        overlay.append(dialog);
+        document.body.append(overlay);
+        document.body.style.overflow = 'hidden';
     }
 
     function suggestedAmount(item) {
@@ -172,7 +230,7 @@
                 });
                 toast(`已取消「${item.food}」今天的进食记录`);
             } else {
-                const meal = suggestedMeal();
+                const meal = item.meal === 'both' ? suggestedMeal() : (item.meal || suggestedMeal());
                 const mode = item.kind === 'planned' ? 'start' : 'keep';
                 if (mode === 'start' && !await confirmNoOtherScreening([item.food_id], item.food)) return;
                 const amount = suggestedAmount(item);
@@ -304,7 +362,16 @@
             return;
         }
         closeDialog();
-        const state = { meal: suggestedMeal() };
+        const mealCounts = { lunch: 0, dinner: 0 };
+        foods.forEach(item => {
+            if (item.meal === 'lunch') mealCounts.lunch += 1;
+            if (item.meal === 'dinner') mealCounts.dinner += 1;
+        });
+        const state = {
+            meal: mealCounts.lunch !== mealCounts.dinner
+                ? (mealCounts.lunch > mealCounts.dinner ? 'lunch' : 'dinner')
+                : suggestedMeal()
+        };
 
         overlay = node('div', '', 'banner-dialog-overlay');
         overlay.addEventListener('click', event => {

@@ -120,16 +120,18 @@
         }
         const recorded = new Set(context.entries.map(entry => entry.food_id));
         plans = plans.filter(plan => !recorded.has(plan.food_id) &&
-            !blocks.some(block => block.food_id === plan.food_id));
+            !blocks.some(block => block.food_id === plan.food_id) &&
+            (plan.meal === 'both' || plan.meal === selectedMeal));
         if (!plans.length) return;
         plans.forEach(plan => {
+            const starting = plan.is_new && !plan.started;
             blocks.push({
                 id: null, original_food_id: null,
                 food_id: plan.food_id, food_name: plan.food_name,
-                amount: plan.is_new ? amounts[0] : '',
+                amount: starting ? amounts[0] : '',
                 rating: null, note: '',
-                mode: plan.is_new ? 'start' : 'keep',
-                auto_amount: plan.is_new
+                mode: starting ? 'start' : 'keep',
+                auto_amount: starting
             });
         });
         dirty = true;

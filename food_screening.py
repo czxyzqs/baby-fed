@@ -10,6 +10,9 @@ from food_library import FAMILY_PRESETS, FoodLibraryError, FoodLibraryStore
 
 
 SYMPTOMS = ('口周红疹', '荨麻疹', '呕吐', '腹泻', '便秘', '湿疹加重', '其他')
+BLOCK_MEALS = ('lunch', 'dinner')            # 排敏块：单顿
+NORMAL_MEALS = ('all', 'lunch', 'dinner')    # 常规计划：all = 两餐都吃
+OVERRIDE_MEALS = ('lunch', 'dinner', 'both', 'none')  # 当日覆盖：换餐/两餐/今天不吃
 CN_TZ = timezone(timedelta(hours=8))
 
 
@@ -421,6 +424,7 @@ class FoodScreeningStore(FoodLibraryStore):
         )]
         for item in rounds:
             item['end_date'] = add_days(date.fromisoformat(item['start_date']), item['observe_days'] - 1)
+            item['meal'] = self.block_meal_in(connection, item['food_id'], today)
         # 已完成的排敏轮次（通过/过敏）作为历史展示在排期页，不再凭空消失
         history = [dict(row) for row in connection.execute(
             'SELECT r.id, r.food_id, r.start_date, r.observe_days, r.status, f.name AS food_name '
@@ -589,6 +593,10 @@ class FoodScreeningStore(FoodLibraryStore):
                     if days <= eaten or days < block['days']:
                         raise FoodLibraryError('进行中的观察只能延长，且不能少于已吃天数')
                 updates['days'] = days
+            if 'meal' in data:
+                if data['meal'] not in BLOCK_MEALS:
+                    raise FoodLibraryError('排敏餐次只能是午餐或晚餐')
+                updates['meal'] = data['meal']
             if not updates:
                 raise FoodLibraryError('没有需要修改的内容')
             updates['updated_at'] = datetime.now(CN_TZ).isoformat()
@@ -743,6 +751,9 @@ class FoodScreeningStore(FoodLibraryStore):
         strategy = data.get('strategy') or 'defer'
         if strategy not in ('defer', 'overlap'):
             raise FoodLibraryError('不支持的重叠处理方式')
+        meal = data.get('meal', 'lunch')
+        if meal not in BLOCK_MEALS:
+            raise FoodLibraryError('排敏餐次只能是午餐或晚餐')
         today = today_cn()
         if start < today:
             raise FoodLibraryError('只能从今天或之后的日期插入')
@@ -771,9 +782,9 @@ class FoodScreeningStore(FoodLibraryStore):
             end = start + timedelta(days=days - 1)
             now = datetime.now(CN_TZ).isoformat()
             cursor = connection.execute(
-                'INSERT INTO food_plan_blocks (food_id, start_date, days, pinned, status, created_at, updated_at) '
-                'VALUES (?, ?, ?, 0, ?, ?, ?)',
-                (food_id, start.isoformat(), days, 'scheduled', now, now),
+                'INSERT INTO food_plan_blocks (food_id, start_date, days, pinned, status, meal, created_at, updated_at) '
+                "VALUES (?, ?, ?, 0, 'scheduled', ?, ?, ?)",
+                (food_id, start.isoformat(), days, meal, now, now),
             )
             inserted_id = cursor.lastrowid
             if strategy == 'defer':
@@ -955,10 +966,13 @@ class FoodScreeningStore(FoodLibraryStore):
                 if latest is None or latest['status'] != 'normal':
                     raise FoodLibraryError(f'「{food["name"]}」还不是已正常的食物，未排敏食物请加入排敏队列', 409)
             now = datetime.now(CN_TZ).isoformat()
+            meal = data.get('meal', 'all')
+            if meal not in NORMAL_MEALS:
+                raise FoodLibraryError('餐次只能是两餐都吃、仅午餐或仅晚餐')
             for food_id in food_ids:
                 connection.execute(
-                    'INSERT INTO food_normal_plans (food_id, start_date, days, created_at) VALUES (?, ?, ?, ?)',
-                    (food_id, start.isoformat(), days, now),
+                    'INSERT INTO food_normal_plans (food_id, start_date, days, meal, created_at) VALUES (?, ?, ?, ?, ?)',
+                    (food_id, start.isoformat(), days, meal, now),
                 )
             return self.schedule_in(connection)
 
@@ -976,6 +990,14 @@ class FoodScreeningStore(FoodLibraryStore):
             today = today_cn().isoformat()
             items = []
             rounds = self.latest_round_map(connection)
+            overrides = self.menu_overrides_in(connection, today)
+
+            def menu_meal(food_id, default_meal):
+                meal = 'both' if default_meal == 'all' else default_meal
+                override = overrides.get(food_id)
+                if override == 'none':
+                    return None
+                return override if override is not None else meal
             names = {row['id']: row['name'] for row in connection.execute('SELECT id, name FROM foods')}
             eaten_today_ids = {
                 row[0] for row in connection.execute(
@@ -996,12 +1018,14 @@ class FoodScreeningStore(FoodLibraryStore):
                     })
                 elif latest['start_date'] <= today <= window_end:
                     position = eaten_days + (0 if today in eaten else 1)
-                    items.append({
-                        'kind': 'screening', 'food_id': food_id, 'food': names.get(food_id),
-                        'position': position, 'eaten_days': eaten_days, 'observe_days': observe_days,
-                        'eaten_today': food_id in eaten_today_ids,
-                        'text': f'第{position}天/{observe_days}天',
-                    })
+                    meal = menu_meal(food_id, self.block_meal_in(connection, food_id, today))
+                    if meal is not None:
+                        items.append({
+                            'kind': 'screening', 'food_id': food_id, 'food': names.get(food_id),
+                            'position': position, 'eaten_days': eaten_days, 'observe_days': observe_days,
+                            'eaten_today': food_id in eaten_today_ids, 'meal': meal,
+                            'text': f'第{position}天/{observe_days}天',
+                        })
             for row in connection.execute(
                 "SELECT p.*, foods.name AS food_name FROM food_plan_blocks p JOIN foods ON foods.id = p.food_id "
                 "WHERE p.status = 'scheduled' AND p.start_date <= ? AND date(p.start_date, '+' || (p.days - 1) || ' days') >= ? "
@@ -1011,21 +1035,25 @@ class FoodScreeningStore(FoodLibraryStore):
                 if latest is not None:
                     continue
                 index = (date.fromisoformat(today) - date.fromisoformat(row['start_date'])).days + 1
-                items.append({
-                    'kind': 'planned', 'food_id': row['food_id'], 'food': row['food_name'],
-                    'position': index, 'observe_days': row['days'],
-                    'eaten_today': row['food_id'] in eaten_today_ids,
-                    'text': f'第{index}天/{row["days"]}天',
-                })
+                meal = menu_meal(row['food_id'], row['meal'])
+                if meal is not None:
+                    items.append({
+                        'kind': 'planned', 'food_id': row['food_id'], 'food': row['food_name'],
+                        'position': index, 'observe_days': row['days'],
+                        'eaten_today': row['food_id'] in eaten_today_ids, 'meal': meal,
+                        'text': f'第{index}天/{row["days"]}天',
+                    })
             for row in connection.execute(
                 "SELECT n.*, foods.name AS food_name FROM food_normal_plans n JOIN foods ON foods.id = n.food_id "
                 "WHERE n.start_date <= ? AND date(n.start_date, '+' || (n.days - 1) || ' days') >= ? ORDER BY n.start_date",
                 (today, today),
             ):
-                items.append({
-                    'kind': 'normal', 'food_id': row['food_id'], 'food': row['food_name'],
-                    'eaten_today': row['food_id'] in eaten_today_ids, 'text': '',
-                })
+                meal = menu_meal(row['food_id'], row['meal'])
+                if meal is not None:
+                    items.append({
+                        'kind': 'normal', 'food_id': row['food_id'], 'food': row['food_name'],
+                        'eaten_today': row['food_id'] in eaten_today_ids, 'meal': meal, 'text': '',
+                    })
             tomorrow = add_days(date.fromisoformat(today), 1)
             acked = {
                 row['key'][len('banner_ack_'):] for row in connection.execute(
@@ -1041,7 +1069,7 @@ class FoodScreeningStore(FoodLibraryStore):
                     'kind': 'upcoming', 'block_id': row['id'], 'food_id': row['food_id'],
                     'food': row['food_name'], 'observe_days': row['days'],
                 })
-            return {'date': today, 'items': items}
+            return {'date': today, 'items': items, 'overrides': overrides}
 
     def ack_banner(self, data):
         block_id = data.get('block_id')
@@ -1061,12 +1089,82 @@ class FoodScreeningStore(FoodLibraryStore):
             )
             return {'success': True}
 
+    def block_meal_in(self, connection, food_id, day):
+        row = connection.execute(
+            "SELECT meal FROM food_plan_blocks WHERE food_id = ? AND status = 'scheduled' "
+            'ORDER BY (start_date <= ? AND date(start_date, "+" || (days - 1) || " days") >= ?) DESC, id DESC LIMIT 1',
+            (food_id, day, day),
+        ).fetchone()
+        return row['meal'] if row is not None else 'lunch'
+
+    def menu_overrides_in(self, connection, day):
+        return {row['food_id']: row['meal'] for row in connection.execute(
+            'SELECT food_id, meal FROM food_menu_overrides WHERE date = ?', (day,))}
+
+    def set_menu_override(self, data):
+        day = parse_date(data.get('date'), '日期').isoformat()
+        food_id = data.get('food_id')
+        if type(food_id) is not int:
+            raise FoodLibraryError('请选择有效食物')
+        meal = data.get('meal')
+        with self.connect() as connection:
+            if connection.execute('SELECT 1 FROM foods WHERE id = ?', (food_id,)).fetchone() is None:
+                raise FoodLibraryError('该食物已不存在，请刷新后重试', 404)
+            if meal == 'default':
+                connection.execute(
+                    'DELETE FROM food_menu_overrides WHERE date = ? AND food_id = ?', (day, food_id))
+            elif meal in OVERRIDE_MEALS:
+                connection.execute(
+                    'INSERT OR REPLACE INTO food_menu_overrides (date, food_id, meal) VALUES (?, ?, ?)',
+                    (day, food_id, meal))
+            else:
+                raise FoodLibraryError('餐次调整选项无效')
+        # banner 在事务外重查，避免嵌套连接锁库
+        result = self.banner()
+        result['success'] = True
+        return result
+
     def plans_for_date(self, value):
+        """某天的进食计划（排敏块 + 进行中轮次 + 常规计划），带餐次并应用当日覆盖。
+
+        meal 归一化为 lunch / dinner / both；覆盖为 none 的不返回。"""
         selected = parse_date(value)
         with self.connect() as connection:
             end = selected.isoformat()
             rounds = self.latest_round_map(connection)
+            overrides = self.menu_overrides_in(connection, end)
+            names = {row['id']: row['name'] for row in connection.execute('SELECT id, name FROM foods')}
             items = []
+
+            def push(item):
+                item['meal'] = 'both' if item.get('meal') == 'all' else item.get('meal', 'lunch')
+                override = overrides.get(item['food_id'])
+                if override == 'none':
+                    return
+                if override is not None:
+                    item['meal'] = override
+                items.append(item)
+
+            # 进行中的观察：当天窗口内的轮次（预填时按 keep 记录）
+            for food_id, latest in rounds.items():
+                if latest['status'] != 'active':
+                    continue
+                start = date.fromisoformat(latest['start_date'])
+                round_end = start + timedelta(days=latest['observe_days'] - 1)
+                if not start <= selected <= round_end:
+                    continue
+                block = connection.execute(
+                    "SELECT meal FROM food_plan_blocks WHERE food_id = ? AND status = 'scheduled' "
+                    'ORDER BY (start_date <= ? AND date(start_date, "+" || (days - 1) || " days") >= ?) DESC, id DESC LIMIT 1',
+                    (food_id, end, end),
+                ).fetchone()
+                push({
+                    'food_id': food_id, 'food_name': names.get(food_id),
+                    'is_new': True, 'started': True,
+                    'position': (selected - start).days + 1,
+                    'observe_days': latest['observe_days'],
+                    'meal': block['meal'] if block is not None else 'lunch',
+                })
             for row in connection.execute(
                 "SELECT p.*, foods.name AS food_name FROM food_plan_blocks p JOIN foods ON foods.id = p.food_id "
                 "WHERE p.status = 'scheduled' AND p.start_date <= ? AND date(p.start_date, '+' || (p.days - 1) || ' days') >= ?",
@@ -1075,16 +1173,18 @@ class FoodScreeningStore(FoodLibraryStore):
                 if rounds.get(row['food_id']) is not None:
                     continue
                 index = (selected - date.fromisoformat(row['start_date'])).days + 1
-                items.append({
+                push({
                     'food_id': row['food_id'], 'food_name': row['food_name'],
                     'is_new': True, 'position': index, 'observe_days': row['days'],
+                    'meal': row['meal'],
                 })
             for row in connection.execute(
                 'SELECT n.*, foods.name AS food_name FROM food_normal_plans n JOIN foods ON foods.id = n.food_id '
                 'WHERE n.start_date <= ? AND date(n.start_date, "+" || (n.days - 1) || " days") >= ?',
                 (end, end),
             ):
-                items.append({'food_id': row['food_id'], 'food_name': row['food_name'], 'is_new': False})
+                push({'food_id': row['food_id'], 'food_name': row['food_name'],
+                      'is_new': False, 'meal': row['meal']})
             return {'date': end, 'items': items}
 
     # ---------- stats ----------
@@ -1237,6 +1337,10 @@ def register_food_screening(app, data_dir):
     @blueprint.post('/schedule/auto')
     def auto_pack():
         return jsonify({'success': True, **store.auto_schedule()})
+
+    @blueprint.post('/menu-override')
+    def menu_override():
+        return jsonify(store.set_menu_override(request.get_json(silent=True) or {}))
 
     @blueprint.post('/schedule/repack')
     def repack_blocks():
