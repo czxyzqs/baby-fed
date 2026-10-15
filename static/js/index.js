@@ -331,6 +331,13 @@
                 for (const field of ['openSleep', 'positionOpenSleep']) {
                     if (analysis[field]) analysis[field] = { ...analysis[field], parsedTime: new Date(analysis[field].time) };
                 }
+                if (Array.isArray(analysis.timeline)) {
+                    analysis.timeline = analysis.timeline.map(day => ({
+                        date: day.date,
+                        sessions: (day.sessions || []).map(session => ({ ...session, start: new Date(session.start), end: new Date(session.end) })),
+                        feeds: (day.feeds || []).map(time => new Date(time))
+                    }));
+                }
             }
             analysisCache.delete(key);
             analysisCache.set(key, analysis);
@@ -872,6 +879,59 @@
         return html;
     }
 
+    // 作息规律图：近 7 天 × 24 小时，睡眠画色块（跨午夜拆到两天）、喂奶标 🍼，直观看出一周节律
+    function buildSleepTimelineHtml(selectedDate, analysis) {
+        const timeline = analysis.timeline;
+        if (!Array.isArray(timeline) || !timeline.length) return '';
+        const days = timeline.map(day => ({ ...day, sessions: [...day.sessions], feeds: [...day.feeds] }));
+        if (analysis.openSleep && analysis.openSleep.parsedTime && analysis.openSleepDate) {
+            const openDay = days.find(day => day.date === analysis.openSleepDate);
+            if (openDay) openDay.sessions.push({ start: analysis.openSleep.parsedTime, end: null, ongoing: true });
+        }
+        const weekdayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        const dayMs = 86400000;
+        const timeText = value => value.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+        // 跨午夜的时段归属在入睡日；渲染时用全部时段对每一天裁剪，后半夜才能落到次日的列里
+        const allSessions = [];
+        days.forEach(day => day.sessions.forEach(session => allSessions.push(session)));
+        const columns = days.map(day => {
+            const dayStart = new Date(`${day.date}T00:00:00`);
+            const blocks = allSessions.map(session => {
+                const end = session.ongoing ? new Date() : session.end;
+                const from = Math.max(session.start.getTime(), dayStart.getTime());
+                const to = Math.min(end.getTime(), dayStart.getTime() + dayMs);
+                if (to <= from) return '';
+                const top = (from - dayStart.getTime()) / dayMs * 100;
+                const height = (to - from) / dayMs * 100;
+                const title = session.ongoing
+                    ? `${timeText(session.start)} 起 · 进行中`
+                    : `${timeText(session.start)}–${timeText(session.end)}`;
+                return `<div class="sleep-tl-block${session.ongoing ? ' ongoing' : ''}" style="top:${top.toFixed(3)}%;height:${height.toFixed(3)}%" title="${title}"></div>`;
+            }).join('');
+            const feeds = day.feeds.map(feed => {
+                const offset = feed.getTime() - dayStart.getTime();
+                if (offset < 0 || offset >= dayMs) return '';
+                return `<span class="sleep-tl-feed" style="top:${(offset / dayMs * 100).toFixed(3)}%" title="🍼 ${timeText(feed)}">🍼</span>`;
+            }).join('');
+            const date = new Date(`${day.date}T00:00:00`);
+            const label = `${day.date.slice(5).replace('-', '/')} ${weekdayLabels[date.getDay()]}`;
+            return `<div class="sleep-tl-colwrap">
+                <div class="sleep-tl-col">${blocks}${feeds}</div>
+                <div class="sleep-tl-label${day.date === selectedDate ? ' selected' : ''}">${label}</div>
+            </div>`;
+        }).join('');
+        const hourLabels = Array.from({ length: 13 }, (_, index) => index * 2)
+            .map(hour => `<span style="top:${hour / 24 * 100}%">${String(hour).padStart(2, '0')}</span>`)
+            .join('');
+        return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">作息规律 · 近7天（🍼 喂奶时刻，斜纹 = 进行中）</div>
+            <div class="sleep-timeline">
+                <div class="sleep-tl-hours">${hourLabels}</div>
+                <div class="sleep-tl-grid">${columns}</div>
+            </div>
+        </div>`;
+    }
+
     function getSleepPositionDurations(analysis, now = new Date()) {
         const durations = { ...analysis.positionDurations };
         const openSleep = analysis.positionOpenSleep;
@@ -1104,6 +1164,7 @@
                     </div>
                 </div>
                 ${buildSleepPositionHistoryHtml(allRecords, now)}
+                ${buildSleepTimelineHtml(dateStr, allRecords)}
                 <div style="text-align:center;padding:40px 20px;color:var(--text-muted)">
                     <div style="font-size:48px;margin-bottom:16px">🛏️</div>
                     <div style="font-size:16px;font-weight:500">当日暂无睡眠记录</div>
@@ -1151,6 +1212,7 @@
         html += `</div>`;
 
         html += buildSleepTrendHtml(dateStr, allRecords, now);
+        html += buildSleepTimelineHtml(dateStr, allRecords);
         html += buildSleepPositionHistoryHtml(allRecords, now);
 
         const sleepPositionLabels = { left: '左侧睡', right: '右侧睡', back: '平躺' };

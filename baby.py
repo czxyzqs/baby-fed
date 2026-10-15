@@ -1214,6 +1214,16 @@ def build_analysis_sleep_index(records, display_timezone, china_time=False):
                 if position in positions:
                     positions[position] += duration_ms
             open_sleep = None
+    # 各日喂奶时刻（供睡眠分析的作息规律图标注 🍼 用）
+    for record in records:
+        if record.get('type') != 'feed':
+            continue
+        parsed = parse_analysis_time(record.get('time'), display_timezone, china_time)
+        if parsed is None:
+            continue
+        feed_date = parsed.astimezone(display_timezone).date().isoformat()
+        day = days.setdefault(feed_date, {'sessions': [], 'totalDurationMs': 0})
+        day.setdefault('feeds', []).append(parsed.isoformat())
     return {
         'days': days,
         'positionDurations': positions,
@@ -1302,6 +1312,13 @@ def get_date_analysis(analysis_type):
             'totalDurationMs': index['days'].get(trend_date, {}).get('totalDurationMs', 0),
             'sessionCount': len(index['days'].get(trend_date, {}).get('sessions', [])),
         } for trend_date in trend_dates]
+        # 作息规律图：选中日起往前 7 天，逐日的睡眠时段与喂奶时刻
+        timeline_dates = [(selected_date - timedelta(days=offset)).isoformat() for offset in range(6, -1, -1)]
+        result['timeline'] = [{
+            'date': timeline_date,
+            'sessions': index['days'].get(timeline_date, {}).get('sessions', []),
+            'feeds': index['days'].get(timeline_date, {}).get('feeds', []),
+        } for timeline_date in timeline_dates]
         for field in ('openSleep', 'openSleepDate', 'positionDurations', 'positionOpenSleep'):
             result[field] = index[field]
     response = jsonify(result)

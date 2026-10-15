@@ -1597,6 +1597,36 @@
     border-radius: 50%;
 }
 
+/* 睡眠分析 · 作息规律图（近7天 × 24小时） */
+.sleep-timeline { display: flex; gap: 6px; }
+.sleep-tl-hours { position: relative; width: 24px; height: 360px; flex: none; font-size: 10px; color: var(--text-muted, #8a94a3); }
+.sleep-tl-hours span { position: absolute; right: 2px; transform: translateY(-50%); line-height: 1; }
+.sleep-tl-grid { display: flex; gap: 5px; flex: 1; min-width: 0; }
+.sleep-tl-colwrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sleep-tl-col {
+    position: relative; height: 360px; border-radius: 6px; overflow: hidden;
+    background-color: var(--bg-secondary, rgba(128, 128, 128, 0.06));
+    background-image: repeating-linear-gradient(to bottom,
+        transparent 0, transparent calc(100% / 12 - 1px),
+        var(--border, rgba(128, 128, 128, 0.18)) calc(100% / 12 - 1px),
+        var(--border, rgba(128, 128, 128, 0.18)) calc(100% / 12));
+}
+.sleep-tl-block {
+    position: absolute; left: 2px; right: 2px; min-height: 2px;
+    background: var(--accent-sleep, #7c3aed); border-radius: 4px; opacity: 0.88;
+}
+.sleep-tl-block.ongoing {
+    background: repeating-linear-gradient(45deg,
+        var(--accent-sleep, #7c3aed) 0 6px, rgba(255, 255, 255, 0.35) 6px 12px);
+    opacity: 0.8;
+}
+.sleep-tl-feed {
+    position: absolute; left: 50%; transform: translate(-50%, -50%);
+    font-size: 11px; line-height: 1; z-index: 2; cursor: default;
+}
+.sleep-tl-label { text-align: center; font-size: 10px; color: var(--text-muted, #8a94a3); white-space: nowrap; }
+.sleep-tl-label.selected { color: var(--accent-sleep, #7c3aed); font-weight: 700; }
+
 .supplement-switch-list {
     margin-top: 12px;
     border-top: 1px solid #e0e0e0;
