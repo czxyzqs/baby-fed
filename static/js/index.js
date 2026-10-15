@@ -1178,16 +1178,46 @@
 
     function renderSleepTrendRangeBar() {
         const range = sleepTrendRange;
-        const weekActive = range.mode === 'week';
-        return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-            <button type="button" class="stats-btn" onclick="useSleepTrendWeek()" style="${weekActive ? 'background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;' : ''}">近7天</button>
-            <span style="color:var(--text-muted);font-size:13px">或自选（≤7天）</span>
-            <input type="date" id="sleep-range-start" class="form-input" style="width:auto;padding:6px 8px" value="${range.start}" max="${range.end}">
-            <span style="color:var(--text-muted)">~</span>
-            <input type="date" id="sleep-range-end" class="form-input" style="width:auto;padding:6px 8px" value="${range.end}" min="${range.start}">
-            <button type="button" class="stats-btn" onclick="applySleepTrendRange()">查看</button>
-            <span id="sleep-range-error" style="color:#ff8a70;font-size:12px;flex-basis:100%"></span>
+        return `<div class="sleep-range-bar">
+            <button type="button" class="stats-btn sleep-range-week${range.mode === 'week' ? ' active' : ''}" onclick="useSleepTrendWeek()">近7天</button>
+            <div class="sleep-range-picker" id="sleep-range-start-picker"></div>
+            <span class="sleep-range-sep">~</span>
+            <div class="sleep-range-picker" id="sleep-range-end-picker"></div>
         </div>`;
+    }
+
+    // 两个日期胶囊（点击弹月历，选完即生效）：自动把另一端夹到合法的 7 天窗口内
+    function mountSleepRangePickers() {
+        const range = sleepTrendRange;
+        const short = value => value.slice(5).replace('-', '/');
+        const adjust = (which, value) => {
+            let start = range.start;
+            let end = range.end;
+            if (which === 'start') {
+                start = value;
+                if (end < start) end = start;
+                const maxEnd = shiftDateString(start, 6);
+                if (end > maxEnd) end = maxEnd;
+            } else {
+                end = value;
+                if (start > end) start = end;
+                const minStart = shiftDateString(end, -6);
+                if (start < minStart) start = minStart;
+            }
+            const isDefaultWeek = start === shiftDateString(range.base, -6) && end === range.base;
+            sleepTrendRange = { ...range, mode: isDefaultWeek ? 'week' : 'custom', start, end };
+            renderSleepTrendModal();
+        };
+        window.createDatePicker({
+            mount: document.getElementById('sleep-range-start-picker'),
+            value: range.start, max: range.end, format: short,
+            onChange: value => adjust('start', value)
+        });
+        window.createDatePicker({
+            mount: document.getElementById('sleep-range-end-picker'),
+            value: range.end, format: short,
+            onChange: value => adjust('end', value)
+        });
     }
 
     function sleepTrendRangeText() {
@@ -1204,6 +1234,7 @@
             ${renderSleepTrendRangeBar()}
             <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px" id="sleep-trend-caption">加载中...</div>
             <div id="sleep-trend-charts"><div style="text-align:center;padding:20px">加载中...</div></div>`;
+        mountSleepRangePickers();
         try {
             const analysis = range.mode === 'week'
                 ? await loadDateAnalysis('sleep', range.base)
@@ -1232,20 +1263,6 @@
     function useSleepTrendWeek() {
         if (!sleepTrendRange) return;
         sleepTrendRange = { ...sleepTrendRange, mode: 'week', start: shiftDateString(sleepTrendRange.base, -6), end: sleepTrendRange.base };
-        renderSleepTrendModal();
-    }
-
-    function applySleepTrendRange() {
-        if (!sleepTrendRange) return;
-        const start = document.getElementById('sleep-range-start').value;
-        const end = document.getElementById('sleep-range-end').value;
-        const error = document.getElementById('sleep-range-error');
-        if (!start || !end) { error.textContent = '请选择开始和结束日期'; return; }
-        if (start > end) { error.textContent = '开始日期不能晚于结束日期'; return; }
-        const spanDays = (new Date(`${end}T00:00:00`) - new Date(`${start}T00:00:00`)) / 86400000 + 1;
-        if (spanDays > 7) { error.textContent = `日期段最多 7 天，当前选了 ${spanDays} 天`; return; }
-        error.textContent = '';
-        sleepTrendRange = { ...sleepTrendRange, mode: 'custom', start, end };
         renderSleepTrendModal();
     }
 

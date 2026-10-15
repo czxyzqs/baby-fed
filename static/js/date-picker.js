@@ -23,6 +23,7 @@
         const max = options.max || null;
         const hiddenInput = options.hiddenInput || null;
         const onChange = typeof options.onChange === 'function' ? options.onChange : null;
+        const format = typeof options.format === 'function' ? options.format : null;
         let value = options.value || isoOf(new Date());
         let viewYear = toDate(value).getFullYear();
         let viewMonth = toDate(value).getMonth();
@@ -79,7 +80,7 @@
         mount.replaceChildren(root);
 
         function refresh() {
-            label.textContent = display(value);
+            label.textContent = format ? format(value) : display(value);
             title.textContent = `${viewYear}年${viewMonth + 1}月`;
             grid.replaceChildren();
             const first = new Date(viewYear, viewMonth, 1);

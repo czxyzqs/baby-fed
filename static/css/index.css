@@ -1599,6 +1599,17 @@
 
 /* 睡眠分析 · 作息规律图（近7天 × 24小时） */
 #sleep-trend-modal .modal { max-width: min(720px, 94vw); }
+
+/* 趋势弹窗 · 日期段选择条（近7天 + 两个可点击日期胶囊） */
+.sleep-range-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.sleep-range-week.active { background: linear-gradient(135deg, #7c3aed, #ec4899); color: #fff; border: none; }
+.sleep-range-picker { width: 122px; }
+.sleep-range-picker .sdp-trigger { padding: 8px 10px; font-size: 14px; min-height: 38px; gap: 6px; }
+.sleep-range-picker .sdp-panel { left: auto; right: auto; width: 300px; }
+.sleep-range-sep { color: var(--text-muted); }
+body.elder .sleep-range-picker { width: 140px; }
+body.elder .sleep-range-picker .sdp-trigger { font-size: 17px; }
+
 .sleep-tl-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .sleep-timeline { display: flex; gap: 6px; min-width: 480px; }
 .sleep-tl-hours { position: relative; width: 24px; height: 360px; flex: none; font-size: 10px; color: var(--text-muted, #8a94a3); }
