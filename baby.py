@@ -1277,6 +1277,20 @@ def get_date_analysis(analysis_type):
         selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         trend_end = datetime.combine(selected_date, datetime.min.time()).replace(hour=12, tzinfo=CN_TZ).astimezone(display_timezone).date()
         trend_dates = [(trend_end - timedelta(days=offset)).isoformat() for offset in range(6, -1, -1)]
+        # 自定义日期段（含端点，最多 7 天）：趋势与作息规律图按此窗口返回
+        chart_dates = None
+        if analysis_type == 'sleep' and (request.args.get('range_start') or request.args.get('range_end')):
+            try:
+                range_start = datetime.strptime(request.args.get('range_start') or date_str, '%Y-%m-%d').date()
+                range_end = datetime.strptime(request.args.get('range_end') or date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'error': 'Invalid range dates'}), 400
+            if range_start > range_end:
+                return jsonify({'error': '日期段的开始不能晚于结束'}), 400
+            if (range_end - range_start).days > 6:
+                return jsonify({'error': '日期段最多包含 7 天'}), 400
+            chart_dates = [(range_start + timedelta(days=offset)).isoformat()
+                           for offset in range((range_end - range_start).days + 1)]
         first_day = after_last_day = None
         if analysis_type == 'feeding':
             first_day = min(date_str, *trend_dates)
@@ -1307,13 +1321,13 @@ def get_date_analysis(analysis_type):
         } for trend_date in trend_dates]
     else:
         result['sessions'] = selected_day.get('sessions', [])
+        timeline_dates = chart_dates or trend_dates
         result['trend'] = [{
-            'dateStr': trend_date,
-            'totalDurationMs': index['days'].get(trend_date, {}).get('totalDurationMs', 0),
-            'sessionCount': len(index['days'].get(trend_date, {}).get('sessions', [])),
-        } for trend_date in trend_dates]
-        # 作息规律图：选中日起往前 7 天，逐日的睡眠时段与喂奶时刻
-        timeline_dates = [(selected_date - timedelta(days=offset)).isoformat() for offset in range(6, -1, -1)]
+            'dateStr': chart_date,
+            'totalDurationMs': index['days'].get(chart_date, {}).get('totalDurationMs', 0),
+            'sessionCount': len(index['days'].get(chart_date, {}).get('sessions', [])),
+        } for chart_date in timeline_dates]
+        # 作息规律图：按日期窗口逐日返回睡眠时段与喂奶时刻
         result['timeline'] = [{
             'date': timeline_date,
             'sessions': index['days'].get(timeline_date, {}).get('sessions', []),

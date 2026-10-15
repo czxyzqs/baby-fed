@@ -855,10 +855,13 @@
         const trendData = buildSleepTrendData(selectedDate, allRecords, now);
         const maxMinutes = Math.max(...trendData.map(item => item.totalMinutes), 60);
         const avgMinutes = Math.round(trendData.reduce((sum, item) => sum + item.totalMinutes, 0) / trendData.length);
+        const first = trendData[0]?.dateStr || '';
+        const last = trendData[trendData.length - 1]?.dateStr || '';
+        const rangeText = first === last ? first.slice(5).replace('-', '/') : `${first.slice(5).replace('-', '/')}–${last.slice(5).replace('-', '/')}`;
 
         let html = `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
-                <div style="font-size:13px;color:var(--text-muted)">近七日睡眠时长趋势</div>
+                <div style="font-size:13px;color:var(--text-muted)">睡眠时长趋势 · ${rangeText}</div>
                 <div style="font-size:12px;color:var(--text-muted)">平均 ${formatSleepDurationMinutes(avgMinutes)}</div>
             </div>
             <div style="display:flex;align-items:flex-end;gap:8px;height:150px;">`;
@@ -923,8 +926,13 @@
         const hourLabels = Array.from({ length: 13 }, (_, index) => index * 2)
             .map(hour => `<span style="top:${hour / 24 * 100}%">${String(hour).padStart(2, '0')}</span>`)
             .join('');
+        const firstDay = days[0]?.date || '';
+        const lastDay = days[days.length - 1]?.date || '';
+        const rangeText = firstDay === lastDay
+            ? firstDay.slice(5).replace('-', '/')
+            : `${firstDay.slice(5).replace('-', '/')}–${lastDay.slice(5).replace('-', '/')}`;
         return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
-            <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">作息规律 · 近7天（🍼 喂奶时刻，斜纹 = 进行中）</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">作息规律 · ${rangeText}（🍼 喂奶时刻，斜纹 = 进行中）</div>
             <div class="sleep-tl-scroll">
                 <div class="sleep-timeline">
                     <div class="sleep-tl-hours">${hourLabels}</div>
@@ -1139,24 +1147,106 @@
         await showDateAnalysis('sleep', sleepCalSelectedDate);
     }
 
-    // 近7日趋势 + 作息规律的独立弹窗，叠在睡眠分析之上，数据直接复用分析缓存
-    async function openSleepTrendModal(dateStr) {
-        openModal('sleep-trend');
+    // 近7日趋势 + 作息规律的独立弹窗，叠在睡眠分析之上；支持近7天或自选日期段（最多 7 天）
+    let sleepTrendRange = null;
+
+    function shiftDateString(dateStr, days) {
+        const date = new Date(`${dateStr}T12:00:00`);
+        date.setDate(date.getDate() + days);
+        return formatSleepDate(date);
+    }
+
+    async function loadSleepRangeAnalysis(startStr, endStr) {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
+        const params = new URLSearchParams({ date: endStr, timezone, range_start: startStr, range_end: endStr });
+        const analysis = await getJson(`/api/analysis/sleep?${params}`);
+        if (analysis.type !== 'sleep' || !Array.isArray(analysis.trend) || analysis.trend.length < 1 ||
+            !Array.isArray(analysis.timeline) || !analysis.positionDurations) {
+            throw new Error('Invalid analysis response');
+        }
+        analysis.sessions = (analysis.sessions || []).map(session => ({ ...session, start: new Date(session.start), end: new Date(session.end) }));
+        for (const field of ['openSleep', 'positionOpenSleep']) {
+            if (analysis[field]) analysis[field] = { ...analysis[field], parsedTime: new Date(analysis[field].time) };
+        }
+        analysis.timeline = analysis.timeline.map(day => ({
+            date: day.date,
+            sessions: (day.sessions || []).map(session => ({ ...session, start: new Date(session.start), end: new Date(session.end) })),
+            feeds: (day.feeds || []).map(time => new Date(time))
+        }));
+        return analysis;
+    }
+
+    function renderSleepTrendRangeBar() {
+        const range = sleepTrendRange;
+        const weekActive = range.mode === 'week';
+        return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+            <button type="button" class="stats-btn" onclick="useSleepTrendWeek()" style="${weekActive ? 'background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;border:none;' : ''}">近7天</button>
+            <span style="color:var(--text-muted);font-size:13px">或自选（≤7天）</span>
+            <input type="date" id="sleep-range-start" class="form-input" style="width:auto;padding:6px 8px" value="${range.start}" max="${range.end}">
+            <span style="color:var(--text-muted)">~</span>
+            <input type="date" id="sleep-range-end" class="form-input" style="width:auto;padding:6px 8px" value="${range.end}" min="${range.start}">
+            <button type="button" class="stats-btn" onclick="applySleepTrendRange()">查看</button>
+            <span id="sleep-range-error" style="color:#ff8a70;font-size:12px;flex-basis:100%"></span>
+        </div>`;
+    }
+
+    function sleepTrendRangeText() {
+        const range = sleepTrendRange;
+        return range.mode === 'week'
+            ? `基准日期：${formatSleepDateDisplay(range.base)}（近 7 天）`
+            : `自选日期段：${range.start} ~ ${range.end}（${(new Date(`${range.end}T00:00:00`) - new Date(`${range.start}T00:00:00`)) / 86400000 + 1} 天）`;
+    }
+
+    async function renderSleepTrendModal() {
         const body = document.getElementById('sleep-trend-body');
-        const base = dateStr || formatSleepDate(new Date());
-        body.innerHTML = '<div style="text-align:center;padding:20px">加载中...</div>';
+        const range = sleepTrendRange;
+        body.innerHTML = `
+            ${renderSleepTrendRangeBar()}
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px" id="sleep-trend-caption">加载中...</div>
+            <div id="sleep-trend-charts"><div style="text-align:center;padding:20px">加载中...</div></div>`;
         try {
-            const analysis = await loadDateAnalysis('sleep', base);
-            body.innerHTML = `
-                <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">基准日期：${formatSleepDateDisplay(analysis.date)}（含此前 7 天）</div>
-                ${buildSleepTrendHtml(analysis.date, analysis, new Date())}
-                ${buildSleepTimelineHtml(analysis.date, analysis)}`;
+            const analysis = range.mode === 'week'
+                ? await loadDateAnalysis('sleep', range.base)
+                : await loadSleepRangeAnalysis(range.start, range.end);
+            const selectedDate = range.mode === 'week' ? analysis.date : range.end;
+            document.getElementById('sleep-trend-caption').textContent = sleepTrendRangeText();
+            document.getElementById('sleep-trend-charts').innerHTML =
+                buildSleepTrendHtml(selectedDate, analysis, new Date()) +
+                buildSleepTimelineHtml(selectedDate, analysis);
         } catch (error) {
-            body.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted)">
+            document.getElementById('sleep-trend-caption').textContent = '';
+            document.getElementById('sleep-trend-charts').innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted)">
                 <div style="margin-bottom:12px">加载失败：${error.message}</div>
-                <button class="stats-btn" onclick="openSleepTrendModal('${base}')">重新加载</button>
+                <button class="stats-btn" onclick="renderSleepTrendModal()">重新加载</button>
             </div>`;
         }
+    }
+
+    async function openSleepTrendModal(dateStr) {
+        openModal('sleep-trend');
+        const base = dateStr || formatSleepDate(new Date());
+        sleepTrendRange = { base, mode: 'week', start: shiftDateString(base, -6), end: base };
+        await renderSleepTrendModal();
+    }
+
+    function useSleepTrendWeek() {
+        if (!sleepTrendRange) return;
+        sleepTrendRange = { ...sleepTrendRange, mode: 'week', start: shiftDateString(sleepTrendRange.base, -6), end: sleepTrendRange.base };
+        renderSleepTrendModal();
+    }
+
+    function applySleepTrendRange() {
+        if (!sleepTrendRange) return;
+        const start = document.getElementById('sleep-range-start').value;
+        const end = document.getElementById('sleep-range-end').value;
+        const error = document.getElementById('sleep-range-error');
+        if (!start || !end) { error.textContent = '请选择开始和结束日期'; return; }
+        if (start > end) { error.textContent = '开始日期不能晚于结束日期'; return; }
+        const spanDays = (new Date(`${end}T00:00:00`) - new Date(`${start}T00:00:00`)) / 86400000 + 1;
+        if (spanDays > 7) { error.textContent = `日期段最多 7 天，当前选了 ${spanDays} 天`; return; }
+        error.textContent = '';
+        sleepTrendRange = { ...sleepTrendRange, mode: 'custom', start, end };
+        renderSleepTrendModal();
     }
 
     function renderSleepAnalysisByDate(dateStr, allRecords) {
@@ -1188,10 +1278,7 @@
                 ${buildSleepPositionHistoryHtml(allRecords, now)}
                 <div class="stat-item clickable" onclick="openSleepTrendModal('${dateStr}')" style="margin-bottom:16px">
                     <div style="display:flex;align-items:center;justify-content:space-between">
-                        <div>
-                            <div style="font-size:15px;font-weight:600;color:var(--text-primary)">📈 睡眠趋势与作息规律</div>
-                            <div class="stat-lbl" style="margin-top:2px">近7天时长趋势 · 24小时作息图</div>
-                        </div>
+                        <div style="font-size:15px;font-weight:600;color:var(--text-primary)">📈 睡眠趋势与作息规律</div>
                         <div style="font-size:22px;color:var(--accent-sleep,#7c3aed)">›</div>
                     </div>
                 </div>
@@ -1244,10 +1331,7 @@
         // 近7日趋势与作息规律拆到独立弹窗，主弹窗只留入口
         html += `<div class="stat-item clickable" onclick="openSleepTrendModal('${dateStr}')" style="margin-bottom:20px">
             <div style="display:flex;align-items:center;justify-content:space-between">
-                <div>
-                    <div style="font-size:15px;font-weight:600;color:var(--text-primary)">📈 睡眠趋势与作息规律</div>
-                    <div class="stat-lbl" style="margin-top:2px">近7天时长趋势 · 24小时作息图</div>
-                </div>
+                <div style="font-size:15px;font-weight:600;color:var(--text-primary)">📈 睡眠趋势与作息规律</div>
                 <div style="font-size:22px;color:var(--accent-sleep,#7c3aed)">›</div>
             </div>
         </div>`;
