@@ -1182,15 +1182,19 @@
         const chosenDays = { days: 1 };
         daysLabel.append(daysStepper(chosenDays, 1, 14, days => `连续${days}天`));
         body.append(daysLabel);
-        const mealLabel = node('label', '餐次');
+        const mealLabel = node('label', '餐次（可多选）');
         const mealGroup = node('div', '', 'planning-chip-group');
-        const chosenMeal = { meal: 'all' };
-        [['all', '两餐都吃'], ['breakfast', '早餐'], ['lunch', '仅午餐'], ['snack', '下午茶'], ['dinner', '仅晚餐']].forEach(([value, label]) => {
+        const chosenMeals = new Set(['lunch', 'dinner']);
+        [['breakfast', '早餐'], ['lunch', '午餐'], ['snack', '下午茶'], ['dinner', '晚餐']].forEach(([value, label]) => {
             const chip = button(label, () => {
-                chosenMeal.meal = value;
-                [...mealGroup.children].forEach(child => child.classList.remove('active'));
-                chip.classList.add('active');
-            }, 'planning-chip' + (value === 'all' ? ' active' : ''));
+                if (chosenMeals.has(value)) {
+                    chosenMeals.delete(value);
+                    chip.classList.remove('active');
+                } else {
+                    chosenMeals.add(value);
+                    chip.classList.add('active');
+                }
+            }, 'planning-chip' + (chosenMeals.has(value) ? ' active' : ''));
             mealGroup.append(chip);
         });
         mealLabel.append(mealGroup);
@@ -1202,9 +1206,13 @@
                 message('请至少选择一种食物', true);
                 return;
             }
+            if (!chosenMeals.size) {
+                message('请至少选择一个餐次', true);
+                return;
+            }
             try {
                 const result = await api('normals', 'POST', {
-                    food_ids: [...chosen], start_date: dateStr, days: chosenDays.days, meal: chosenMeal.meal
+                    food_ids: [...chosen], start_date: dateStr, days: chosenDays.days, meal: [...chosenMeals]
                 });
                 applySchedule(result);
                 closeDialog();

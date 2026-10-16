@@ -121,9 +121,13 @@
         const recorded = new Set(context.entries
             .filter(entry => entry.meal === selectedMeal)
             .map(entry => entry.food_id));
+        // 计划餐次可能是多选（逗号分隔）或旧值 both/all（午晚两餐）
+        const planMeals = plan => (plan.meal === 'both' || plan.meal === 'all')
+            ? ['lunch', 'dinner']
+            : String(plan.meal || '').split(',').filter(Boolean);
         plans = plans.filter(plan => !recorded.has(plan.food_id) &&
             !blocks.some(block => block.food_id === plan.food_id) &&
-            (plan.meal === 'both' || plan.meal === selectedMeal));
+            planMeals(plan).includes(selectedMeal));
         if (!plans.length) return;
         plans.forEach(plan => {
             const starting = plan.is_new && !plan.started;

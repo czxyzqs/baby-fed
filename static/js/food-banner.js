@@ -9,6 +9,12 @@
     const SYMPTOMS = ['口周红疹', '荨麻疹', '呕吐', '腹泻', '便秘', '湿疹加重', '其他'];
     const MEALS = { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐' };
 
+    // 计划餐次可能是多选（逗号分隔）或旧值 both/all（午晚两餐），统一展开成数组
+    function mealsOf(value) {
+        if (value === 'both' || value === 'all') return ['lunch', 'dinner'];
+        return String(value || '').split(',').filter(Boolean);
+    }
+
     function node(tag, text, className = '') {
         const result = document.createElement(tag);
         if (text) result.textContent = text;
@@ -113,7 +119,7 @@
         [['breakfast', '🥣 早餐'], ['lunch', '☀️ 午餐'], ['snack', '🍎 下午茶'], ['dinner', '🌙 晚餐']].forEach(([meal, label]) => {
             const column = node('div', '', 'food-banner-menu-col');
             column.append(node('h4', label, 'food-banner-menu-title'));
-            const columnFoods = foods.filter(item => item.meal === meal || item.meal === 'both');
+            const columnFoods = foods.filter(item => mealsOf(item.meal).includes(meal));
             if (!columnFoods.length) {
                 column.append(node('p', '没有计划', 'food-banner-menu-empty'));
             }
@@ -411,12 +417,12 @@
             return;
         }
         closeDialog();
-        // 计划绑定的餐次里取众数做默认（四餐通用），没有明显多数时按当前时间猜
+        // 计划绑定的餐次里取众数做默认（四餐通用，多选计划按所选餐次计票），没有明显多数时按当前时间猜
         const mealCounts = {};
         foods.forEach(item => {
-            if (item.meal && item.meal !== 'both') {
-                mealCounts[item.meal] = (mealCounts[item.meal] || 0) + 1;
-            }
+            mealsOf(item.meal).forEach(meal => {
+                mealCounts[meal] = (mealCounts[meal] || 0) + 1;
+            });
         });
         const ranked = Object.entries(mealCounts).sort((a, b) => b[1] - a[1]);
         const state = {
@@ -573,7 +579,7 @@
             rating: null,
             symptoms: new Set(),
             // 默认取计划绑定的餐次；两餐都吃/无计划时按当前时段，但界面显式可选，不静默落餐
-            meal: item.meal && item.meal !== 'both' ? item.meal : suggestedMeal()
+            meal: mealsOf(item.meal).length === 1 ? mealsOf(item.meal)[0] : suggestedMeal()
         };
         overlay = node('div', '', 'banner-dialog-overlay');
         overlay.addEventListener('click', event => {

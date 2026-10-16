@@ -11,8 +11,24 @@ from food_library import FAMILY_PRESETS, FoodLibraryError, FoodLibraryStore
 
 SYMPTOMS = ('口周红疹', '荨麻疹', '呕吐', '腹泻', '便秘', '湿疹加重', '其他')
 BLOCK_MEALS = ('lunch', 'dinner')            # 排敏块：单顿，只绑辅食两餐
-NORMAL_MEALS = ('all', 'breakfast', 'lunch', 'snack', 'dinner')  # 常规计划：all = 午晚两餐
+NORMAL_MEALS = ('breakfast', 'lunch', 'snack', 'dinner')  # 常规计划餐次，可多选
 OVERRIDE_MEALS = ('breakfast', 'lunch', 'snack', 'dinner', 'both', 'none')  # 当日覆盖：任意餐/两餐/不吃
+
+
+def expand_normal_meal(value):
+    """常规计划餐次展开为列表；兼容旧值 all/both（午晚两餐）与逗号分隔的多选。"""
+    parts = [part for part in str(value or '').split(',') if part]
+    if 'all' in parts or 'both' in parts:
+        parts = ['lunch', 'dinner']
+    return [part for part in parts if part in NORMAL_MEALS] or ['lunch']
+
+
+def canonical_meal(value):
+    """对外输出的规范餐次：单餐原样、午+晚 合并为 both、其余逗号连接。"""
+    parts = expand_normal_meal(value)
+    if parts == ['lunch', 'dinner']:
+        return 'both'
+    return ','.join(parts)
 CN_TZ = timezone(timedelta(hours=8))
 
 
@@ -966,9 +982,23 @@ class FoodScreeningStore(FoodLibraryStore):
                 if latest is None or latest['status'] != 'normal':
                     raise FoodLibraryError(f'「{food["name"]}」还不是已正常的食物，未排敏食物请加入排敏队列', 409)
             now = datetime.now(CN_TZ).isoformat()
-            meal = data.get('meal', 'all')
-            if meal not in NORMAL_MEALS:
-                raise FoodLibraryError('餐次只能是两餐都吃、早餐、午餐、下午茶或晚餐')
+            # 餐次可多选：传数组或逗号分隔字符串；旧值 all 视为午+晚
+            meal_input = data.get('meal', 'all')
+            if isinstance(meal_input, str):
+                meal_input = [meal_input]
+            if not isinstance(meal_input, list) or not meal_input:
+                raise FoodLibraryError('请至少选择一个餐次')
+            meals = []
+            for value in meal_input:
+                if value == 'all':
+                    meals.extend(['lunch', 'dinner'])
+                elif value in NORMAL_MEALS:
+                    meals.append(value)
+                else:
+                    raise FoodLibraryError('餐次只能是早餐、午餐、下午茶或晚餐')
+            meal = ','.join(dict.fromkeys(meals))
+            if not meal:
+                raise FoodLibraryError('请至少选择一个餐次')
             for food_id in food_ids:
                 connection.execute(
                     'INSERT INTO food_normal_plans (food_id, start_date, days, meal, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -993,11 +1023,11 @@ class FoodScreeningStore(FoodLibraryStore):
             overrides = self.menu_overrides_in(connection, today)
 
             def menu_meal(food_id, default_meal):
-                meal = 'both' if default_meal == 'all' else default_meal
+                meal = canonical_meal(default_meal)
                 override = overrides.get(food_id)
                 if override == 'none':
                     return None
-                return override if override is not None else meal
+                return canonical_meal(override) if override is not None else meal
             names = {row['id']: row['name'] for row in connection.execute('SELECT id, name FROM foods')}
             eaten_today_meals = {}
             for eaten_food_id, eaten_meal in connection.execute(
@@ -1145,12 +1175,12 @@ class FoodScreeningStore(FoodLibraryStore):
             items = []
 
             def push(item):
-                item['meal'] = 'both' if item.get('meal') == 'all' else item.get('meal', 'lunch')
+                item['meal'] = canonical_meal(item.get('meal', 'lunch'))
                 override = overrides.get(item['food_id'])
                 if override == 'none':
                     return
                 if override is not None:
-                    item['meal'] = override
+                    item['meal'] = canonical_meal(override)
                 items.append(item)
 
             # 进行中的观察：当天窗口内的轮次（预填时按 keep 记录）
