@@ -73,29 +73,6 @@
         return todayContext;
     }
 
-    // 首页收拢成单行入口的摘要：待标记、各餐项数、已吃进度、明天预告
-    function summarize(items) {
-        const foods = items.filter(item => item.kind !== 'due' && item.kind !== 'upcoming');
-        const due = items.filter(item => item.kind === 'due');
-        const upcoming = items.filter(item => item.kind === 'upcoming');
-        const parts = [];
-        if (due.length) parts.push(`🔔${due.map(item => item.food).join('、')}可标记结果`);
-        const counts = {};
-        foods.forEach(item => {
-            (item.meal === 'both' ? ['lunch', 'dinner'] : [item.meal]).filter(Boolean)
-                .forEach(meal => { counts[meal] = (counts[meal] || 0) + 1; });
-        });
-        const mealParts = Object.keys(MEALS).filter(meal => counts[meal])
-            .map(meal => `${MEALS[meal]}${counts[meal]}`);
-        if (mealParts.length) parts.push(mealParts.join(' '));
-        if (foods.length) {
-            const eatenCount = foods.filter(item => (item.eaten_meals || []).length).length;
-            parts.push(eatenCount >= foods.length ? '今日已记录 ✓' : `已吃${eatenCount}/${foods.length}`);
-        }
-        if (upcoming.length) parts.push(`明天吃${upcoming[0].food}`);
-        return parts.join(' · ') || '今天没有计划';
-    }
-
     // 完整餐单内容（待标记、明日预告、四餐格），渲染进底部弹层
     function buildPlanContent() {
         const wrap = node('div', '', 'food-plan-content');
@@ -209,10 +186,8 @@
         const entry = node('button', '', 'food-plan-entry');
         entry.type = 'button';
         entry.append(node('span', '🥣', 'food-plan-entry-icon'));
-        const text = node('div', '', 'food-plan-entry-text');
-        text.append(node('div', '今日辅食计划', 'food-plan-entry-title'));
-        text.append(node('div', summarize(items), 'food-plan-entry-sub'));
-        entry.append(text, node('span', '›', 'food-plan-entry-arrow'));
+        entry.append(node('div', '今日辅食计划', 'food-plan-entry-title'));
+        entry.append(node('span', '›', 'food-plan-entry-arrow'));
         entry.addEventListener('click', openPlanDialog);
         body.append(entry);
         // ✓ 勾选等操作会触发重渲染；餐单弹层开着时就地刷新内容
