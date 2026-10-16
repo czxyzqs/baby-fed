@@ -56,7 +56,13 @@
             <p class="planning-hint">点日期查看当天安排；今天起可在当天详情里添加常规计划（正常食物），未来的日期还可划暂停段或调整排敏。</p>
         </section>
         <section class="planning-card" aria-labelledby="planning-agenda-title">
-            <h2 id="planning-agenda-title">排期一览</h2>
+            <div class="planning-view-bar">
+                <h2 id="planning-agenda-title">排期一览</h2>
+                <div class="planning-view-toggle" role="group" aria-label="排期视图">
+                    <button type="button" id="planning-view-full">完整辅食</button>
+                    <button type="button" id="planning-view-screening">仅排敏</button>
+                </div>
+            </div>
             <div id="planning-agenda"></div>
         </section>
     </main>

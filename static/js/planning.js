@@ -7,6 +7,8 @@
     let movingBlock = null;
     let agendaPastExpanded = false;
     let paletteMap = {};
+    // 排期视图：full = 排敏+常规计划；screening = 只看排敏线
+    let viewMode = localStorage.getItem('planning-view') === 'screening' ? 'screening' : 'full';
 
     // 按时间线出现顺序给食物轮换分配颜色：相邻排期必不同色，同一食物同色
     function buildColorMap() {
@@ -405,7 +407,7 @@
         const pauses = schedule.pauses
             .filter(item => day >= item.start_date && day <= item.end_date)
             .map(pause => ({ kind: 'pause', pause }));
-        const normals = schedule.normals
+        const normals = viewMode === 'screening' ? [] : schedule.normals
             .filter(item => day >= item.start_date && day <= addDays(item.start_date, item.days - 1))
             .map(plan => ({ kind: 'normal', plan }));
         const history = (schedule.history || [])
@@ -605,7 +607,8 @@
             const days = Math.round((new Date(pause.end_date) - new Date(pause.start_date)) / 86400000) + 1;
             pauseRows.push({ sort: pause.start_date, end: pause.end_date, days, pause, merged: [] });
         });
-        schedule.normals.forEach(plan => {
+        // 仅排敏视图下常规计划不参与合并、不单独成行
+        if (viewMode !== 'screening') schedule.normals.forEach(plan => {
             // 常规计划可能与多个排敏段重叠（如跨两段的连续主食计划），重叠的行各自并入展示
             const planEnd = addDays(plan.start_date, plan.days - 1);
             const hosts = [...blockRows, ...roundRows, ...pauseRows].filter(row => {
@@ -1300,6 +1303,20 @@
     element('queue-add').addEventListener('click', openQueuePicker);
     element('prev').addEventListener('click', () => { monthCursor = shiftMonth(-1); renderCalendar(); renderAgenda(); });
     element('next').addEventListener('click', () => { monthCursor = shiftMonth(1); renderCalendar(); renderAgenda(); });
+
+    // 排期视图切换：完整辅食（排敏+常规） / 仅排敏；偏好记入本地
+    const viewButtons = { full: element('view-full'), screening: element('view-screening') };
+    function applyViewMode() {
+        if (!schedule) return;
+        Object.entries(viewButtons).forEach(([mode, btn]) => btn.classList.toggle('active', mode === viewMode));
+        localStorage.setItem('planning-view', viewMode);
+        renderCalendar();
+        renderAgenda();
+        renderDayDetail();
+    }
+    Object.entries(viewButtons).forEach(([mode, btn]) =>
+        btn.addEventListener('click', () => { if (viewMode !== mode) { viewMode = mode; applyViewMode(); } }));
+    Object.entries(viewButtons).forEach(([mode, btn]) => btn.classList.toggle('active', mode === viewMode));
     element('overlay').addEventListener('click', event => {
         if (event.target === element('overlay')) closeDialog();
     });
