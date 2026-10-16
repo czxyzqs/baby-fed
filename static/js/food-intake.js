@@ -118,7 +118,9 @@
         } catch (error) {
             return; // 计划加载失败不影响手动记录
         }
-        const recorded = new Set(context.entries.map(entry => entry.food_id));
+        const recorded = new Set(context.entries
+            .filter(entry => entry.meal === selectedMeal)
+            .map(entry => entry.food_id));
         plans = plans.filter(plan => !recorded.has(plan.food_id) &&
             !blocks.some(block => block.food_id === plan.food_id) &&
             (plan.meal === 'both' || plan.meal === selectedMeal));

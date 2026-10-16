@@ -124,7 +124,7 @@
                 column.append(node('p', '没有计划', 'food-banner-menu-empty'));
             }
             columnFoods.forEach(item => {
-                const eaten = !!item.eaten_today;
+                const eaten = (item.eaten_meals || []).includes(meal);
                 const pill = node('span', '', 'food-banner-pill' + (eaten ? ' eaten' : ''));
                 const check = node('button', eaten ? '✓' : '', 'banner-check' + (eaten ? ' checked' : ''));
                 check.type = 'button';
@@ -132,7 +132,7 @@
                 check.setAttribute('aria-label', `快速记录「${item.food}」今天${eaten ? '已吃（点按取消）' : '吃了'}`);
                 check.addEventListener('click', event => {
                     event.stopPropagation();
-                    toggleEaten(item);
+                    toggleEaten(item, meal);
                 });
                 const name = node('button', '', 'food-banner-pill-name');
                 name.type = 'button';
@@ -211,12 +211,13 @@
             `「${other.food}」正在排敏观察中。同时引入「${name}」会让过敏反应难以归因，建议等观察期结束。确定仍要记录吗？`);
     }
 
-    // 横幅 ✓ 快捷勾选：没吃 → 按建议量记一笔记食；已吃 → 撤销今天的记录
-    async function toggleEaten(item) {
+    // 横幅 ✓ 快捷勾选（按餐）：该餐没吃 → 按建议量记一笔记食；已吃 → 撤销该餐的记录
+    async function toggleEaten(item, mealHint) {
         try {
             const dateValue = today();
             const result = await api(`entries?date=${dateValue}`);
-            const entry = result.entries.find(row => row.food_id === item.food_id);
+            const targetMeal = mealHint || (item.meal === 'both' ? suggestedMeal() : item.meal);
+            const entry = result.entries.find(row => row.food_id === item.food_id && row.meal === targetMeal);
             const keepOthers = meal => result.entries
                 .filter(row => row.meal === meal && (entry ? row.food_id !== item.food_id : true))
                 .map(row => ({
@@ -225,23 +226,22 @@
                 }));
             if (entry) {
                 await api('meals', 'POST', {
-                    date: dateValue, meal: entry.meal,
-                    revision: result.revisions[entry.meal], entries: keepOthers(entry.meal)
+                    date: dateValue, meal: targetMeal,
+                    revision: result.revisions[targetMeal], entries: keepOthers(targetMeal)
                 });
-                toast(`已取消「${item.food}」今天的进食记录`);
+                toast(`已取消「${item.food}」${MEALS[targetMeal]}的进食记录`);
             } else {
-                const meal = item.meal === 'both' ? suggestedMeal() : (item.meal || suggestedMeal());
                 const mode = item.kind === 'planned' ? 'start' : 'keep';
                 if (mode === 'start' && !await confirmNoOtherScreening([item.food_id], item.food)) return;
                 const amount = suggestedAmount(item);
                 await api('meals', 'POST', {
-                    date: dateValue, meal,
-                    revision: result.revisions[meal],
-                    entries: [...keepOthers(meal), {
+                    date: dateValue, meal: targetMeal,
+                    revision: result.revisions[targetMeal],
+                    entries: [...keepOthers(targetMeal), {
                         food_id: item.food_id, amount, rating: null, note: '', mode
                     }]
                 });
-                toast(`已记录：${item.food} ${amount}`);
+                toast(`已记录${MEALS[targetMeal]}：${item.food} ${amount}`);
             }
             todayContext = null;
             load();
