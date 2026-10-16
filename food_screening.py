@@ -10,9 +10,9 @@ from food_library import FAMILY_PRESETS, FoodLibraryError, FoodLibraryStore
 
 
 SYMPTOMS = ('口周红疹', '荨麻疹', '呕吐', '腹泻', '便秘', '湿疹加重', '其他')
-BLOCK_MEALS = ('lunch', 'dinner')            # 排敏块：单顿
-NORMAL_MEALS = ('all', 'lunch', 'dinner')    # 常规计划：all = 两餐都吃
-OVERRIDE_MEALS = ('lunch', 'dinner', 'both', 'none')  # 当日覆盖：换餐/两餐/今天不吃
+BLOCK_MEALS = ('lunch', 'dinner')            # 排敏块：单顿，只绑辅食两餐
+NORMAL_MEALS = ('all', 'breakfast', 'lunch', 'snack', 'dinner')  # 常规计划：all = 午晚两餐
+OVERRIDE_MEALS = ('breakfast', 'lunch', 'snack', 'dinner', 'both', 'none')  # 当日覆盖：任意餐/两餐/不吃
 CN_TZ = timezone(timedelta(hours=8))
 
 
@@ -968,7 +968,7 @@ class FoodScreeningStore(FoodLibraryStore):
             now = datetime.now(CN_TZ).isoformat()
             meal = data.get('meal', 'all')
             if meal not in NORMAL_MEALS:
-                raise FoodLibraryError('餐次只能是两餐都吃、仅午餐或仅晚餐')
+                raise FoodLibraryError('餐次只能是两餐都吃、早餐、午餐、下午茶或晚餐')
             for food_id in food_ids:
                 connection.execute(
                     'INSERT INTO food_normal_plans (food_id, start_date, days, meal, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -1134,7 +1134,8 @@ class FoodScreeningStore(FoodLibraryStore):
     def plans_for_date(self, value):
         """某天的进食计划（排敏块 + 进行中轮次 + 常规计划），带餐次并应用当日覆盖。
 
-        meal 归一化为 lunch / dinner / both；覆盖为 none 的不返回。"""
+        meal：排敏块为 lunch/dinner，常规计划可为 breakfast/lunch/snack/dinner/both；
+        覆盖为 none 的不返回。"""
         selected = parse_date(value)
         with self.connect() as connection:
             end = selected.isoformat()

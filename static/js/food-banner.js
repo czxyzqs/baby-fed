@@ -114,9 +114,9 @@
             }
         });
         if (!foods.length) return;
-        // 今日餐单：按计划绑定的餐次分两列；点名称可临时调整今天的餐次
+        // 今日餐单：固定四餐格（早/午/下午茶/晚），排敏只出现在午/晚，早/下午茶放常规计划
         const menu = node('div', '', 'food-banner-menu');
-        [['lunch', '☀️ 午餐'], ['dinner', '🌙 晚餐']].forEach(([meal, label]) => {
+        [['breakfast', '🥣 早餐'], ['lunch', '☀️ 午餐'], ['snack', '🍎 下午茶'], ['dinner', '🌙 晚餐']].forEach(([meal, label]) => {
             const column = node('div', '', 'food-banner-menu-col');
             column.append(node('h4', label, 'food-banner-menu-title'));
             const columnFoods = foods.filter(item => item.meal === meal || item.meal === 'both');
@@ -177,7 +177,8 @@
         dialog.append(node('p', '只调整今天，不改长期计划。', 'banner-dialog-section'));
         const group = node('div', '', 'banner-chip-group');
         const options = [
-            ['lunch', '☀️ 午餐'], ['dinner', '🌙 晚餐'], ['both', '两餐都吃'], ['none', '今天不吃']
+            ['breakfast', '🥣 早餐'], ['lunch', '☀️ 午餐'], ['snack', '🍎 下午茶'],
+            ['dinner', '🌙 晚餐'], ['both', '两餐都吃'], ['none', '今天不吃']
         ];
         if (overridden) options.push(['default', '恢复计划默认']);
         options.forEach(([value, label]) => {
@@ -367,14 +368,17 @@
             return;
         }
         closeDialog();
-        const mealCounts = { lunch: 0, dinner: 0 };
+        // 计划绑定的餐次里取众数做默认（四餐通用），没有明显多数时按当前时间猜
+        const mealCounts = {};
         foods.forEach(item => {
-            if (item.meal === 'lunch') mealCounts.lunch += 1;
-            if (item.meal === 'dinner') mealCounts.dinner += 1;
+            if (item.meal && item.meal !== 'both') {
+                mealCounts[item.meal] = (mealCounts[item.meal] || 0) + 1;
+            }
         });
+        const ranked = Object.entries(mealCounts).sort((a, b) => b[1] - a[1]);
         const state = {
-            meal: mealCounts.lunch !== mealCounts.dinner
-                ? (mealCounts.lunch > mealCounts.dinner ? 'lunch' : 'dinner')
+            meal: ranked.length && ranked[0][1] > (ranked[1] ? ranked[1][1] : 0)
+                ? ranked[0][0]
                 : suggestedMeal()
         };
 

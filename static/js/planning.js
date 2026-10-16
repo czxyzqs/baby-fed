@@ -1185,7 +1185,7 @@
         const mealLabel = node('label', '餐次');
         const mealGroup = node('div', '', 'planning-chip-group');
         const chosenMeal = { meal: 'all' };
-        [['all', '两餐都吃'], ['lunch', '仅午餐'], ['dinner', '仅晚餐']].forEach(([value, label]) => {
+        [['all', '两餐都吃'], ['breakfast', '早餐'], ['lunch', '仅午餐'], ['snack', '下午茶'], ['dinner', '仅晚餐']].forEach(([value, label]) => {
             const chip = button(label, () => {
                 chosenMeal.meal = value;
                 [...mealGroup.children].forEach(child => child.classList.remove('active'));
