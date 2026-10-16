@@ -330,8 +330,12 @@ body.elder .planning-queue-chevron { font-size: 24px; }
 }
 
 /* 排期一览视图切换：完整辅食 / 仅排敏 */
-.planning-view-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-.planning-view-bar h2 { margin: 0; }
+.planning-view-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin: 12px 2px 10px;
+}
+.planning-view-label { font-size: 14px; font-weight: 600; color: var(--text-secondary, #8a94a3); }
+body.elder .planning-view-label { font-size: 17px; }
 .planning-view-toggle { display: flex; gap: 0; border: 1px solid var(--border, #3a4453); border-radius: 10px; overflow: hidden; }
 .planning-view-toggle button {
     border: none; background: transparent; color: var(--text-secondary, #8a94a3);
