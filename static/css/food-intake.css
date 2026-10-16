@@ -247,7 +247,18 @@
     border-radius: 12px; padding: 10px; min-width: 0;
 }
 .food-banner-menu-title { margin: 0 0 8px; font-size: 14px; color: var(--text-primary); }
-.food-banner-menu-col .food-banner-pill { margin: 0 4px 6px 0; display: inline-flex; }
+.food-banner-menu-col .food-banner-pill { margin: 0 0 6px; max-width: 100%; }
+.food-banner-menu-col .food-banner-pill-name {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    font-size: 15px;
+    line-height: 1.35;
+    padding: 4px 0;
+    white-space: normal;
+    min-width: 0;
+}
+.food-banner-menu-col .food-banner-pill-name small { font-size: 11px; }
 .food-banner-menu-empty { margin: 0; font-size: 12px; color: var(--text-muted); }
 .food-banner-menu-hint { margin: 0 0 4px; font-size: 11px; color: var(--text-muted); }
 

@@ -124,7 +124,7 @@
                 column.append(node('p', '没有计划', 'food-banner-menu-empty'));
             }
             columnFoods.forEach(item => {
-                // ✓ 只反映「这一列的餐次」今天有没有记录；别的餐次吃过用小字提示，不再共享勾选
+                // ✓ 只反映「这一列的餐次」今天有没有记录；别餐已吃的提示放 title 里，避免药丸文字挤爆
                 const eatenMeals = item.eaten_meals || [];
                 const eaten = eatenMeals.includes(meal);
                 const elsewhere = eatenMeals.filter(other => other !== meal);
@@ -142,7 +142,7 @@
                 name.append(node('span', item.food));
                 if (item.text) name.append(node('small', item.text));
                 if (elsewhere.length) {
-                    name.append(node('small', `今天已吃·${elsewhere.map(other => MEALS[other]).join('、')}`));
+                    name.title = `今天已在${elsewhere.map(other => MEALS[other]).join('、')}吃过`;
                 }
                 name.addEventListener('click', () => adjustMealDialog(item));
                 pill.append(check, name);
