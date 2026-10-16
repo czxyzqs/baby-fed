@@ -73,24 +73,41 @@
         return todayContext;
     }
 
-    function render(items, overrides = {}) {
-        lastItems = items;
-        lastOverrides = overrides;
-        body.replaceChildren();
-        if (!items.length) {
-            banner.hidden = true;
-            return;
+    // 首页收拢成单行入口的摘要：待标记、各餐项数、已吃进度、明天预告
+    function summarize(items) {
+        const foods = items.filter(item => item.kind !== 'due' && item.kind !== 'upcoming');
+        const due = items.filter(item => item.kind === 'due');
+        const upcoming = items.filter(item => item.kind === 'upcoming');
+        const parts = [];
+        if (due.length) parts.push(`🔔${due.map(item => item.food).join('、')}可标记结果`);
+        const counts = {};
+        foods.forEach(item => {
+            (item.meal === 'both' ? ['lunch', 'dinner'] : [item.meal]).filter(Boolean)
+                .forEach(meal => { counts[meal] = (counts[meal] || 0) + 1; });
+        });
+        const mealParts = Object.keys(MEALS).filter(meal => counts[meal])
+            .map(meal => `${MEALS[meal]}${counts[meal]}`);
+        if (mealParts.length) parts.push(mealParts.join(' '));
+        if (foods.length) {
+            const eatenCount = foods.filter(item => (item.eaten_meals || []).length).length;
+            parts.push(eatenCount >= foods.length ? '今日已记录 ✓' : `已吃${eatenCount}/${foods.length}`);
         }
-        banner.hidden = false;
+        if (upcoming.length) parts.push(`明天吃${upcoming[0].food}`);
+        return parts.join(' · ') || '今天没有计划';
+    }
+
+    // 完整餐单内容（待标记、明日预告、四餐格），渲染进底部弹层
+    function buildPlanContent() {
+        const wrap = node('div', '', 'food-plan-content');
         const foods = [];
-        items.forEach(item => {
+        lastItems.forEach(item => {
             if (item.kind === 'due') {
                 const card = node('div', '', 'food-banner-item food-banner-due');
                 card.append(node('span', `🔔 ${item.food} ${item.text}`, 'food-banner-text'));
                 const jump = node('a', '去标记 ›', 'food-banner-link');
                 jump.href = '/screening';
                 card.append(jump);
-                body.append(card);
+                wrap.append(card);
             } else if (item.kind === 'upcoming') {
                 const card = node('div', '', 'food-banner-item food-banner-upcoming');
                 card.append(node('span', `明天吃${item.food}`, 'food-banner-text'));
@@ -108,12 +125,12 @@
                     }
                 });
                 card.append(ack);
-                body.append(card);
+                wrap.append(card);
             } else {
                 foods.push(item);
             }
         });
-        if (!foods.length) return;
+        if (!foods.length) return wrap;
         // 今日餐单：固定四餐格（早/午/下午茶/晚），排敏只出现在午/晚，早/下午茶放常规计划
         const menu = node('div', '', 'food-banner-menu');
         [['breakfast', '🥣 早餐'], ['lunch', '☀️ 午餐'], ['snack', '🍎 下午茶'], ['dinner', '🌙 晚餐']].forEach(([meal, label]) => {
@@ -150,8 +167,58 @@
             });
             menu.append(column);
         });
-        body.append(menu);
-        body.append(node('p', '点食物名可临时调整今天的餐次；✓ 记入所在列的餐次。', 'food-banner-menu-hint'));
+        wrap.append(menu);
+        wrap.append(node('p', '点食物名可临时调整今天的餐次；✓ 记入所在列的餐次。', 'food-banner-menu-hint'));
+        return wrap;
+    }
+
+    function openPlanDialog() {
+        closeDialog();
+        overlay = node('div', '', 'banner-dialog-overlay food-plan-overlay');
+        overlay.addEventListener('click', event => {
+            if (event.target === overlay) closeDialog();
+        });
+        const dialog = node('div', '', 'banner-dialog');
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        const head = node('div', '', 'banner-dialog-head');
+        head.append(node('h2', '今日辅食计划', 'banner-dialog-title'));
+        const close = node('button', '✕', 'banner-dialog-close');
+        close.type = 'button';
+        close.setAttribute('aria-label', '关闭');
+        close.addEventListener('click', closeDialog);
+        head.append(close);
+        dialog.append(head);
+        dialog.append(buildPlanContent());
+        overlay.append(dialog);
+        document.body.append(overlay);
+        document.body.style.overflow = 'hidden';
+    }
+
+    function render(items, overrides = {}) {
+        lastItems = items;
+        lastOverrides = overrides;
+        body.replaceChildren();
+        if (!items.length) {
+            banner.hidden = true;
+            if (overlay?.classList.contains('food-plan-overlay')) closeDialog();
+            return;
+        }
+        banner.hidden = false;
+        // 首页只留一条单行入口，样式对齐补剂横幅；点开看完整餐单
+        const entry = node('button', '', 'food-plan-entry');
+        entry.type = 'button';
+        entry.append(node('span', '🥣', 'food-plan-entry-icon'));
+        const text = node('div', '', 'food-plan-entry-text');
+        text.append(node('div', '今日辅食计划', 'food-plan-entry-title'));
+        text.append(node('div', summarize(items), 'food-plan-entry-sub'));
+        entry.append(text, node('span', '›', 'food-plan-entry-arrow'));
+        entry.addEventListener('click', openPlanDialog);
+        body.append(entry);
+        // ✓ 勾选等操作会触发重渲染；餐单弹层开着时就地刷新内容
+        if (overlay?.classList.contains('food-plan-overlay')) {
+            overlay.querySelector('.food-plan-content')?.replaceWith(buildPlanContent());
+        }
     }
 
     // 临时调整某食物「今天」的餐次（不改长期计划）
@@ -189,7 +256,8 @@
                     });
                     closeDialog();
                     toast(value === 'none' ? `今天不吃：${item.food}` : `已调整：${item.food}`);
-                    load();
+                    await load();
+                    openPlanDialog(); // 回到餐单弹层继续操作
                 } catch (error) {
                     toast(`操作失败：${error.message}`);
                 }
