@@ -2103,24 +2103,45 @@
         const sleepPositionShortLabels = { left: '左', right: '右' };
         const sleepPositionBadge = document.getElementById('sleep-position-badge');
 
-        // 最近一次喂奶横幅：最近一次辅食比最近一次喂奶更近时，改显 🍚 并按辅食时间计时
-        const newMilks = records.filter(r => r.type === 'feed' && r.isNewMilk);
-        const lastNewMilk = newMilks.length > 0 ? newMilks[0] : null;
-        const lastFeedMs = lastNewMilk ? parseLocalTime(lastNewMilk.time).getTime() : null;
-        const lastFoodMs = latestFoodTime ? parseLocalTime(latestFoodTime).getTime() : null;
-        const showFood = !isNaN(lastFoodMs) && (isNaN(lastFeedMs) || lastFoodMs > lastFeedMs);
-        const feedBannerIcon = document.getElementById('feed-banner-icon');
-        if (feedBannerIcon) feedBannerIcon.textContent = showFood ? '🍚' : '🍼';
-        document.getElementById('time-since-feed').innerHTML = showFood
-            ? formatElapsedTime({ time: latestFoodTime }, '', '前')
-            : lastNewMilk
-                ? formatElapsedTime(lastNewMilk, '', '前')
-                : '<span class="time-num">--</span>';
+        // 距上一顿辅食：仅在 3 小时内展示，超过后整卡隐藏
+        const foodCard = document.getElementById('food-status-card');
+        if (foodCard) {
+            const foodMs = latestFoodTime ? parseLocalTime(latestFoodTime).getTime() : null;
+            const withinWindow = foodMs !== null && !isNaN(foodMs)
+                && (Date.now() - foodMs) < 3 * 60 * 60 * 1000;
+            foodCard.style.display = withinWindow ? 'flex' : 'none';
+            if (withinWindow) {
+                document.getElementById('time-since-food').innerHTML =
+                    formatElapsedTime({ time: latestFoodTime }, '', '前');
+            }
+        }
 
         if (records.length > 0) {
             // Find last new milk and last diaper separately
+            const newMilks = records.filter(r => r.type === 'feed' && r.isNewMilk);
             const diapers = records.filter(r => r.type === 'diaper');
             const now = new Date();
+
+            if (newMilks.length > 0) {
+                const lastNewMilk = newMilks[0];
+                const diffMs = now - new Date(lastNewMilk.time);
+                const diffMins = Math.floor(diffMs / 60000);
+                let html;
+                if (diffMins < 60) {
+                    html = `<span class="time-num">${diffMins}</span>分钟前`;
+                } else {
+                    const hours = Math.floor(diffMins / 60);
+                    const mins = diffMins % 60;
+                    if (mins > 0) {
+                        html = `<span class="time-num">${hours}</span>小时<span class="time-num">${mins}</span>分钟前`;
+                    } else {
+                        html = `<span class="time-num">${hours}</span>小时前`;
+                    }
+                }
+                document.getElementById('time-since-feed').innerHTML = html;
+            } else {
+                document.getElementById('time-since-feed').innerHTML = '<span class="time-num">--</span>';
+            }
 
             if (diapers.length > 0) {
                 const lastDiaper = diapers[0];

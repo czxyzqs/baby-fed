@@ -99,8 +99,13 @@
                     <div id="time-since-awake"><span class="time-num">--</span></div>
                 </div>
                 <div class="stat-card time" onclick="openModal('feed')" style="display: flex; align-items: center; gap: 16px; cursor:pointer;" title="添加喂奶记录">
-                    <div class="stat-icon" id="feed-banner-icon" style="font-size: 36px; margin-bottom: 0;">🍼</div>
+                    <div class="stat-icon" style="font-size: 36px; margin-bottom: 0;">🍼</div>
                     <div id="time-since-feed"><span class="time-num">--</span></div>
+                </div>
+                <!-- 距上一顿辅食：3 小时内才显示，超过则隐藏整卡 -->
+                <div class="stat-card time" id="food-status-card" onclick="foodQuickRecord.open()" style="display: none; align-items: center; gap: 16px; cursor:pointer;" title="添加辅食记录">
+                    <div class="stat-icon" style="font-size: 36px; margin-bottom: 0;">🍚</div>
+                    <div id="time-since-food"><span class="time-num">--</span></div>
                 </div>
                 <div class="stat-card time" onclick="openModal('diaper')" style="display: flex; align-items: center; gap: 16px; cursor:pointer;" title="添加尿不湿记录">
                     <div class="stat-icon" style="font-size: 36px; margin-bottom: 0;">🚽</div>
