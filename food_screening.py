@@ -507,6 +507,22 @@ class FoodScreeningStore(FoodLibraryStore):
                 connection.execute('DELETE FROM food_queue WHERE id = ?', (item['id'],))
             return self.schedule_in(connection)
 
+    def active_food_ids(self, connection):
+        return {row['food_id'] for row in connection.execute(
+            "SELECT DISTINCT food_id FROM food_rounds WHERE status = 'active'")}
+
+    def fixed_block_intervals(self, connection):
+        """钉住的排期与排敏进行中的排期不可移动，其日期段是其他排期避让的障碍。"""
+        active_foods = self.active_food_ids(connection)
+        intervals = []
+        for row in connection.execute(
+                "SELECT food_id, start_date, days, pinned FROM food_plan_blocks WHERE status = 'scheduled'"):
+            if not row['pinned'] and row['food_id'] not in active_foods:
+                continue
+            start = date.fromisoformat(row['start_date'])
+            intervals.append((start, start + timedelta(days=row['days'] - 1)))
+        return intervals
+
     def repack(self, connection, start_from=None):
         """把未来的排期块从指定日期（默认今天）起依次排开；进行中的观察不可压，撞到暂停段就跳到暂停结束后继续。"""
         cursor = today_cn()
@@ -518,13 +534,17 @@ class FoodScreeningStore(FoodLibraryStore):
             end = date.fromisoformat(interval['end'])
             if end > cursor:
                 cursor = end
-        pauses = [
+        # 暂停段 + 钉住/排敏中的排期都是障碍；这类固定排期本身不参与重排
+        active_foods = self.active_food_ids(connection)
+        obstacles = [
             (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
             for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
-        ]
+        ] + self.fixed_block_intervals(connection)
         now = datetime.now(CN_TZ).isoformat()
         order = [dict(row) for row in connection.execute(
-            "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' ORDER BY start_date, id"
+            "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' "
+            "AND pinned = 0 AND food_id NOT IN (SELECT food_id FROM food_rounds WHERE status = 'active') "
+            "ORDER BY start_date, id"
         )]
         companions = self.snapshot_segment_companions(connection, order)
         for block in order:
@@ -533,9 +553,9 @@ class FoodScreeningStore(FoodLibraryStore):
             overlap = True
             while overlap:
                 overlap = False
-                for pause_start, pause_end in pauses:
-                    if start <= pause_end and end >= pause_start:
-                        start = pause_end + timedelta(days=1)
+                for ob_start, ob_end in obstacles:
+                    if start <= ob_end and end >= ob_start:
+                        start = ob_end + timedelta(days=1)
                         end = start + timedelta(days=block['days'] - 1)
                         overlap = True
             cursor = end
@@ -682,8 +702,9 @@ class FoodScreeningStore(FoodLibraryStore):
             (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
             for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
         ]
-        # 进行中的观察也是障碍：顺延的排期不能压上去
-        obstacles = list(pauses)
+        # 进行中的观察也是障碍：顺延的排期不能压上去；钉住/排敏中的排期同样固定不动
+        active_foods = self.active_food_ids(connection)
+        obstacles = list(pauses) + self.fixed_block_intervals(connection)
         for row in connection.execute("SELECT start_date, observe_days FROM food_rounds WHERE status = 'active'"):
             obstacles.append((
                 date.fromisoformat(row['start_date']),
@@ -700,6 +721,11 @@ class FoodScreeningStore(FoodLibraryStore):
         extended_for = None   # 已补过位的排期，避免重复延长
         extensions = []       # (排期, 需补到的空档末尾)
         for block in blocks:
+            if block['pinned'] or block['food_id'] in active_foods:
+                # 固定排期不顺延，只把链尾推到它的结束日，让后面的排期接在它之后
+                fixed_end = date.fromisoformat(block['start_date']) + timedelta(days=block['days'] - 1)
+                chain_end = fixed_end if chain_end is None or fixed_end > chain_end else chain_end
+                continue
             original = date.fromisoformat(block['start_date'])
             start = original
             if chain_end is not None and start <= chain_end:
@@ -810,14 +836,15 @@ class FoodScreeningStore(FoodLibraryStore):
             return self.schedule_in(connection)
 
     def shift_blocks_clear_of(self, connection, obstacle_start, obstacle_end, exclude_id=None):
-        """把与障碍区间（新插入的排敏）重叠的排期链式顺延到障碍之后，且避让暂停段和观察轮次。"""
+        """把与障碍区间（新插入的排敏）重叠的排期链式顺延到障碍之后，且避让暂停段、进行中的观察和钉住/排敏中的排期。"""
+        active_foods = self.active_food_ids(connection)
         blocks = [dict(row) for row in connection.execute(
             "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' ORDER BY start_date, id"
         )]
         obstacles = [
             (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
             for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
-        ]
+        ] + self.fixed_block_intervals(connection)
         for row in connection.execute("SELECT start_date, observe_days FROM food_rounds WHERE status = 'active'"):
             obstacles.append((
                 date.fromisoformat(row['start_date']),
@@ -828,6 +855,11 @@ class FoodScreeningStore(FoodLibraryStore):
         cursor = None
         for block in blocks:
             if block['id'] == exclude_id:
+                continue
+            if block['pinned'] or block['food_id'] in active_foods:
+                # 固定排期不让位，链尾推到它的结束日，后续排期接在它之后
+                fixed_end = date.fromisoformat(block['start_date']) + timedelta(days=block['days'] - 1)
+                cursor = fixed_end if cursor is None or fixed_end > cursor else cursor
                 continue
             original = date.fromisoformat(block['start_date'])
             start = original
@@ -919,7 +951,7 @@ class FoodScreeningStore(FoodLibraryStore):
             return self.schedule_in(connection)
 
     def close_gap(self, connection, gap_start, gap_end):
-        """删除暂停段后把开始晚于空档的排期整体前移填补空档；更早的排期不动，途中避让剩余暂停段和进行中的观察。"""
+        """删除暂停段后把开始晚于空档的排期整体前移填补空档；更早的排期不动，途中避让剩余暂停段、进行中的观察和钉住/排敏中的排期。"""
         obstacles = [
             (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
             for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
@@ -927,10 +959,13 @@ class FoodScreeningStore(FoodLibraryStore):
         for row in connection.execute("SELECT start_date, observe_days FROM food_rounds WHERE status = 'active'"):
             start = date.fromisoformat(row['start_date'])
             obstacles.append((start, start + timedelta(days=row['observe_days'] - 1)))
+        obstacles += self.fixed_block_intervals(connection)
         now = datetime.now(CN_TZ).isoformat()
         cursor = max(gap_start, today_cn()) - timedelta(days=1)
         movable = [dict(row) for row in connection.execute(
-            "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' AND start_date > ? ORDER BY start_date, id",
+            "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' AND start_date > ? "
+            "AND pinned = 0 AND food_id NOT IN (SELECT food_id FROM food_rounds WHERE status = 'active') "
+            "ORDER BY start_date, id",
             (gap_end.isoformat(),)
         )]
         companions = self.snapshot_segment_companions(connection, movable)
