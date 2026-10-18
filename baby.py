@@ -747,11 +747,38 @@ def build_dashboard_data(records, settings, now):
     }
 
 
+def latest_food_time():
+    """最近一次辅食记录时间；读不到时返回 None，不影响喂奶横幅默认展示。"""
+    store = app.extensions.get('food_entry_store')
+    if store is None:
+        return None
+    try:
+        return store.latest_entry_time()
+    except Exception as exc:
+        app.logger.warning('Latest food time unavailable: %s', exc)
+        return None
+
+
+def food_meal_records(now):
+    """近一周辅食按餐聚合的记录条目，并入首页最近记录列表。"""
+    store = app.extensions.get('food_entry_store')
+    if store is None:
+        return []
+    try:
+        return store.recent_meal_records((now - timedelta(days=6)).date().isoformat())
+    except Exception as exc:
+        app.logger.warning('Food meal records unavailable: %s', exc)
+        return []
+
+
 @app.route('/api/dashboard', methods=['GET'])
 @storage_transaction
 def get_dashboard():
-    dashboard = build_dashboard_data(load_records(), load_supplement_settings(), now_cn())
+    now = now_cn()
+    records = load_records() + food_meal_records(now)
+    dashboard = build_dashboard_data(records, load_supplement_settings(), now)
     dashboard['feverMode'] = load_fever_mode()
+    dashboard['latestFoodTime'] = latest_food_time()
     response = make_response(jsonify(dashboard))
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['X-Records-Version'] = records_file_version()
@@ -797,7 +824,8 @@ def index():
     today = now.strftime('%Y-%m-%d')
     settings = load_supplement_settings()
     records = load_records()
-    dashboard = build_dashboard_data(records, settings, now)
+    # 近记录列表并入辅食（按餐聚合）；今日统计仍只算 JSON 记录
+    dashboard = build_dashboard_data(records + food_meal_records(now), settings, now)
 
     # 计算今日统计
     today_records = [r for r in records if r.get('time', '').startswith(today)]
@@ -835,6 +863,7 @@ def index():
     # 传递记录数据到模板（避免前端 fetch）
     records_json = json.dumps(dashboard['records'], ensure_ascii=False)
     due_supplements_json = json.dumps(today_due_supplements, ensure_ascii=False)
+    latest_food_time_json = json.dumps(latest_food_time(), ensure_ascii=False)
 
     cache_bust = now.strftime('%Y%m%d%H%M%S')
     response = make_response(render_template('index.html',
@@ -843,6 +872,7 @@ def index():
         cache_bust=cache_bust,
         init_records=records_json,
         init_due_supplements=due_supplements_json,
+        init_latest_food_time=latest_food_time_json,
         init_recommended_sleep_position=dashboard['recommendedSleepPosition'],
         fever_mode=load_fever_mode(),
         supplement_options=[{

@@ -13,6 +13,7 @@
         --accent-secondary: #c44cff;
         --accent-tertiary: #4cc9f0;
         --accent-feed: #00d9a5;
+        --accent-food: #aedd53;
         --accent-diaper: #ff7b54;
         --accent-vitamin: #ffd700;
         --accent-bath: #ff9800;
@@ -37,6 +38,7 @@
         --accent-secondary: #9c27b0;
         --accent-tertiary: #00bcd4;
         --accent-feed: #00c853;
+        --accent-food: #7cb342;
         --accent-diaper: #ff6e40;
         --accent-vitamin: #ffb300;
         --accent-bath: #03a9f4;
@@ -907,16 +909,11 @@
 
     .record-item.diaper { --record-color: var(--accent-diaper); }
     .record-item.feed { --record-color: var(--accent-feed); }
+    .record-item.food { --record-color: var(--accent-food); }
     .record-item.vitamin { --record-color: var(--accent-vitamin); }
     .record-item.bath { --record-color: var(--accent-bath); }
     .record-item.sleep { --record-color: var(--accent-sleep, var(--accent-probiotic)); }
     .record-item.tummy { --record-color: var(--accent-tummy); }
-
-    .record-item.diaper { --record-color: var(--accent-diaper); }
-    .record-item.feed { --record-color: var(--accent-feed); }
-    .record-item.vitamin { --record-color: var(--accent-vitamin); }
-    .record-item.bath { --record-color: var(--accent-bath); }
-    .record-item.sleep { --record-color: var(--accent-sleep, var(--accent-probiotic)); }
 
     .record-item.new-record {
         animation: newRecordFlash 0.8s ease;

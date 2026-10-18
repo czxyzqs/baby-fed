@@ -59,6 +59,39 @@ class FoodEntryStore(FoodLibraryStore):
         )})
         return {'date': selected_date, 'categories': categories, 'foods': foods, 'entries': entries, 'revisions': revisions}
 
+    def latest_entry_time(self):
+        with self.connect() as connection:
+            row = connection.execute('SELECT MAX(created_at) AS latest FROM food_entries').fetchone()
+        return row['latest'] if row else None
+
+    def recent_meal_records(self, since_date):
+        """近段日期的辅食按（日期, 餐次）聚合成首页最近记录条目。"""
+        with self.connect() as connection:
+            rows = connection.execute(
+                '''SELECT date, meal, MAX(created_at) AS latest, COUNT(*) AS item_count,
+                          GROUP_CONCAT(food_name, '、') AS foods
+                   FROM food_entries WHERE date >= ?
+                   GROUP BY date, meal ORDER BY latest DESC''', (since_date,)
+            ).fetchall()
+        records = []
+        for row in rows:
+            try:
+                created = datetime.fromisoformat(row['latest'])
+                if created.tzinfo is not None:
+                    created = created.astimezone(CN_TZ).replace(tzinfo=None)
+                time_text = created.isoformat(timespec='seconds')
+            except (TypeError, ValueError):
+                time_text = row['date']
+            records.append({
+                'id': f"food-{row['date']}-{row['meal']}",
+                'type': 'food',
+                'time': time_text,
+                'meal': row['meal'],
+                'foods': row['foods'] or '',
+                'itemCount': row['item_count'],
+            })
+        return records
+
     def save_meal(self, data):
         selected_date = intake_date(data.get('date'))
         meal = data.get('meal')
@@ -165,6 +198,7 @@ class FoodEntryStore(FoodLibraryStore):
 
 def register_food_entries(app, data_dir):
     store = FoodEntryStore(data_dir)
+    app.extensions['food_entry_store'] = store
     blueprint = Blueprint('food_entries', __name__, url_prefix='/api')
 
     @blueprint.errorhandler(FoodLibraryError)

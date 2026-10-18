@@ -285,6 +285,7 @@
                     revision: result.revisions[meal], entries: keepOthers
                 });
                 toast(`已取消「${item.food}」${MEALS[meal]}的进食记录`);
+                window.fetchRecords?.();
             } else {
                 const mode = item.kind === 'planned' ? 'start' : 'keep';
                 if (mode === 'start' && !await confirmNoOtherScreening([item.food_id], item.food)) return;
@@ -297,6 +298,7 @@
                     }]
                 });
                 toast(`已记录${MEALS[meal]}：${item.food} ${amount}`);
+                window.fetchRecords?.();
             }
             todayContext = null;
             load();
@@ -563,6 +565,7 @@
                 todayContext = null;
                 closeDialog();
                 toast(`已记录${MEALS[state.meal]}：${selected.map(entry => entry.item.food).join('、')}`);
+                window.fetchRecords?.();
                 load();
             } catch (error) {
                 toast(`保存失败：${error.message}`);
@@ -746,6 +749,7 @@
             todayContext = null;
             closeDialog();
             toast(`已记录${MEALS[state.meal]}：${item.food} ${state.amount}`);
+            window.fetchRecords?.();
             load();
         } catch (error) {
             toast(`保存失败：${error.message}`);
