@@ -674,7 +674,7 @@
         text-transform: uppercase;
     }
 
-    #time-since-feed, #time-since-diaper, #time-since-awake {
+    #time-since-feed, #time-since-diaper, #time-since-awake, #time-since-food {
         font-size: 32px;
         color: rgba(255, 255, 255, 0.6);
         font-weight: 500;
