@@ -1,5 +1,6 @@
 // State - 从服务器端传递的初始化数据
     let records = Array.isArray(window.INIT_RECORDS) ? window.INIT_RECORDS : [];
+    let latestFoodTime = window.INIT_LATEST_FOOD_TIME || null;
     let dueSupplements = Array.isArray(window.INIT_DUE_SUPPLEMENTS) ? window.INIT_DUE_SUPPLEMENTS : [];
     let lastFetchTime = records.length > 0 ? records[0].time : null;
     let recordsVersion = null;
@@ -97,6 +98,7 @@
             const dashboard = await response.json();
             if (requestId !== dashboardRequestId) return;
             records = dashboard.records;
+            latestFoodTime = dashboard.latestFoodTime || null;
             dueSupplements = dashboard.dueSupplements;
             dashboardRecommendedSleepPosition = dashboard.recommendedSleepPosition;
             if (!feverModeSaving && modeRevision === feverModeRevision) {
@@ -1962,7 +1964,7 @@
             ? records
             : records.filter(r => r.type === currentRecordFilter);
         if (filtered.length === 0) {
-            const labels = { feed: '喂奶', diaper: '尿布', supplement: '补剂', bath: '洗澡', health: '健康', sleep: '睡眠', tummy: '练趴' };
+            const labels = { feed: '喂奶', food: '辅食', diaper: '尿布', supplement: '补剂', bath: '洗澡', health: '健康', sleep: '睡眠', tummy: '练趴' };
             const label = labels[currentRecordFilter] || '该类型';
             container.innerHTML = `
                 <div class="empty-state">
@@ -2030,6 +2032,13 @@
                 icon = '🧸';
                 typeLabel = '练趴';
                 detail = `🧸 练趴 ${record.duration || 1}分钟`;
+            } else if (record.type === 'food') {
+                icon = '🍚';
+                typeLabel = '辅食';
+                const mealLabels = { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐' };
+                const foods = (record.foods || '').split('、').filter(Boolean);
+                const shown = foods.slice(0, 2).join('、') + (foods.length > 2 ? ` 等${foods.length}样` : '');
+                detail = `🍚 ${mealLabels[record.meal] || '辅食'} · ${shown}`;
             } else if (record.type === 'sleep') {
                 icon = '🛏️';
                 typeLabel = record.sleepType === 'sleep' ? '宝宝睡了' : '宝宝醒了';
@@ -2039,9 +2048,14 @@
             }
 
             const canEdit = record.type === 'feed' || record.type === 'diaper' || record.type === 'sleep' || record.type === 'supplement' || record.type === 'tummy' || record.type === 'health';
+            // 辅食条目不可在此编辑，点击跳辅食中心处理
+            const clickable = canEdit || record.type === 'food';
+            const clickAttr = record.type === 'food'
+                ? `onclick="location.href='/food-hub'"`
+                : canEdit ? `onclick="openEditModal('${record.type}', '${record.id}')"` : `onclick="showToast('暂不支持修改', 'ℹ️')"`;
             return `
                 <div class="record-item-wrapper">
-                    <div class="record-item ${record.type}" style="${canEdit ? 'cursor:pointer' : ''}" ${canEdit ? `onclick="openEditModal('${record.type}', '${record.id}')"` : `onclick="showToast('暂不支持修改', 'ℹ️')"`}>
+                    <div class="record-item ${record.type}" style="${clickable ? 'cursor:pointer' : ''}" ${clickAttr}>
                         <div class="record-content">
                             <div class="record-type" style="font-size:30px;font-weight:600">${detail}</div>
                             ${record.note ? `<div class="record-detail" style="font-style: italic; opacity: 0.7;">${record.note}</div>` : ''}
@@ -2088,6 +2102,19 @@
         const recommendedSleepPosition = dashboardRecommendedSleepPosition;
         const sleepPositionShortLabels = { left: '左', right: '右' };
         const sleepPositionBadge = document.getElementById('sleep-position-badge');
+
+        // 距上一顿辅食：仅在 3 小时内展示，超过后整卡隐藏
+        const foodCard = document.getElementById('food-status-card');
+        if (foodCard) {
+            const foodMs = latestFoodTime ? parseLocalTime(latestFoodTime).getTime() : null;
+            const withinWindow = foodMs !== null && !isNaN(foodMs)
+                && (Date.now() - foodMs) < 3 * 60 * 60 * 1000;
+            foodCard.style.display = withinWindow ? 'flex' : 'none';
+            if (withinWindow) {
+                document.getElementById('time-since-food').innerHTML =
+                    formatElapsedTime({ time: latestFoodTime }, '', '前');
+            }
+        }
 
         if (records.length > 0) {
             // Find last new milk and last diaper separately

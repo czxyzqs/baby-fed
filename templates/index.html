@@ -102,6 +102,11 @@
                     <div class="stat-icon" style="font-size: 36px; margin-bottom: 0;">🍼</div>
                     <div id="time-since-feed"><span class="time-num">--</span></div>
                 </div>
+                <!-- 距上一顿辅食：3 小时内才显示，超过则隐藏整卡 -->
+                <div class="stat-card time" id="food-status-card" onclick="foodQuickRecord.open()" style="display: none; align-items: center; gap: 16px; cursor:pointer;" title="添加辅食记录">
+                    <div class="stat-icon" style="font-size: 36px; margin-bottom: 0;">🍚</div>
+                    <div id="time-since-food"><span class="time-num">--</span></div>
+                </div>
                 <div class="stat-card time" onclick="openModal('diaper')" style="display: flex; align-items: center; gap: 16px; cursor:pointer;" title="添加尿不湿记录">
                     <div class="stat-icon" style="font-size: 36px; margin-bottom: 0;">🚽</div>
                     <div id="time-since-diaper"><span class="time-num">--</span></div>
@@ -148,6 +153,7 @@
             </div>
             <div class="record-filter-bar">
                 <button class="record-filter-btn active" data-filter="feed" onclick="setRecordFilter('feed')">🍼 喂奶</button>
+                <button class="record-filter-btn" data-filter="food" onclick="setRecordFilter('food')">🍚 辅食</button>
                 <button class="record-filter-btn" data-filter="diaper" onclick="setRecordFilter('diaper')">🚽 尿布</button>
                 <button class="record-filter-btn" data-filter="supplement" onclick="setRecordFilter('supplement')">💊 补剂</button>
                 <button class="record-filter-btn" data-filter="bath" onclick="setRecordFilter('bath')">🛁 洗澡</button>
@@ -805,6 +811,7 @@
     <script>
         // 服务器端传递的初始化数据
         window.INIT_RECORDS = {{ init_records | safe }};
+        window.INIT_LATEST_FOOD_TIME = {{ init_latest_food_time | safe }};
         window.INIT_DIAPER_COUNT = {{ diaper_count }};
         window.INIT_FEED_COUNT = {{ feed_count }};
         window.INIT_TUMMY_MINUTES = {{ tummy_minutes }};
