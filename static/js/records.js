@@ -340,6 +340,12 @@ function openEditModal(type, id) {
     const record = recordsById.get(id);
     if (!record) return;
 
+    if (type === 'food') {
+        // 辅食按「日期+餐次」整餐编辑，复用辅食编辑器
+        if (window.foodIntake) foodIntake.open(record.time ? record.time.substring(0, 10) : '', record.meal || null);
+        return;
+    }
+
     if (type === 'feed') {
         setDateTimeAndNote('feed', record);
         document.getElementById('edit-feed-amount-input').value = record.amount || 100;

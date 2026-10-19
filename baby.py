@@ -771,6 +771,19 @@ def food_meal_records(now):
         return []
 
 
+def records_with_food(date_filter):
+    """记录列表并入辅食条目；有日期过滤时只保留该日的辅食。"""
+    records = load_records(date_prefix=date_filter)
+    try:
+        food = food_meal_records(now_cn_naive())
+    except Exception as exc:
+        app.logger.warning('Food meal records unavailable: %s', exc)
+        return records
+    if date_filter:
+        food = [item for item in food if item.get('date') == date_filter]
+    return records + food
+
+
 @app.route('/api/dashboard', methods=['GET'])
 @storage_transaction
 def get_dashboard():
@@ -1411,7 +1424,7 @@ def all_records_page():
     # Default to today if no date filter specified
     if not date_filter:
         date_filter = today
-    records = load_records(date_prefix=date_filter)
+    records = records_with_food(date_filter)
     # Apply type filter
     if type_filter and type_filter != 'all':
         records = [r for r in records if r.get('type') == type_filter]
@@ -1444,7 +1457,7 @@ def load_more_records():
     date_filter = request.args.get('date', '')
     type_filter = request.args.get('type', 'all')
     per_page = 20
-    records = load_records(date_prefix=date_filter)
+    records = records_with_food(date_filter)
     if type_filter and type_filter != 'all':
         records = [r for r in records if r.get('type') == type_filter]
     records.sort(key=lambda x: x.get('time', ''), reverse=True)

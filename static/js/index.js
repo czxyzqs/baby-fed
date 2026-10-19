@@ -1597,6 +1597,15 @@
         if (medicineGroup) medicineGroup.style.display = healthType === 'medicine' ? '' : 'none';
     }
 
+    // 点最近记录里的辅食条目：打开辅食编辑器改这一餐（编辑器未就绪时退回辅食中心）
+    function openFoodRecordEdit(dateStr, meal) {
+        if (window.foodIntake) {
+            foodIntake.open(dateStr, meal || null);
+        } else {
+            location.href = '/food-hub';
+        }
+    }
+
     async function openEditModal(type, id) {
         const record = records.find(r => r.id === id);
         if (!record) return;
@@ -2048,10 +2057,11 @@
             }
 
             const canEdit = record.type === 'feed' || record.type === 'diaper' || record.type === 'sleep' || record.type === 'supplement' || record.type === 'tummy' || record.type === 'health';
-            // 辅食条目不可在此编辑，点击跳辅食中心处理
+            // 辅食条目：打开辅食编辑器（按日期+餐次载入整餐），编辑器不可用时退回辅食中心
             const clickable = canEdit || record.type === 'food';
+            const isoDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
             const clickAttr = record.type === 'food'
-                ? `onclick="location.href='/food-hub'"`
+                ? `onclick="openFoodRecordEdit('${isoDate}', '${record.meal || ''}')"`
                 : canEdit ? `onclick="openEditModal('${record.type}', '${record.id}')"` : `onclick="showToast('暂不支持修改', 'ℹ️')"`;
             return `
                 <div class="record-item-wrapper">

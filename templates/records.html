@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>全部记录 - 宝宝喂养记录</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/records.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-intake.css') }}">
 </head>
 <body>
     <div class="container">
@@ -206,6 +207,9 @@
 
     <div class="toast" id="toast"><span class="toast-icon">✅</span><span class="toast-text"></span></div>
 
+    <!-- 辅食编辑器（点辅食记录复用首页同一套） -->
+    {% include 'food-intake.html' %}
+
     <script>
         window.INIT_RECORDS_PAGE = {
             page: {{ page | tojson }},
@@ -215,6 +219,7 @@
             records: {{ records | tojson }}
         };
     </script>
+    <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/records.js') }}"></script>
 </body>
 </html>

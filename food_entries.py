@@ -86,6 +86,7 @@ class FoodEntryStore(FoodLibraryStore):
                 'id': f"food-{row['date']}-{row['meal']}",
                 'type': 'food',
                 'time': time_text,
+                'date': row['date'],
                 'meal': row['meal'],
                 'foods': row['foods'] or '',
                 'itemCount': row['item_count'],
