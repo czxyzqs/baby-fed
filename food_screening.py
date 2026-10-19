@@ -471,7 +471,15 @@ class FoodScreeningStore(FoodLibraryStore):
                 ''')
             ],
             'settings': self.settings_in(connection),
+            # 临时餐次调整：{日期: {食物id: 餐次}}，供排期页当天详情展示与修改
+            'overrides': self.all_overrides_in(connection),
         }
+
+    def all_overrides_in(self, connection):
+        overrides = {}
+        for row in connection.execute('SELECT date, food_id, meal FROM food_menu_overrides'):
+            overrides.setdefault(row['date'], {})[str(row['food_id'])] = row['meal']
+        return overrides
 
     def pack_start(self, connection):
         latest_end = today_cn().isoformat()
@@ -1179,7 +1187,8 @@ class FoodScreeningStore(FoodLibraryStore):
             'SELECT food_id, meal FROM food_menu_overrides WHERE date = ?', (day,))}
 
     def set_menu_override(self, data):
-        day = parse_date(data.get('date'), '日期').isoformat()
+        # 允许未来日期：排期页可对任意一天做临时餐次调整
+        day = parse_date(data.get('date'), '日期', allow_future=True).isoformat()
         food_id = data.get('food_id')
         if type(food_id) is not int:
             raise FoodLibraryError('请选择有效食物')

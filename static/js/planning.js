@@ -483,14 +483,17 @@
             const row = node('div', '', 'planning-day-row');
             const dot = node('span', '', 'planning-agenda-dot');
             let text = '';
+            let mealFood = null; // 支持「改餐次」的食物行：round/block/normal
             if (item.kind === 'round') {
                 dot.classList.add('round');
+                mealFood = { id: item.item.food_id, name: item.item.food_name };
                 text = `${item.item.food_name} · 排敏观察中 · 第${item.offset + 1}/${item.item.observe_days}天（${item.item.start_date.slice(5).replace('-', '/')} 起）`;
             } else if (item.kind === 'history') {
                 dot.classList.add(item.item.status === 'normal' ? 'done-normal' : 'done-allergic');
                 text = `${item.item.food_name} · 排敏${item.item.status === 'normal' ? '已通过' : '过敏'}（${item.item.start_date.slice(5).replace('-', '/')} 起）`;
             } else if (item.kind === 'block') {
                 dot.classList.add(paletteMap[item.block.food_id] || 'seg-0');
+                if (!item.block.stale) mealFood = { id: item.block.food_id, name: foodName(item.block.food_id) };
                 text = `${foodName(item.block.food_id)} · 第${item.offset + 1}/${item.block.days}天` +
                     `${item.block.stale ? ' · 已失效' : ''}`;
             } else if (item.kind === 'pause') {
@@ -498,7 +501,13 @@
                 text = `⏸ 暂停排敏${item.pause.reason ? ` · ${item.pause.reason}` : ''}`;
             } else {
                 dot.classList.add('normal');
+                mealFood = { id: item.plan.food_id, name: foodName(item.plan.food_id) };
                 text = `${foodName(item.plan.food_id)} · 常规计划`;
+            }
+            // 临时餐次调整标记：只影响这一天，不改长期计划
+            if (mealFood) {
+                const override = dayOverride(selectedDay, mealFood.id);
+                if (override) text += override === 'none' ? ' · 🚫这天不吃' : ` · 临时改${OVERRIDE_MEAL_LABEL[override] || ''}`;
             }
             row.append(dot);
             row.append(node('span', text, 'planning-day-text'));
@@ -517,6 +526,9 @@
                 actions.append(button('删除', () => pauseDeleteDialog(item.pause)));
             } else if (item.kind === 'normal') {
                 actions.append(button('删除', () => run('删除这条常规计划？', () => api(`normals/${item.plan.id}`, 'DELETE'))));
+            }
+            if (mealFood && selectedDay >= schedule.today) {
+                actions.append(button('改餐次', () => mealOverrideDialog(selectedDay, mealFood.id, mealFood.name)));
             }
             if (actions.children.length) row.append(actions);
             container.append(row);
@@ -1169,6 +1181,36 @@
         }, 'planning-btn primary'));
         body.append(actions);
         openDialog('删除排敏计划', body);
+    }
+
+    // 临时餐次调整：只影响某一天，不改长期计划（与首页餐单卡的当日微调同一套数据）
+    const OVERRIDE_MEAL_LABEL = { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐', both: '两餐都吃' };
+
+    function dayOverride(day, foodId) {
+        return schedule?.overrides?.[day]?.[String(foodId)];
+    }
+
+    function mealOverrideDialog(day, foodId, name) {
+        const overridden = dayOverride(day, foodId) !== undefined;
+        const body = node('div', '', 'planning-dialog-body');
+        body.append(node('p', `只调整 ${day.slice(5).replace('-', '/')} 这一天「${name}」的餐次，长期计划不变。`, 'planning-hint'));
+        const group = node('div', '', 'planning-chip-group');
+        const options = [
+            ['breakfast', '早餐'], ['lunch', '午餐'], ['snack', '下午茶'],
+            ['dinner', '晚餐'], ['both', '两餐都吃'], ['none', '这天不吃']
+        ];
+        if (overridden) options.push(['default', '恢复计划默认']);
+        options.forEach(([value, label]) => {
+            group.append(button(label, async () => {
+                if (!await actAndReload(() => api('menu-override', 'POST', { date: day, food_id: foodId, meal: value }))) return;
+                closeDialog();
+                toast(value === 'default' ? `已恢复「${name}」的计划默认餐次`
+                    : value === 'none' ? `${day.slice(5).replace('-', '/')} 不吃：${name}`
+                    : `已调整 ${name} 的餐次`);
+            }));
+        });
+        body.append(group);
+        openDialog(`改餐次 · ${name}`, body);
     }
 
     function normalDialog(dateStr) {
