@@ -1187,8 +1187,12 @@ class FoodScreeningStore(FoodLibraryStore):
             'SELECT food_id, meal FROM food_menu_overrides WHERE date = ?', (day,))}
 
     def set_menu_override(self, data):
-        # 允许未来日期：排期页可对任意一天做临时餐次调整
-        day = parse_date(data.get('date'), '日期', allow_future=True).isoformat()
+        # 允许未来日期：排期页可对任意一天做临时餐次调整；days>1 时连续多天一起调
+        start = parse_date(data.get('date'), '日期', allow_future=True)
+        days = data.get('days', 1)
+        if type(days) is not int or not 1 <= days <= 14:
+            raise FoodLibraryError('连续调整最多 14 天')
+        day_list = [(start + timedelta(days=offset)).isoformat() for offset in range(days)]
         food_id = data.get('food_id')
         if type(food_id) is not int:
             raise FoodLibraryError('请选择有效食物')
@@ -1196,15 +1200,16 @@ class FoodScreeningStore(FoodLibraryStore):
         with self.connect() as connection:
             if connection.execute('SELECT 1 FROM foods WHERE id = ?', (food_id,)).fetchone() is None:
                 raise FoodLibraryError('该食物已不存在，请刷新后重试', 404)
-            if meal == 'default':
-                connection.execute(
-                    'DELETE FROM food_menu_overrides WHERE date = ? AND food_id = ?', (day, food_id))
-            elif meal in OVERRIDE_MEALS:
-                connection.execute(
-                    'INSERT OR REPLACE INTO food_menu_overrides (date, food_id, meal) VALUES (?, ?, ?)',
-                    (day, food_id, meal))
-            else:
-                raise FoodLibraryError('餐次调整选项无效')
+            for day in day_list:
+                if meal == 'default':
+                    connection.execute(
+                        'DELETE FROM food_menu_overrides WHERE date = ? AND food_id = ?', (day, food_id))
+                elif meal in OVERRIDE_MEALS:
+                    connection.execute(
+                        'INSERT OR REPLACE INTO food_menu_overrides (date, food_id, meal) VALUES (?, ?, ?)',
+                        (day, food_id, meal))
+                else:
+                    raise FoodLibraryError('餐次调整选项无效')
         # banner 在事务外重查，避免嵌套连接锁库
         result = self.banner()
         result['success'] = True

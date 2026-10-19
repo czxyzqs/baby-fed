@@ -762,17 +762,19 @@
         return iso(date);
     }
 
-    // 天数步进器（弹窗内复用）：format 自定义文案，默认排敏观察
-    function daysStepper(state, min, max, format = days => `观察${days}天`) {
+    // 天数步进器（弹窗内复用）：format 自定义文案，默认排敏观察；onChange 可选，值变化时回调
+    function daysStepper(state, min, max, format = days => `观察${days}天`, onChange = null) {
         const row = node('div', '', 'planning-queue-days planning-queue-days-dialog');
         const minus = button('－', () => {
             state.days = Math.max(min, state.days - 1);
             value.textContent = format(state.days);
+            if (onChange) onChange(state.days);
         });
         const value = node('span', format(state.days), 'planning-queue-days-value');
         const plus = button('＋', () => {
             state.days = Math.min(max, state.days + 1);
             value.textContent = format(state.days);
+            if (onChange) onChange(state.days);
         });
         row.append(minus, value, plus);
         return row;
@@ -1192,8 +1194,20 @@
 
     function mealOverrideDialog(day, foodId, name) {
         const overridden = dayOverride(day, foodId) !== undefined;
+        const chosenDays = { days: 1 };
+        const fmtDay = value => value.slice(5).replace('-', '/');
         const body = node('div', '', 'planning-dialog-body');
-        body.append(node('p', `只调整 ${day.slice(5).replace('-', '/')} 这一天「${name}」的餐次，长期计划不变。`, 'planning-hint'));
+        const hint = node('p', '', 'planning-hint');
+        const refreshHint = () => {
+            hint.textContent = chosenDays.days > 1
+                ? `调整 ${fmtDay(day)} 起连续 ${chosenDays.days} 天「${name}」的餐次，长期计划不变。`
+                : `只调整 ${fmtDay(day)} 这一天「${name}」的餐次，长期计划不变。`;
+        };
+        refreshHint();
+        body.append(hint);
+        const daysLabel = node('label', '连续调整天数');
+        daysLabel.append(daysStepper(chosenDays, 1, 14, days => `连续${days}天`, refreshHint));
+        body.append(daysLabel);
         const group = node('div', '', 'planning-chip-group');
         const options = [
             ['breakfast', '早餐'], ['lunch', '午餐'], ['snack', '下午茶'],
@@ -1202,11 +1216,14 @@
         if (overridden) options.push(['default', '恢复计划默认']);
         options.forEach(([value, label]) => {
             group.append(button(label, async () => {
-                if (!await actAndReload(() => api('menu-override', 'POST', { date: day, food_id: foodId, meal: value }))) return;
+                const payload = { date: day, food_id: foodId, meal: value };
+                if (chosenDays.days > 1) payload.days = chosenDays.days;
+                if (!await actAndReload(() => api('menu-override', 'POST', payload))) return;
                 closeDialog();
-                toast(value === 'default' ? `已恢复「${name}」的计划默认餐次`
-                    : value === 'none' ? `${day.slice(5).replace('-', '/')} 不吃：${name}`
-                    : `已调整 ${name} 的餐次`);
+                const range = chosenDays.days > 1 ? `${fmtDay(day)} 起${chosenDays.days}天` : fmtDay(day);
+                toast(value === 'default' ? `已恢复「${name}」${range}的默认餐次`
+                    : value === 'none' ? `${range}不吃：${name}`
+                    : `已调整 ${name} ${range}的餐次`);
             }));
         });
         body.append(group);
