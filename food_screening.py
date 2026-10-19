@@ -634,7 +634,7 @@ class FoodScreeningStore(FoodLibraryStore):
                 )
             return self.schedule_in(connection)
 
-    def delete_block(self, identifier):
+    def delete_block(self, identifier, close_gap=False):
         with self.connect() as connection:
             row = connection.execute('SELECT * FROM food_plan_blocks WHERE id = ?', (identifier,)).fetchone()
             if row is None:
@@ -651,6 +651,12 @@ class FoodScreeningStore(FoodLibraryStore):
                     (row['food_id'],
                      connection.execute('SELECT COALESCE(MAX(sort_order), -1) + 1 FROM food_queue').fetchone()[0],
                      None, datetime.now(CN_TZ).isoformat()),
+                )
+            if close_gap:
+                self.close_gap(
+                    connection,
+                    date.fromisoformat(row['start_date']),
+                    date.fromisoformat(row['start_date']) + timedelta(days=row['days'] - 1),
                 )
             return self.schedule_in(connection)
 
@@ -1389,7 +1395,8 @@ def register_food_screening(app, data_dir):
     def change_block(block_id):
         identifier(block_id)
         if request.method == 'DELETE':
-            return jsonify({'success': True, **store.delete_block(block_id)})
+            close_gap = request.args.get('close_gap') == '1'
+            return jsonify({'success': True, **store.delete_block(block_id, close_gap)})
         return jsonify({'success': True, **store.update_block(block_id, payload())})
 
     @blueprint.post('/blocks/insert')

@@ -511,7 +511,7 @@
                 }));
                 actions.append(button('天数+', () => changeBlock(item.block, { days: Math.min(14, item.block.days + 1) })));
                 if (item.block.days > 1) actions.append(button('天数-', () => changeBlock(item.block, { days: item.block.days - 1 })));
-                actions.append(button('删除', () => run(`删除「${foodName(item.block.food_id)}」的计划？食物将回到排敏队列末尾。`, () => api(`blocks/${item.block.id}`, 'DELETE'))));
+                actions.append(button('删除', () => blockDeleteDialog(item.block)));
             } else if (item.kind === 'pause') {
                 actions.append(button('修改', () => editPauseDialog(item.pause)));
                 actions.append(button('删除', () => pauseDeleteDialog(item.pause)));
@@ -650,12 +650,7 @@
                     : null,
                 text: `${dateRange(row.sort, row.days)} ${foodName(row.block.food_id)}${mealTag(row.block.meal)} · 观察${row.block.days}天${row.suffix}`,
                 edit: row.block.stale ? null : { type: 'block', block: row.block },
-                del: {
-                    path: `blocks/${row.block.id}`,
-                    confirm: row.merged.length
-                        ? `删除「${foodName(row.block.food_id)}」的排敏计划？食物将回到排敏队列末尾，常规计划不受影响。`
-                        : `删除「${foodName(row.block.food_id)}」的计划？食物将回到排敏队列末尾。`
-                }
+                del: { block: row.block }
             });
         });
         pauseRows.forEach(row => {
@@ -729,7 +724,8 @@
                 del.setAttribute('aria-label', `删除：${labelText}`);
                 del.addEventListener('click', () =>
                     row.del.pause ? pauseDeleteDialog(row.del.pause)
-                                  : run(row.del.confirm, () => api(row.del.path, 'DELETE')));
+                        : row.del.block ? blockDeleteDialog(row.del.block)
+                        : run(row.del.confirm, () => api(row.del.path, 'DELETE')));
                 line.append(del);
             }
             target.append(line);
@@ -1153,6 +1149,26 @@
         }, 'planning-btn primary'));
         body.append(actions);
         openDialog('删除暂停段', body);
+    }
+
+    function blockDeleteDialog(block) {
+        const range = dateRange(block.start_date, block.days);
+        const body = node('div', '', 'planning-dialog-body');
+        body.append(node('p', `删除 ${range} ${foodName(block.food_id)} 的排敏计划？食物会回到排敏队列末尾。删除后空出的时段怎么处理？`, 'planning-hint'));
+        const actions = node('div', '', 'planning-actions');
+        actions.append(button('取消', closeDialog));
+        actions.append(button('保留空档', async () => {
+            if (!await actAndReload(() => api(`blocks/${block.id}`, 'DELETE'))) return;
+            closeDialog();
+            toast('已删除排敏计划，后续排期保持原位');
+        }));
+        actions.append(button('删除并前移排期', async () => {
+            if (!await actAndReload(() => api(`blocks/${block.id}?close_gap=1`, 'DELETE'))) return;
+            closeDialog();
+            toast('已删除排敏计划，后续排期已前移');
+        }, 'planning-btn primary'));
+        body.append(actions);
+        openDialog('删除排敏计划', body);
     }
 
     function normalDialog(dateStr) {
