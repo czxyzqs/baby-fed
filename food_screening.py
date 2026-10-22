@@ -1186,7 +1186,7 @@ class FoodScreeningStore(FoodLibraryStore):
                 if meal is not None:
                     items.append({
                         'kind': 'planned', 'food_id': row['food_id'], 'food': row['food_name'],
-                        'position': index, 'observe_days': row['days'],
+                        'position': index, 'observe_days': row['days'], 'block_id': row['id'],
                         **eaten_fields(row['food_id']), 'meal': meal,
                         'text': f'第{index}天/{row["days"]}天',
                     })
@@ -1201,6 +1201,7 @@ class FoodScreeningStore(FoodLibraryStore):
                 if meal is not None:
                     items.append({
                         'kind': 'normal', 'food_id': row['food_id'], 'food': row['food_name'],
+                        'plan_id': row['id'],
                         **eaten_fields(row['food_id']), 'meal': meal, 'text': '',
                     })
                 else:

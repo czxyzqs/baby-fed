@@ -223,6 +223,7 @@
             hasOverride: Object.prototype.hasOwnProperty.call(lastOverrides, String(item.food_id))
                 || Object.prototype.hasOwnProperty.call(lastOverrides, item.food_id),
             position: item.position, observeDays: item.observe_days,
+            planId: item.plan_id, blockId: item.block_id,
             screeningReplaceable: item.kind === 'planned' && item.position === 1
         };
     }
