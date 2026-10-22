@@ -9,6 +9,10 @@
     let paletteMap = {};
     // 排期视图：full = 排敏+常规计划；screening = 只看排敏线
     let viewMode = localStorage.getItem('planning-view') === 'screening' ? 'screening' : 'full';
+    // 选段编辑：rangePicking 进行中、rangeAnchor 已点起始日、rangeSel 选定区间
+    let rangePicking = false;
+    let rangeAnchor = null;
+    let rangeSel = null;
 
     // 按时间线出现顺序给食物轮换分配颜色：相邻排期必不同色，同一食物同色
     function buildColorMap() {
@@ -355,9 +359,46 @@
         });
     }
 
+    function rangeDays(sel) {
+        return sel ? Math.round((new Date(sel.end + 'T00:00:00') - new Date(sel.start + 'T00:00:00')) / 86400000) + 1 : 1;
+    }
+
+    function rangeLabel(sel) {
+        const fmt = value => value.slice(5).replace('-', '/');
+        return sel ? (sel.start === sel.end ? fmt(sel.start) : `${fmt(sel.start)}–${fmt(sel.end)}`) : '';
+    }
+
+    function exitRangeMode() {
+        rangePicking = false;
+        rangeAnchor = null;
+        rangeSel = null;
+        element('range').classList.remove('active');
+        renderMovebar();
+        renderCalendar();
+        renderDayDetail();
+    }
+
     function renderMovebar() {
         const bar = element('movebar');
         bar.replaceChildren();
+        if (rangeSel) {
+            bar.hidden = false;
+            bar.append(node('span', `已选 ${rangeLabel(rangeSel)}（共${rangeDays(rangeSel)}天）：下方按餐编辑这一段，点任意日期退出。`, 'planning-line'));
+            const actions = node('div', '', 'planning-actions');
+            actions.append(button('退出选段', exitRangeMode));
+            bar.append(actions);
+            return;
+        }
+        if (rangePicking) {
+            bar.hidden = false;
+            bar.append(node('span', rangeAnchor
+                ? `已选 ${rangeLabel({ start: rangeAnchor, end: rangeAnchor })}，点结束日期（同一天则只选一天）`
+                : '选段编辑：点这一段的起始日期', 'planning-line'));
+            const actions = node('div', '', 'planning-actions');
+            actions.append(button('取消选段', exitRangeMode));
+            bar.append(actions);
+            return;
+        }
         if (movingBlock === null) {
             bar.hidden = true;
             return;
@@ -436,6 +477,9 @@
             if (dateStr === today) cell.classList.add('today');
             if (dateStr < today) cell.classList.add('past');
             if (selectedDay === dateStr) cell.classList.add('selected');
+            if (rangeSel && dateStr >= rangeSel.start && dateStr <= rangeSel.end) cell.classList.add('range-in');
+            if (dateStr === rangeSel?.start || dateStr === rangeSel?.end) cell.classList.add('range-edge');
+            if (rangePicking && dateStr === rangeAnchor) cell.classList.add('range-edge');
             cell.append(node('span', String(day), 'planning-day'));
             const dots = node('span', '', 'planning-dots');
             itemsForDate(dateStr).slice(0, 3).forEach(item => {
@@ -452,6 +496,21 @@
                     moveBlockTo(dateStr);
                     return;
                 }
+                if (rangePicking) {
+                    if (!rangeAnchor) {
+                        rangeAnchor = dateStr;
+                    } else {
+                        const [start, end] = [rangeAnchor, dateStr].sort();
+                        rangeSel = { start, end };
+                        rangeAnchor = null;
+                        rangePicking = false;
+                    }
+                    renderMovebar();
+                    renderCalendar();
+                    renderDayDetail();
+                    return;
+                }
+                if (rangeSel) exitRangeMode();
                 selectedDay = dateStr;
                 renderCalendar();
                 renderDayDetail();
@@ -465,75 +524,262 @@
         return ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][index];
     }
 
+    // ---------- 当天详情：按餐分组的菜品编辑（单日 / 选段共用） ----------
+
+    function normalFoodCandidates() {
+        return (schedule.board_foods || []).filter(food => food.status === 'normal');
+    }
+
+    function untouchedFoodCandidates() {
+        return (schedule.board_foods || []).filter(food => food.status === 'untouched');
+    }
+
+    // 某天的菜品清单：排敏块/观察轮次/常规计划应用当日覆盖后，再补上「当日加菜」
+    function dishesForDay(day) {
+        const dishes = [];
+        const hidden = [];
+        const seen = new Set();
+        const overrides = schedule.overrides?.[day] || {};
+        itemsForDate(day).forEach(entry => {
+            let dish = null;
+            if (entry.kind === 'round') {
+                dish = {
+                    foodId: entry.item.food_id,
+                    name: entry.item.food_name || foodName(entry.item.food_id),
+                    kind: 'screening', position: entry.offset + 1, observeDays: entry.item.observe_days,
+                    meals: FoodMenu.mealsOf(entry.item.meal || 'lunch')
+                };
+            } else if (entry.kind === 'block') {
+                dish = {
+                    foodId: entry.block.food_id, name: foodName(entry.block.food_id),
+                    kind: 'screening', position: entry.offset + 1, observeDays: entry.block.days,
+                    blockId: entry.block.id, blockStart: entry.block.start_date, blockDays: entry.block.days,
+                    meals: FoodMenu.mealsOf(entry.block.meal || 'lunch'),
+                    screeningReplaceable: entry.offset === 0
+                };
+            } else if (entry.kind === 'normal') {
+                dish = {
+                    foodId: entry.plan.food_id, name: foodName(entry.plan.food_id),
+                    kind: 'normal', planId: entry.plan.id,
+                    meals: FoodMenu.mealsOf(entry.plan.meal)
+                };
+            }
+            if (!dish || seen.has(dish.foodId)) return;
+            seen.add(dish.foodId);
+            const override = overrides[String(dish.foodId)];
+            if (override === 'none') {
+                hidden.push({ foodId: dish.foodId, name: dish.name });
+                return;
+            }
+            if (override) {
+                dish.meals = FoodMenu.mealsOf(override);
+                dish.hasOverride = true;
+            }
+            dishes.push(dish);
+        });
+        // 当日加菜：override 里当天不在任何计划中的食物
+        Object.entries(overrides).forEach(([foodIdStr, meal]) => {
+            const foodId = Number(foodIdStr);
+            if (seen.has(foodId) || meal === 'none') return;
+            const name = foodName(foodId);
+            if (name === '?') return;
+            dishes.push({ foodId, name, kind: 'extra', meals: FoodMenu.mealsOf(meal), hasOverride: true });
+        });
+        return { dishes, hidden };
+    }
+
+    function panelOnChanged(result) {
+        if (result && result.blocks) applySchedule(result);
+        else reload();
+    }
+
+    function openDishPanelFor(dish, meal) {
+        const day = rangeSel ? rangeSel.start : selectedDay;
+        FoodMenu.openDishPanel({
+            day, meal, dish,
+            days: rangeSel ? rangeDays(rangeSel) : 1,
+            segmentLabel: rangeSel ? rangeLabel(rangeSel) : '',
+            replaceCandidates: normalFoodCandidates().filter(food => food.id !== dish.foodId),
+            screeningSwapCandidates: untouchedFoodCandidates().filter(food => food.id !== dish.foodId),
+            extraActions: dish.blockId ? blockExtraActions(dish) : [],
+            onChanged: panelOnChanged
+        });
+    }
+
+    // 排敏块的段级操作（移动/天数/删除）挂在面板附加区
+    function blockExtraActions(dish) {
+        const actions = [];
+        if (dish.blockStart > schedule.today) {
+            actions.push({
+                label: '移动整段排敏',
+                handler: () => {
+                    FoodMenu.closePanel();
+                    movingBlock = dish.blockId;
+                    renderMovebar();
+                    renderCalendar();
+                    toast('已选中，点日历选目标日期；同段搭配的常规计划会一起移动');
+                }
+            });
+            actions.push({
+                label: `观察天数改为 ${Math.min(14, dish.blockDays + 1)} 天`,
+                handler: () => { FoodMenu.closePanel(); changeBlock({ id: dish.blockId }, { days: Math.min(14, dish.blockDays + 1) }); }
+            });
+            if (dish.blockDays > 1) {
+                actions.push({
+                    label: `观察天数改为 ${dish.blockDays - 1} 天`,
+                    handler: () => { FoodMenu.closePanel(); changeBlock({ id: dish.blockId }, { days: dish.blockDays - 1 }); }
+                });
+            }
+        }
+        actions.push({
+            label: '删除排敏计划…', danger: true,
+            handler: () => {
+                FoodMenu.closePanel();
+                blockDeleteDialog({ id: dish.blockId, food_id: dish.foodId, start_date: dish.blockStart, days: dish.blockDays });
+            }
+        });
+        return actions;
+    }
+
+    function openAddFor(day, meal, lockedDays) {
+        FoodMenu.openAddDialog({
+            day, meal,
+            days: lockedDays || 1,
+            foods: normalFoodCandidates(),
+            segmentLabel: lockedDays ? rangeLabel(rangeSel) : '',
+            onChanged: panelOnChanged
+        });
+    }
+
+    function mealRow(dish, meal, editable, coverage) {
+        const row = node('div', '', 'planning-meal-row');
+        const name = button(dish.name, () => editable && openDishPanelFor(dish, meal), 'planning-meal-name');
+        if (!editable) name.disabled = true;
+        row.append(name);
+        if (dish.kind === 'screening') {
+            row.append(node('span', `🧪 第${dish.position}/${dish.observeDays}天`, 'planning-meal-tag'));
+        }
+        if (coverage) row.append(node('span', coverage.text(dish), 'planning-meal-cover'));
+        if (editable) {
+            const more = button('⋯', () => openDishPanelFor(dish, meal), 'planning-meal-more');
+            more.setAttribute('aria-label', `调整${dish.name}`);
+            row.append(more);
+        }
+        return row;
+    }
+
+    function buildMealGrid({ day, dishes, editable, coverage }) {
+        const wrap = node('div', '', 'planning-meal-grid');
+        Object.entries(FoodMenu.MEALS).forEach(([meal, label]) => {
+            const sec = node('div', '', 'planning-meal-sec');
+            sec.append(node('div', label, 'planning-meal-title'));
+            const rows = node('div', '', 'planning-meal-rows');
+            const inMeal = dishes.filter(dish => dish.meals.includes(meal));
+            inMeal.forEach(dish => rows.append(mealRow(dish, meal, editable, coverage)));
+            if (!inMeal.length) {
+                if (editable) {
+                    rows.append(button('＋ 加一道', () => openAddFor(day, meal, coverage ? rangeDays(rangeSel) : 1), 'planning-meal-add'));
+                } else {
+                    rows.append(node('p', '空', 'planning-meal-empty'));
+                }
+            }
+            sec.append(rows);
+            wrap.append(sec);
+        });
+        return wrap;
+    }
+
+    function appendHiddenRow(container, hidden, day) {
+        if (!hidden.length) return;
+        const row = node('div', '', 'planning-hidden-row');
+        row.append(node('span', '这天不吃：', 'planning-hidden-label'));
+        hidden.forEach(item => {
+            const restore = button(`${item.name} ↺`, () => {
+                actAndReload(() => api('menu-override', 'POST', { date: day, food_id: item.foodId, meal: 'default' }));
+            }, 'planning-hidden-chip');
+            row.append(restore);
+        });
+        container.append(row);
+    }
+
+    function renderSegmentDetail(container) {
+        const total = rangeDays(rangeSel);
+        const head = node('div', '', 'planning-day-head');
+        head.append(node('strong', `${rangeLabel(rangeSel)} · 共${total}天`, 'planning-day-title'));
+        container.append(head);
+        container.append(node('p', '按餐编辑这一段：改动只作用于所选日期，长期计划不变；行上角标显示覆盖情况。', 'planning-hint'));
+        const inPause = [...Array(total).keys()].some(offset => {
+            const day = addDays(rangeSel.start, offset);
+            return schedule.pauses.some(item => day >= item.start_date && day <= item.end_date);
+        });
+        if (inPause) container.append(node('p', '⏸ 这段里有暂停段：新食物排敏自动绕开。', 'planning-hint'));
+        const count = new Map();
+        const dishBy = new Map();
+        for (let offset = 0; offset < total; offset += 1) {
+            const day = addDays(rangeSel.start, offset);
+            dishesForDay(day).dishes.forEach(dish => {
+                if (!dishBy.has(dish.foodId)) dishBy.set(dish.foodId, { ...dish, mealSet: new Set() });
+                const union = dishBy.get(dish.foodId);
+                dish.meals.forEach(meal => union.mealSet.add(meal));
+                count.set(dish.foodId, (count.get(dish.foodId) || 0) + 1);
+            });
+        }
+        const dishes = [...dishBy.values()].map(dish => ({ ...dish, meals: [...dish.mealSet] }));
+        const coverage = {
+            text: dish => count.get(dish.foodId) >= total ? '每天' : `${count.get(dish.foodId)}天`
+        };
+        container.append(buildMealGrid({ day: rangeSel.start, dishes, editable: rangeSel.start >= schedule.today, coverage }));
+    }
+
     function renderDayDetail() {
         const container = element('day');
         if (!container) return;
         container.replaceChildren();
+        if (rangeSel) {
+            renderSegmentDetail(container);
+            return;
+        }
         if (!selectedDay) {
             container.append(node('p', '点上面的日期，查看当天的排敏安排。', 'planning-hint'));
             return;
         }
         const future = selectedDay > schedule.today;
+        const editable = selectedDay >= schedule.today;
         const head = node('div', '', 'planning-day-head');
         head.append(node('strong', `${Number(selectedDay.slice(8))}日 · ${weekdayLabel(selectedDay)}${selectedDay === schedule.today ? ' · 今天' : ''}`, 'planning-day-title'));
         container.append(head);
-        const items = itemsForDate(selectedDay);
-        if (!items.length) container.append(node('p', '这天没有安排。', 'planning-line'));
-        items.forEach(item => {
+        // 非餐条目：暂停段、历史轮次（不进四餐格）
+        itemsForDate(selectedDay).forEach(item => {
             const row = node('div', '', 'planning-day-row');
             const dot = node('span', '', 'planning-agenda-dot');
             let text = '';
-            let mealFood = null; // 支持「改餐次」的食物行：round/block/normal
-            if (item.kind === 'round') {
-                dot.classList.add('round');
-                mealFood = { id: item.item.food_id, name: item.item.food_name };
-                text = `${item.item.food_name} · 排敏观察中 · 第${item.offset + 1}/${item.item.observe_days}天（${item.item.start_date.slice(5).replace('-', '/')} 起）`;
-            } else if (item.kind === 'history') {
+            if (item.kind === 'history') {
                 dot.classList.add(item.item.status === 'normal' ? 'done-normal' : 'done-allergic');
                 text = `${item.item.food_name} · 排敏${item.item.status === 'normal' ? '已通过' : '过敏'}（${item.item.start_date.slice(5).replace('-', '/')} 起）`;
-            } else if (item.kind === 'block') {
-                dot.classList.add(paletteMap[item.block.food_id] || 'seg-0');
-                if (!item.block.stale) mealFood = { id: item.block.food_id, name: foodName(item.block.food_id) };
-                text = `${foodName(item.block.food_id)} · 第${item.offset + 1}/${item.block.days}天` +
-                    `${item.block.stale ? ' · 已失效' : ''}`;
             } else if (item.kind === 'pause') {
                 dot.classList.add('pause');
                 text = `⏸ 暂停排敏${item.pause.reason ? ` · ${item.pause.reason}` : ''}`;
+            } else if (item.kind === 'block' && item.block.stale) {
+                dot.classList.add(paletteMap[item.block.food_id] || 'seg-0');
+                text = `${foodName(item.block.food_id)} · 已失效`;
             } else {
-                dot.classList.add('normal');
-                mealFood = { id: item.plan.food_id, name: foodName(item.plan.food_id) };
-                text = `${foodName(item.plan.food_id)} · 常规计划`;
-            }
-            // 临时餐次调整标记：只影响这一天，不改长期计划
-            if (mealFood) {
-                const override = dayOverride(selectedDay, mealFood.id);
-                if (override) text += override === 'none' ? ' · 🚫这天不吃' : ` · 临时改${OVERRIDE_MEAL_LABEL[override] || ''}`;
+                return; // 正常菜品进四餐格
             }
             row.append(dot);
             row.append(node('span', text, 'planning-day-text'));
             const actions = node('div', '', 'planning-day-actions');
-            if (item.kind === 'block' && !item.block.stale && future) {
-                actions.append(button('移动', () => {
-                    movingBlock = item.block.id;
-                    renderMovebar();
-                    toast('已选中，点日历选目标日期；同段搭配的常规计划会一起移动');
-                }));
-                actions.append(button('天数+', () => changeBlock(item.block, { days: Math.min(14, item.block.days + 1) })));
-                if (item.block.days > 1) actions.append(button('天数-', () => changeBlock(item.block, { days: item.block.days - 1 })));
-                actions.append(button('删除', () => blockDeleteDialog(item.block)));
-            } else if (item.kind === 'pause') {
+            if (item.kind === 'pause') {
                 actions.append(button('修改', () => editPauseDialog(item.pause)));
                 actions.append(button('删除', () => pauseDeleteDialog(item.pause)));
-            } else if (item.kind === 'normal') {
-                actions.append(button('删除', () => run('删除这条常规计划？', () => api(`normals/${item.plan.id}`, 'DELETE'))));
-            }
-            if (mealFood && selectedDay >= schedule.today) {
-                actions.append(button('改餐次', () => mealOverrideDialog(selectedDay, mealFood.id, mealFood.name)));
             }
             if (actions.children.length) row.append(actions);
             container.append(row);
         });
-        if (selectedDay >= schedule.today) {
+        // 四餐格 + 这天不吃
+        const { dishes, hidden } = dishesForDay(selectedDay);
+        container.append(buildMealGrid({ day: selectedDay, dishes, editable, coverage: null }));
+        if (editable) appendHiddenRow(container, hidden, selectedDay);
+        if (editable) {
             // 暂停段内不排新食物，但正常食物的常规计划照常可安排（含今天）
             const inPause = schedule.pauses.some(item => selectedDay >= item.start_date && selectedDay <= item.end_date);
             if (inPause) container.append(node('p', '⏸ 这天在暂停段内：新食物排敏自动绕开，可以安排正常食物的常规计划。', 'planning-hint'));
@@ -1185,50 +1431,7 @@
         openDialog('删除排敏计划', body);
     }
 
-    // 临时餐次调整：只影响某一天，不改长期计划（与首页餐单卡的当日微调同一套数据）
-    const OVERRIDE_MEAL_LABEL = { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐', both: '两餐都吃' };
-
-    function dayOverride(day, foodId) {
-        return schedule?.overrides?.[day]?.[String(foodId)];
-    }
-
-    function mealOverrideDialog(day, foodId, name) {
-        const overridden = dayOverride(day, foodId) !== undefined;
-        const chosenDays = { days: 1 };
-        const fmtDay = value => value.slice(5).replace('-', '/');
-        const body = node('div', '', 'planning-dialog-body');
-        const hint = node('p', '', 'planning-hint');
-        const refreshHint = () => {
-            hint.textContent = chosenDays.days > 1
-                ? `调整 ${fmtDay(day)} 起连续 ${chosenDays.days} 天「${name}」的餐次，长期计划不变。`
-                : `只调整 ${fmtDay(day)} 这一天「${name}」的餐次，长期计划不变。`;
-        };
-        refreshHint();
-        body.append(hint);
-        const daysLabel = node('label', '连续调整天数');
-        daysLabel.append(daysStepper(chosenDays, 1, 14, days => `连续${days}天`, refreshHint));
-        body.append(daysLabel);
-        const group = node('div', '', 'planning-chip-group');
-        const options = [
-            ['breakfast', '早餐'], ['lunch', '午餐'], ['snack', '下午茶'],
-            ['dinner', '晚餐'], ['both', '两餐都吃'], ['none', '这天不吃']
-        ];
-        if (overridden) options.push(['default', '恢复计划默认']);
-        options.forEach(([value, label]) => {
-            group.append(button(label, async () => {
-                const payload = { date: day, food_id: foodId, meal: value };
-                if (chosenDays.days > 1) payload.days = chosenDays.days;
-                if (!await actAndReload(() => api('menu-override', 'POST', payload))) return;
-                closeDialog();
-                const range = chosenDays.days > 1 ? `${fmtDay(day)} 起${chosenDays.days}天` : fmtDay(day);
-                toast(value === 'default' ? `已恢复「${name}」${range}的默认餐次`
-                    : value === 'none' ? `${range}不吃：${name}`
-                    : `已调整 ${name} ${range}的餐次`);
-            }));
-        });
-        body.append(group);
-        openDialog(`改餐次 · ${name}`, body);
-    }
+    // 临时餐次调整已并入 FoodMenu 动作面板（food-menu-actions.js），这里不再单独弹窗
 
     function normalDialog(dateStr) {
         const body = node('div', '', 'planning-dialog-body');
@@ -1392,11 +1595,25 @@
     Object.entries(viewButtons).forEach(([mode, btn]) =>
         btn.addEventListener('click', () => { if (viewMode !== mode) { viewMode = mode; applyViewMode(); } }));
     Object.entries(viewButtons).forEach(([mode, btn]) => btn.classList.toggle('active', mode === viewMode));
+    // 选段编辑：进入后先点起始日、再点结束日，当天详情切换为整段编辑器
+    element('range').addEventListener('click', () => {
+        if (movingBlock !== null) return;
+        if (rangeSel || rangePicking) {
+            exitRangeMode();
+            return;
+        }
+        rangePicking = true;
+        rangeAnchor = null;
+        element('range').classList.add('active');
+        renderMovebar();
+    });
     element('overlay').addEventListener('click', event => {
         if (event.target === element('overlay')) closeDialog();
     });
     document.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && !element('overlay').hidden) closeDialog();
+        if (event.key !== 'Escape') return;
+        if (!element('overlay').hidden) closeDialog();
+        else if (rangeSel || rangePicking) exitRangeMode();
     });
 
     function shiftMonth(count) {

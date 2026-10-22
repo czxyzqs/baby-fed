@@ -1,0 +1,83 @@
+/* 菜品动作面板（food-menu-actions.js）：排期页与首页共用，置顶于两页各自的弹层之上 */
+.fma-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex; align-items: flex-end; justify-content: center;
+}
+.fma-dialog {
+    background: var(--bg-secondary, #1a1a2e);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 18px 18px 0 0;
+    width: min(100%, 560px);
+    max-height: 86vh; overflow-y: auto;
+    padding: 16px 16px 22px;
+}
+.fma-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.fma-title { font-size: 17px; margin: 0; }
+.fma-close {
+    background: none; border: none; color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+    font-size: 16px; cursor: pointer; padding: 6px 10px; border-radius: 10px;
+}
+.fma-hint { color: var(--text-muted, rgba(255, 255, 255, 0.4)); font-size: 12px; margin: 8px 0; line-height: 1.6; }
+.fma-label { font-size: 13px; margin: 12px 0 6px; color: var(--text-secondary, rgba(255, 255, 255, 0.7)); }
+
+.fma-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.fma-scope-label { font-size: 13px; color: var(--text-secondary, rgba(255, 255, 255, 0.7)); }
+.fma-scope-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.fma-scope-date {
+    background: var(--bg-card, rgba(255, 255, 255, 0.03)); color: var(--text-primary, #fff);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 10px; padding: 7px 10px; font-size: 14px;
+    color-scheme: dark;
+}
+
+.fma-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.fma-chip {
+    background: var(--bg-card, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    color: var(--text-primary, #fff);
+    border-radius: 999px; padding: 8px 14px; font-size: 14px; cursor: pointer;
+}
+.fma-chip.active {
+    border-color: var(--accent-tertiary, #4cc9f0);
+    background: rgba(76, 201, 240, 0.16);
+}
+
+.fma-actions { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 4px; }
+.fma-btn {
+    background: var(--bg-card, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    color: var(--text-primary, #fff);
+    border-radius: 12px; padding: 12px 14px; font-size: 15px; cursor: pointer;
+    text-align: left;
+}
+.fma-btn.primary {
+    background: linear-gradient(135deg, var(--accent-primary, #ff6b9d), var(--accent-secondary, #c44cff));
+    border: none; text-align: center; font-weight: 600;
+}
+.fma-btn.danger { color: #ff8a70; border-color: rgba(255, 138, 112, 0.35); }
+.fma-sub { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+.fma-danger-zone { border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08)); margin-top: 12px; padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+.fma-search {
+    width: 100%; box-sizing: border-box;
+    background: var(--bg-card, rgba(255, 255, 255, 0.03)); color: var(--text-primary, #fff);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 10px; padding: 10px 12px; font-size: 14px; margin: 4px 0;
+}
+.fma-list { max-height: 34vh; overflow-y: auto; margin-bottom: 4px; }
+
+.fma-toast {
+    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(8px);
+    z-index: 1200; max-width: 86vw;
+    background: rgba(17, 23, 31, 0.95); border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+    color: #fff; font-size: 13px; border-radius: 10px; padding: 9px 14px;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s;
+}
+.fma-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* 老年模式：面板同步放大 */
+body.elder .fma-title { font-size: 20px; }
+body.elder .fma-btn { font-size: 17px; padding: 14px 16px; }
+body.elder .fma-chip { font-size: 16px; padding: 10px 16px; }
+body.elder .fma-hint { font-size: 14px; }

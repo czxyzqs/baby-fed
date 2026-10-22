@@ -16,8 +16,10 @@
     </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/planning.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-menu-actions.css') }}">
     <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-families.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/food-menu-actions.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/planning.js') }}"></script>
 </head>
 <body>
@@ -50,6 +52,7 @@
                 <button type="button" id="planning-view-full">完整辅食</button>
                 <button type="button" id="planning-view-screening">仅排敏</button>
             </div>
+            <button type="button" class="planning-range-btn" id="planning-range">⇹ 选段</button>
         </div>
         <section class="planning-card" aria-labelledby="planning-calendar-title">
             <div class="planning-calendar-head">
@@ -60,7 +63,7 @@
             </div>
             <div class="planning-calendar" id="planning-calendar"></div>
             <div id="planning-day" class="planning-day-detail" aria-live="polite"></div>
-            <p class="planning-hint">点日期查看当天安排；今天起可在当天详情里添加常规计划（正常食物），未来的日期还可划暂停段或调整排敏。</p>
+            <p class="planning-hint">点日期按餐查看、编辑当天菜品；「⇹ 选段」一次编辑一段日期；未来的日期还可划暂停段或调整排期。</p>
         </section>
         <section class="planning-card" aria-labelledby="planning-agenda-title">
             <h2 id="planning-agenda-title">排期一览</h2>
