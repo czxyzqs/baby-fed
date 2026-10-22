@@ -64,7 +64,10 @@
             const response = await fetch('/api/screening/banner', { cache: 'no-store' });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || '加载失败');
-            render(result.items || [], result.overrides || {});
+            lastItems = result.items || [];
+            lastOverrides = result.overrides || {};
+            lastHidden = result.hidden || [];
+            render(lastItems, lastOverrides);
         } catch (error) {
             banner.hidden = true;
         }
@@ -72,6 +75,7 @@
 
     let lastItems = [];
     let lastOverrides = {};
+    let lastHidden = [];
     let todayContext = null;
 
     async function getContext() {
@@ -113,15 +117,28 @@
                 foods.push(item);
             }
         });
-        if (!foods.length) return wrap;
-        // 今日餐单：固定四餐格（早/午/下午茶/晚），排敏只出现在午/晚，早/下午茶放常规计划
+        if (!foods.length) {
+            appendHiddenRow(wrap);
+            return wrap;
+        }
+        // 今日餐单：固定四餐格（早/午/下午茶/晚）；点菜名打开菜品动作面板（换餐/替换/不吃/加菜）
         const menu = node('div', '', 'food-banner-menu');
         [['breakfast', '🥣 早餐'], ['lunch', '☀️ 午餐'], ['snack', '🍎 下午茶'], ['dinner', '🌙 晚餐']].forEach(([meal, label]) => {
             const column = node('div', '', 'food-banner-menu-col');
             column.append(node('h4', label, 'food-banner-menu-title'));
             const columnFoods = foods.filter(item => mealsOf(item.meal).includes(meal));
             if (!columnFoods.length) {
-                column.append(node('p', '没有计划', 'food-banner-menu-empty'));
+                const add = node('button', '＋ 加一道', 'food-banner-menu-add');
+                add.type = 'button';
+                add.addEventListener('click', async () => {
+                    try {
+                        const context = await getContext();
+                        openAddForToday(meal, context);
+                    } catch (error) {
+                        toast(`加载食物失败：${error.message}`);
+                    }
+                });
+                column.append(add);
             }
             columnFoods.forEach(item => {
                 // ✓ 只反映「这一列的餐次」今天有没有记录；别餐已吃的提示放 title 里，避免药丸文字挤爆
@@ -140,19 +157,92 @@
                 const name = node('button', '', 'food-banner-pill-name');
                 name.type = 'button';
                 name.append(node('span', item.food));
-                if (item.text) name.append(node('small', item.text));
+                if (item.kind === 'screening' || item.kind === 'planned') {
+                    name.append(node('small', `🧪 ${item.text || ''}`.trim()));
+                }
                 if (elsewhere.length) {
                     name.title = `今天已在${elsewhere.map(other => MEALS[other]).join('、')}吃过`;
                 }
-                name.addEventListener('click', () => adjustMealDialog(item));
+                name.addEventListener('click', async () => {
+                    try {
+                        const context = await getContext();
+                        openDishPanelForToday(item, meal, context);
+                    } catch (error) {
+                        toast(`加载食物失败：${error.message}`);
+                    }
+                });
                 pill.append(check, name);
                 column.append(pill);
             });
             menu.append(column);
         });
         wrap.append(menu);
-        wrap.append(node('p', '点食物名可临时调整今天的餐次；✓ 记入所在列的餐次。', 'food-banner-menu-hint'));
+        wrap.append(node('p', '点菜名可换餐/替换/这餐不吃；✓ 记入所在列的餐次。', 'food-banner-menu-hint'));
+        appendHiddenRow(wrap);
         return wrap;
+    }
+
+    // 「今天不吃」的食物：底部提供一键恢复（清除当日覆盖）
+    function appendHiddenRow(wrap) {
+        if (!lastHidden.length) return;
+        const row = node('div', '', 'food-banner-hidden-row');
+        row.append(node('span', '今天不吃：', 'food-banner-hidden-label'));
+        lastHidden.forEach(item => {
+            const chipNode = node('button', `${item.food} ↺`, 'food-banner-hidden-chip');
+            chipNode.type = 'button';
+            chipNode.addEventListener('click', async () => {
+                try {
+                    await api('screening/menu-override', 'POST', { date: today(), food_id: item.food_id, meal: 'default' });
+                    await load();
+                } catch (error) {
+                    toast(`操作失败：${error.message}`);
+                }
+            });
+            row.append(chipNode);
+        });
+        wrap.append(row);
+    }
+
+    function panelChanged(result) {
+        if (result && Array.isArray(result.items)) {
+            lastItems = result.items;
+            lastOverrides = result.overrides || {};
+            lastHidden = result.hidden || [];
+            render(lastItems, lastOverrides);
+        } else {
+            load();
+        }
+    }
+
+    function dishFromItem(item) {
+        const kind = item.kind === 'screening' || item.kind === 'planned'
+            ? 'screening' : (item.kind === 'extra' ? 'extra' : 'normal');
+        return {
+            foodId: item.food_id, name: item.food, kind,
+            meals: mealsOf(item.meal),
+            hasOverride: Object.prototype.hasOwnProperty.call(lastOverrides, String(item.food_id))
+                || Object.prototype.hasOwnProperty.call(lastOverrides, item.food_id),
+            position: item.position, observeDays: item.observe_days,
+            screeningReplaceable: item.kind === 'planned' && item.position === 1
+        };
+    }
+
+    async function openDishPanelForToday(item, meal, context) {
+        const dish = dishFromItem(item);
+        FoodMenu.openDishPanel({
+            day: today(), meal, dish,
+            replaceCandidates: context.foods.filter(food => food.status === 'normal' && food.id !== dish.foodId),
+            screeningSwapCandidates: context.foods.filter(food => food.status === 'untouched' && food.id !== dish.foodId),
+            onChanged: panelChanged
+        });
+    }
+
+    function openAddForToday(meal, context) {
+        FoodMenu.openAddDialog({
+            day: today(), meal,
+            foods: context.foods.filter(food => food.status === 'normal'),
+            onChanged: panelChanged
+        });
     }
 
     function openPlanDialog() {
@@ -202,53 +292,7 @@
         }
     }
 
-    // 临时调整某食物「今天」的餐次（不改长期计划）
-    function adjustMealDialog(item) {
-        closeDialog();
-        const overridden = Object.prototype.hasOwnProperty.call(lastOverrides, String(item.food_id))
-            || Object.prototype.hasOwnProperty.call(lastOverrides, item.food_id);
-        overlay = node('div', '', 'banner-dialog-overlay');
-        overlay.addEventListener('click', event => {
-            if (event.target === overlay) closeDialog();
-        });
-        const dialog = node('div', '', 'banner-dialog');
-        dialog.setAttribute('role', 'dialog');
-        dialog.setAttribute('aria-modal', 'true');
-        const head = node('div', '', 'banner-dialog-head');
-        head.append(node('h2', `${item.food} · 今天哪顿吃？`, 'banner-dialog-title'));
-        const close = node('button', '✕', 'banner-dialog-close');
-        close.type = 'button';
-        close.setAttribute('aria-label', '关闭');
-        close.addEventListener('click', closeDialog);
-        head.append(close);
-        dialog.append(head);
-        dialog.append(node('p', '只调整今天，不改长期计划。', 'banner-dialog-section'));
-        const group = node('div', '', 'banner-chip-group');
-        const options = [
-            ['breakfast', '🥣 早餐'], ['lunch', '☀️ 午餐'], ['snack', '🍎 下午茶'],
-            ['dinner', '🌙 晚餐'], ['both', '两餐都吃'], ['none', '今天不吃']
-        ];
-        if (overridden) options.push(['default', '恢复计划默认']);
-        options.forEach(([value, label]) => {
-            group.append(chip(label, async () => {
-                try {
-                    await api('screening/menu-override', 'POST', {
-                        date: today(), food_id: item.food_id, meal: value
-                    });
-                    closeDialog();
-                    toast(value === 'none' ? `今天不吃：${item.food}` : `已调整：${item.food}`);
-                    await load();
-                    openPlanDialog(); // 回到餐单弹层继续操作
-                } catch (error) {
-                    toast(`操作失败：${error.message}`);
-                }
-            }, value === item.meal));
-        });
-        dialog.append(group);
-        overlay.append(dialog);
-        document.body.append(overlay);
-        document.body.style.overflow = 'hidden';
-    }
+    // 临时调整餐次已并入 FoodMenu 动作面板（food-menu-actions.js）：换餐/替换/这餐不吃/加菜统一入口
 
     function suggestedAmount(item) {
         return AMOUNTS[Math.min(Math.max(item.position || 1, 1), 4) - 1];
