@@ -498,3 +498,14 @@ body.elder #food-intake-history-message { font-size: 18px; }
 }
 body.elder .food-banner-menu-add { font-size: 16px; }
 body.elder .food-banner-hidden-chip { font-size: 15px; }
+
+/* 餐单列头：标题 + 记一记 */
+.food-banner-menu-title-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+}
+.food-banner-menu-title { margin: 0; }
+.food-banner-record-btn {
+    background: none; border: 1px solid var(--accent-tertiary, #4cc9f0); color: var(--accent-tertiary, #4cc9f0);
+    border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-family: inherit;
+}
+body.elder .food-banner-record-btn { font-size: 14px; padding: 5px 12px; }

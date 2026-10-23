@@ -125,7 +125,15 @@
         const menu = node('div', '', 'food-banner-menu');
         [['breakfast', '🥣 早餐'], ['lunch', '☀️ 午餐'], ['snack', '🍎 下午茶'], ['dinner', '🌙 晚餐']].forEach(([meal, label]) => {
             const column = node('div', '', 'food-banner-menu-col');
-            column.append(node('h4', label, 'food-banner-menu-title'));
+            const title = node('div', '', 'food-banner-menu-title-row');
+            title.append(node('h4', label, 'food-banner-menu-title'));
+            if (window.FoodPrep) {
+                const record = node('button', '记一记', 'food-banner-record-btn');
+                record.type = 'button';
+                record.addEventListener('click', () => FoodPrep.recordSheet(today(), meal));
+                title.append(record);
+            }
+            column.append(title);
             const columnFoods = foods.filter(item => mealsOf(item.meal).includes(meal));
             if (!columnFoods.length) {
                 const add = node('button', '＋ 加一道', 'food-banner-menu-add');
@@ -374,8 +382,8 @@
             toast(`加载食物失败：${error.message}`);
             return;
         }
-        if (plannedFoods().length) {
-            openBatchDialog();
+        if (plannedFoods().length && window.FoodPrep) {
+            FoodPrep.recordSheet(today());
             return;
         }
         openPickerDialog(context);
@@ -453,177 +461,12 @@
         openFoodDialog(item);
     }
 
-    // ---------- 今日计划多选弹窗：勾选要摄入的部分食物，一次批量记录 ----------
-
-    function openBatchDialog() {
-        const foods = plannedFoods();
-        if (!foods.length) return;
-        // 只有一种计划食物时直接用单食物弹窗（含量化/反应的完整记录）
-        if (foods.length === 1) {
-            openFoodDialog(foods[0]);
-            return;
-        }
-        closeDialog();
-        // 计划绑定的餐次里取众数做默认（四餐通用，多选计划按所选餐次计票），没有明显多数时按当前时间猜
-        const mealCounts = {};
-        foods.forEach(item => {
-            mealsOf(item.meal).forEach(meal => {
-                mealCounts[meal] = (mealCounts[meal] || 0) + 1;
-            });
-        });
-        const ranked = Object.entries(mealCounts).sort((a, b) => b[1] - a[1]);
-        const state = {
-            meal: ranked.length && ranked[0][1] > (ranked[1] ? ranked[1][1] : 0)
-                ? ranked[0][0]
-                : suggestedMeal()
-        };
-
-        overlay = node('div', '', 'banner-dialog-overlay');
-        overlay.addEventListener('click', event => {
-            if (event.target === overlay) closeDialog();
-        });
-        const dialog = node('div', '', 'banner-dialog');
-        dialog.setAttribute('role', 'dialog');
-        dialog.setAttribute('aria-modal', 'true');
-
-        const head = node('div', '', 'banner-dialog-head');
-        head.append(node('h2', '今天吃了哪些？', 'banner-dialog-title'));
-        const close = node('button', '✕', 'banner-dialog-close');
-        close.type = 'button';
-        close.setAttribute('aria-label', '关闭');
-        close.addEventListener('click', closeDialog);
-        head.append(close);
-        dialog.append(head);
-
-        const mealGroup = node('div', '', 'banner-chip-group');
-        Object.entries(MEALS).forEach(([value, label]) => {
-            mealGroup.append(chip(label, () => {
-                state.meal = value;
-                [...mealGroup.children].forEach(child => child.classList.remove('active'));
-                [...mealGroup.children][Object.keys(MEALS).indexOf(value)].classList.add('active');
-                refreshRows();
-            }, value === state.meal));
-        });
-        dialog.append(mealGroup);
-
-        const rows = node('div', '', 'banner-meal-rows');
-        dialog.append(rows);
-
-        const save = node('button', '保存已选进食', 'banner-dialog-primary');
-        save.type = 'button';
-        save.addEventListener('click', saveBatch);
-        dialog.append(save);
-        dialog.append(node('p', '勾选这餐吃了哪些计划食物；点 ⚠️ 可记录单个食物的反应。', 'banner-dialog-section'));
-
-        overlay.append(dialog);
-        document.body.append(overlay);
-        document.body.style.overflow = 'hidden';
-
-        async function refreshRows() {
-            let entries = [];
-            try {
-                entries = (await api(`entries?date=${today()}`)).entries;
-            } catch (error) {
-                toast(`加载记录失败：${error.message}`);
-            }
-            rows.replaceChildren();
-            foods.forEach(item => {
-                const entry = entries.find(row => row.food_id === item.food_id && row.meal === state.meal);
-                const chosen = { on: !!entry, amount: entry ? entry.amount : suggestedAmount(item) };
-                const row = node('div', '', 'banner-meal-row');
-                const check = node('button', chosen.on ? '✓' : '', 'banner-check' + (chosen.on ? ' checked' : ''));
-                check.type = 'button';
-                check.setAttribute('aria-pressed', String(chosen.on));
-                check.setAttribute('aria-label', `选择「${item.food}」`);
-                const name = node('button', '', 'banner-meal-name');
-                name.type = 'button';
-                name.append(node('span', item.food));
-                if (item.text) name.append(node('small', item.text));
-                function toggle() {
-                    chosen.on = !chosen.on;
-                    check.classList.toggle('checked', chosen.on);
-                    check.textContent = chosen.on ? '✓' : '';
-                    check.setAttribute('aria-pressed', String(chosen.on));
-                }
-                check.addEventListener('click', toggle);
-                name.addEventListener('click', toggle);
-                const amount = node('select', '', 'banner-amount-select');
-                amount.setAttribute('aria-label', `${item.food} 的量`);
-                AMOUNTS.forEach(value => {
-                    const option = node('option', value);
-                    option.value = value;
-                    amount.append(option);
-                });
-                amount.value = chosen.amount;
-                amount.addEventListener('change', () => { chosen.amount = amount.value; });
-                const react = node('button', '⚠️ 反应', 'banner-react-btn');
-                react.type = 'button';
-                react.setAttribute('aria-label', `记录「${item.food}」的反应`);
-                react.addEventListener('click', event => {
-                    event.stopPropagation();
-                    openFoodDialog(item);
-                });
-                row.append(check, name, amount, react);
-                row._item = item;
-                row._check = check;
-                row._amount = () => amount.value;
-                rows.append(row);
-            });
-            if (!rows.children.length) rows.append(node('p', '今天没有计划食物。', 'banner-dialog-section'));
-        }
-
-        async function saveBatch() {
-            const selected = [...rows.children]
-                .filter(row => row._check?.classList.contains('checked'))
-                .map(row => ({ item: row._item, amount: row._amount() }));
-            if (!selected.length) {
-                toast('请先勾选这餐吃了哪些食物');
-                return;
-            }
-            try {
-                const dateValue = today();
-                const result = await api(`entries?date=${dateValue}`);
-                const selectedIds = selected.map(entry => entry.item.food_id);
-                const plannedNames = selected
-                    .filter(entry => entry.item.kind === 'planned')
-                    .map(entry => entry.item.food);
-                if (plannedNames.length
-                    && !await confirmNoOtherScreening(selectedIds, plannedNames.join('、'))) {
-                    return;
-                }
-                const others = result.entries
-                    .filter(row => row.meal === state.meal && !selectedIds.includes(row.food_id))
-                    .map(row => ({
-                        id: row.id, food_id: row.food_id, amount: row.amount,
-                        rating: row.rating, note: row.note, mode: 'keep'
-                    }));
-                const entries = [...others, ...selected.map(({ item, amount }) => ({
-                    food_id: item.food_id,
-                    amount,
-                    rating: null, note: '',
-                    mode: item.kind === 'planned' ? 'start' : 'keep'
-                }))];
-                await api('meals', 'POST', {
-                    date: dateValue, meal: state.meal,
-                    revision: result.revisions[state.meal], entries
-                });
-                todayContext = null;
-                closeDialog();
-                toast(`已记录${MEALS[state.meal]}：${selected.map(entry => entry.item.food).join('、')}`);
-                window.fetchRecords?.();
-                load();
-            } catch (error) {
-                toast(`保存失败：${error.message}`);
-            }
-        }
-
-        refreshRows();
-    }
+    // 今日计划批量记录已由 FoodPrep.recordSheet（food-prep.js）取代：按餐拨份数，自动折算克数
 
     function openFoodDialog(item) {
         closeDialog();
         const state = {
-            amount: AMOUNTS[Math.min(Math.max(item.position || 1, 1), 4) - 1],
+            amount: item.amount || AMOUNTS[Math.min(Math.max(item.position || 1, 1), 4) - 1],
             rating: null,
             symptoms: new Set(),
             // 默认取计划绑定的餐次；两餐都吃/无计划时按当前时段，但界面显式可选，不静默落餐
@@ -692,7 +535,9 @@
         // 记录进食
         dialog.append(node('h3', '今天吃了吗？', 'banner-dialog-section'));
         const amountGroup = node('div', '', 'banner-chip-group');
-        AMOUNTS.forEach(value => {
+        const amountOptions = [...AMOUNTS, ...(['0.5份','1份','1.5份','2份','2.5份','3份','3.5份','4份'].filter(
+            value => value === state.amount))];
+        amountOptions.forEach(value => {
             const option = chip(value, () => {
                 state.amount = value;
                 [...amountGroup.children].forEach(child => child.classList.remove('active'));
@@ -823,6 +668,8 @@
     });
 
     window.foodQuickRecord = { open: openQuickAdd };
+    // 供 food-prep.js 的按餐记录面板复用：单食物完整记录、归因确认、刷新餐单
+    window.FoodBanner = { openFoodDialog, confirmNoOtherScreening, refresh: load };
     window.addEventListener('pageshow', event => { if (event.persisted) load(); });
     load();
 })();

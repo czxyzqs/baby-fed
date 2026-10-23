@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-intake.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-menu-actions.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-prep.css') }}">
 
 </head>
 <body class="page-index">
@@ -89,6 +90,11 @@
 
         <section class="food-screening-banner" id="food-screening-banner" aria-label="今日辅食计划" hidden>
             <div id="food-screening-banner-body"></div>
+        </section>
+
+        <section id="prep-banner" class="prep-entry" aria-label="今日摄入与备餐" hidden>
+            <button type="button" id="prep-today">今日摄入</button>
+            <button type="button" id="prep-stock">🧊 备餐</button>
         </section>
 
         <!-- Stats Bar -->
@@ -828,6 +834,7 @@
     <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-menu-actions.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-banner.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/food-prep.js') }}"></script>
 <!-- 药品配置弹窗 -->
 <div id="medicine-settings-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1002;justify-content:center;align-items:center;">
   <div style="background:white;border-radius:16px;width:90%;max-width:420px;padding:24px;">

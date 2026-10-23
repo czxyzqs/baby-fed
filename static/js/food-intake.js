@@ -2,6 +2,9 @@
     const element = name => document.getElementById(`food-intake-${name}`);
     const meals = { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐' };
     const amounts = ['一勺尖', '一勺', '两勺', '三勺', '半碗', '一碗'];
+    // 备餐按份记录的量值（与后端 PORTION_AMOUNTS 对齐）；编辑器里作为额外选项呈现
+    const portionAmounts = ['0.5份', '1份', '1.5份', '2份', '2.5份', '3份', '3.5份', '4份'];
+    const allAmounts = [...amounts, ...portionAmounts];
     const ratings = { 喜欢: '😋 喜欢', 一般: '😐 一般', 拒绝: '🥴 拒绝' };
     const statuses = { untouched: '未排敏', screening: '排敏中', normal: '正常', allergic: '过敏' };
     let context = null;
@@ -257,7 +260,8 @@
                 }));
             }
             card.append(node('h3', '进食量（必选）'));
-            card.append(choices('进食量', amounts.map(value => [value, value]), block.amount, value => {
+            const options = [...amounts, ...portionAmounts.filter(value => value === block.amount)];
+            card.append(choices('进食量', options.map(value => [value, value]), block.amount, value => {
                 block.amount = value;
                 block.auto_amount = false;
                 dirty = true;
@@ -347,7 +351,7 @@
     async function save(event) {
         event.preventDefault();
         if (busy || !context || !selectedMeal) return;
-        if (blocks.some(block => !amounts.includes(block.amount))) {
+        if (blocks.some(block => !allAmounts.includes(block.amount))) {
             message('请为每种食物选择进食量。', true);
             return;
         }
