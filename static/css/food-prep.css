@@ -53,16 +53,3 @@ body.elder .fp-row-name { font-size: 18px; }
 body.elder .fp-batch-meta { font-size: 15px; }
 body.elder .fp-stepper .amount-btn { width: 44px; height: 44px; }
 body.elder .fp-stepper-value { font-size: 18px; }
-
-/* 首页横幅：复用 .food-plan-entry 的单行结构 */
-.prep-entry {
-    display: flex; align-items: stretch; gap: 0; width: 100%;
-    background: var(--bg-card, rgba(255, 255, 255, 0.05));
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-    border-radius: 12px; padding: 0; overflow: hidden; cursor: pointer;
-}
-.prep-entry button {
-    width: 100%; background: none; border: none; color: var(--text-primary, #fff);
-    font-size: 14px; font-family: inherit; text-align: left; padding: 11px 12px;
-    cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}

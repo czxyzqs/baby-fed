@@ -111,36 +111,6 @@
         render();
     }
 
-    // ---------- 横幅：今日摄入 + 备餐余量 ----------
-
-    let bannerTimer = null;
-
-    function groupText(group) {
-        if (group.grams) return `${group.emoji} ${group.grams}g`;
-        if (group.portions) return `${group.emoji} ${group.portions}份`;
-        if (group.spoons) return `${group.emoji} ${group.spoons}勺`;
-        return '';
-    }
-
-    async function refreshBanner() {
-        const bar = document.getElementById('prep-banner');
-        if (!bar) return;
-        try {
-            const data = await api('prep/overview');
-            const todayEl = document.getElementById('prep-today');
-            const groups = (data.today?.groups || []).map(groupText).filter(Boolean);
-            // 备餐管理在辅食中心；首页只做余量提醒的只读展示
-            const batches = data.batches || [];
-            const stock = batches.length
-                ? ` · 🧊${batches.map(batch =>
-                    `${batch.low ? '⚠️' : ''}${batch.food_name}${batch.portions_left}份`).join(' ')}` : '';
-            todayEl.textContent = (groups.length ? `今日 ${groups.join(' · ')}` : '记一餐辅食摄入') + stock;
-            bar.hidden = false;
-        } catch (error) {
-            bar.hidden = true;
-        }
-    }
-
     // ---------- 备餐弹窗 ----------
 
     async function open() {
@@ -481,7 +451,6 @@
                 toast(`已记录${MEALS[state.meal].slice(2)}：${selected.length}样`);
                 window.fetchRecords?.();
                 window.FoodBanner?.refresh?.();
-                refreshBanner();
             } catch (error) {
                 toast(`保存失败：${error.message}`);
             }
@@ -515,9 +484,7 @@
 
     // ---------- 启动 ----------
 
-    document.getElementById('prep-today')?.addEventListener('click', () => recordSheet(today()));
     document.querySelector('[data-prep-open]')?.addEventListener('click', open);
-    refreshBanner();
 
-    window.FoodPrep = { open, recordSheet, refreshBanner };
+    window.FoodPrep = { open, recordSheet };
 })();
