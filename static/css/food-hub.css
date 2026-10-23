@@ -69,3 +69,9 @@
 body.elder .food-hub-header h1 { font-size: 38px; }
 body.elder .food-hub-name { font-size: 23px; }
 body.elder .food-hub-desc { font-size: 17px; }
+
+/* 备餐卡片是 button 而非链接：对齐 a 卡片外观 */
+button.food-hub-card {
+    font-family: inherit; cursor: pointer; width: 100%; text-align: left;
+    font-size: inherit; line-height: inherit;
+}

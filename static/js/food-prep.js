@@ -128,13 +128,13 @@
         try {
             const data = await api('prep/overview');
             const todayEl = document.getElementById('prep-today');
-            const stockEl = document.getElementById('prep-stock');
             const groups = (data.today?.groups || []).map(groupText).filter(Boolean);
-            todayEl.textContent = groups.length ? `今日 ${groups.join(' · ')}` : '今日还没记辅食';
+            // 备餐管理在辅食中心；首页只做余量提醒的只读展示
             const batches = data.batches || [];
-            const stock = batches.map(batch =>
-                `${batch.low ? '⚠️' : ''}${batch.food_name}${batch.portions_left}份`).join(' · ');
-            stockEl.textContent = batches.length ? `🧊 ${stock}` : '🧊 去备餐';
+            const stock = batches.length
+                ? ` · 🧊${batches.map(batch =>
+                    `${batch.low ? '⚠️' : ''}${batch.food_name}${batch.portions_left}份`).join(' ')}` : '';
+            todayEl.textContent = (groups.length ? `今日 ${groups.join(' · ')}` : '记一餐辅食摄入') + stock;
             bar.hidden = false;
         } catch (error) {
             bar.hidden = true;
@@ -516,7 +516,7 @@
     // ---------- 启动 ----------
 
     document.getElementById('prep-today')?.addEventListener('click', () => recordSheet(today()));
-    document.getElementById('prep-stock')?.addEventListener('click', open);
+    document.querySelector('[data-prep-open]')?.addEventListener('click', open);
     refreshBanner();
 
     window.FoodPrep = { open, recordSheet, refreshBanner };

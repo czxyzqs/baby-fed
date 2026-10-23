@@ -13,6 +13,8 @@
     </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-hub.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-menu-actions.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-prep.css') }}">
 </head>
 <body>
     <main class="food-hub food-hub-page" aria-labelledby="food-hub-title">
@@ -31,6 +33,11 @@
                 <span class="food-hub-name">辅食库</span>
                 <span class="food-hub-desc">品类与食物池，拍照导入</span>
             </a>
+            <button type="button" class="food-hub-card" data-prep-open>
+                <span class="food-hub-icon" aria-hidden="true">🧊</span>
+                <span class="food-hub-name">备餐</span>
+                <span class="food-hub-desc">分装批次、每份含量与余量</span>
+            </button>
             <a class="food-hub-card" href="/screening">
                 <span class="food-hub-icon" aria-hidden="true">🩺</span>
                 <span class="food-hub-name">排敏看板</span>
@@ -48,5 +55,7 @@
             </a>
         </nav>
     </main>
+    <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/food-prep.js') }}"></script>
 </body>
 </html>

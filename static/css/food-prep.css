@@ -62,9 +62,7 @@ body.elder .fp-stepper-value { font-size: 18px; }
     border-radius: 12px; padding: 0; overflow: hidden; cursor: pointer;
 }
 .prep-entry button {
-    flex: 1; background: none; border: none; color: var(--text-primary, #fff);
+    width: 100%; background: none; border: none; color: var(--text-primary, #fff);
     font-size: 14px; font-family: inherit; text-align: left; padding: 11px 12px;
     cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.prep-entry button + button { border-left: 1px solid var(--border, rgba(255, 255, 255, 0.08)); }
-.prep-entry #prep-stock { flex: 0 0 auto; max-width: 46%; color: var(--text-secondary, rgba(255, 255, 255, 0.75)); }
