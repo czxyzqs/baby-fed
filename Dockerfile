@@ -11,7 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 libgl1 libxcb1 libsm6 libice6 libxext6 \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 142 服务器直连 pypi 常超时，走清华镜像并放宽重试
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
+        --retries 5 --timeout 60 -r requirements.txt
 
 # Copy application
 COPY baby.py .
