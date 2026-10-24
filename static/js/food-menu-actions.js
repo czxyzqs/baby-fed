@@ -399,15 +399,15 @@
             dialog.append(scope.el);
         }
 
-        dialog.append(node('p', '选食物（仅已正常的食物；未排敏的请走排敏队列）：', 'fma-label'));
-        const chosenFood = { food: null };
+        dialog.append(node('p', '选食物（可多选；仅已正常的食物，未排敏的请走排敏队列）：', 'fma-label'));
+        const chosenFoods = new Map();
         const chosen = node('p', '未选择', 'fma-hint');
-        openFoodPickerTo(dialog, config.foods, chosenFood, chosen);
+        openFoodPickerTo(dialog, config.foods, chosenFoods, chosen);
 
         const save = node('button', '加上', 'fma-btn primary');
         save.type = 'button';
-        save.addEventListener('click', () => {
-            if (!chosenFood.food) {
+        save.addEventListener('click', async () => {
+            if (!chosenFoods.size) {
                 toast('请先选择食物');
                 return;
             }
@@ -417,34 +417,41 @@
             }
             try {
                 const meals = MEAL_KEYS.filter(key => picker.chosen.has(key));
+                const mealValue = meals.length === 1 ? meals[0] : meals;
                 const days = lockedDays || scope.days();
-                writeOverride(config.day, chosenFood.food.id, meals.length === 1 ? meals[0] : meals, days)
-                    .then(result => {
-                        closePanel();
-                        config.onChanged?.(result);
-                    })
-                    .catch(error => toast(`操作失败：${error.message}`));
+                save.disabled = true;
+                for (const food of chosenFoods.values()) {
+                    await writeOverride(config.day, food.id, mealValue, days);
+                }
+                closePanel();
+                toast(`已加：${[...chosenFoods.values()].map(food => food.name).join('、')}`);
+                config.onChanged?.();
             } catch (error) {
+                save.disabled = false;
                 toast(`操作失败：${error.message}`);
             }
         });
         dialog.append(save);
     }
 
-    function openFoodPickerTo(dialog, foods, state, label) {
-        // 内嵌在加菜弹窗里的简化选菜区：搜索 + 单选
+    function openFoodPickerTo(dialog, foods, chosenFoods, label) {
+        // 内嵌在加菜弹窗里的选菜区：搜索 + 多选，已选状态跨搜索保持
         const search = node('input', '', 'fma-search');
         search.type = 'search';
         search.placeholder = '搜索食物';
         dialog.append(search);
         const list = node('div', '', 'fma-list');
         dialog.append(list);
-        let chips = [];
+
+        function refreshLabel() {
+            label.textContent = chosenFoods.size
+                ? `已选：${[...chosenFoods.values()].map(food => food.name).join('、')}`
+                : '未选择';
+        }
 
         function render() {
             const query = (search.value || '').trim().toLocaleLowerCase();
             list.replaceChildren();
-            chips = [];
             const matched = foods.filter(food => !query || food.name.toLocaleLowerCase().includes(query));
             if (!matched.length) {
                 list.append(node('p', '没有匹配的食物。', 'fma-hint'));
@@ -452,15 +459,18 @@
             }
             const group = node('div', '', 'fma-chips');
             matched.forEach(food => {
-                const chip = node('button', food.name, 'fma-chip' + (state.food?.id === food.id ? ' active' : ''));
+                const chip = node('button', food.name, 'fma-chip' + (chosenFoods.has(food.id) ? ' active' : ''));
                 chip.type = 'button';
                 chip.addEventListener('click', () => {
-                    state.food = food;
-                    label.textContent = `已选：${food.name}`;
-                    chips.forEach(item => item.classList.remove('active'));
-                    chip.classList.add('active');
+                    if (chosenFoods.has(food.id)) {
+                        chosenFoods.delete(food.id);
+                        chip.classList.remove('active');
+                    } else {
+                        chosenFoods.set(food.id, food);
+                        chip.classList.add('active');
+                    }
+                    refreshLabel();
                 });
-                chips.push(chip);
                 group.append(chip);
             });
             list.append(group);
