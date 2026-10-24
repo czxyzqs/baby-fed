@@ -676,12 +676,15 @@
             const rows = node('div', '', 'planning-meal-rows');
             const inMeal = dishes.filter(dish => dish.meals.includes(meal));
             inMeal.forEach(dish => rows.append(mealRow(dish, meal, editable, coverage)));
-            if (!inMeal.length) {
-                if (editable) {
-                    rows.append(button('＋ 加一道', () => openAddFor(day, meal, coverage ? rangeDays(rangeSel) : 1), 'planning-meal-add'));
-                } else {
-                    rows.append(node('p', '空', 'planning-meal-empty'));
-                }
+            if (editable) {
+                // 加菜入口常驻列底：有菜的列用紧凑小按钮，空列保持完整文案
+                const add = button(inMeal.length ? '＋' : '＋ 加一道',
+                    () => openAddFor(day, meal, coverage ? rangeDays(rangeSel) : 1),
+                    'planning-meal-add' + (inMeal.length ? ' mini' : ''));
+                add.setAttribute('aria-label', `往${label.slice(2).trim()}加一道`);
+                rows.append(add);
+            } else if (!inMeal.length) {
+                rows.append(node('p', '空', 'planning-meal-empty'));
             }
             sec.append(rows);
             wrap.append(sec);

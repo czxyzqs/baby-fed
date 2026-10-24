@@ -135,19 +135,17 @@
             }
             column.append(title);
             const columnFoods = foods.filter(item => mealsOf(item.meal).includes(meal));
-            if (!columnFoods.length) {
-                const add = node('button', '＋ 加一道', 'food-banner-menu-add');
-                add.type = 'button';
-                add.addEventListener('click', async () => {
-                    try {
-                        const context = await getContext();
-                        openAddForToday(meal, context);
-                    } catch (error) {
-                        toast(`加载食物失败：${error.message}`);
-                    }
-                });
-                column.append(add);
-            }
+            const add = node('button', columnFoods.length ? '＋' : '＋ 加一道',
+                'food-banner-menu-add' + (columnFoods.length ? ' mini' : ''));
+            add.type = 'button';
+            add.addEventListener('click', async () => {
+                try {
+                    const context = await getContext();
+                    openAddForToday(meal, context);
+                } catch (error) {
+                    toast(`加载食物失败：${error.message}`);
+                }
+            });
             columnFoods.forEach(item => {
                 // ✓ 只反映「这一列的餐次」今天有没有记录；别餐已吃的提示放 title 里，避免药丸文字挤爆
                 const eatenMeals = item.eaten_meals || [];
@@ -182,6 +180,7 @@
                 pill.append(check, name);
                 column.append(pill);
             });
+            column.append(add);
             menu.append(column);
         });
         wrap.append(menu);

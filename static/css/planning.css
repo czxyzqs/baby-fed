@@ -399,3 +399,4 @@ body.elder .planning-meal-add { font-size: 16px; padding: 9px 16px; }
 body.elder .planning-range-btn { font-size: 17px; padding: 10px 16px; }
 .planning-cell.range-in { background: rgba(77, 163, 255, 0.12); }
 .planning-cell.range-edge { box-shadow: inset 0 0 0 2px var(--accent, #4da3ff); }
+.planning-meal-add.mini { padding: 4px 12px; font-size: 13px; align-self: flex-start; margin-top: 2px; }

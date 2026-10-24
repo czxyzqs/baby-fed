@@ -509,3 +509,4 @@ body.elder .food-banner-hidden-chip { font-size: 15px; }
     border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-family: inherit;
 }
 body.elder .food-banner-record-btn { font-size: 14px; padding: 5px 12px; }
+.food-banner-menu-add.mini { padding: 4px 12px; font-size: 12px; margin: 2px 0 2px; }
