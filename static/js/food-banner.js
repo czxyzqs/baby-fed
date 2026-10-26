@@ -61,12 +61,22 @@
 
     async function load() {
         try {
-            const response = await fetch('/api/screening/banner', { cache: 'no-store' });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || '加载失败');
+            const [bannerFetch, prepFetch] = await Promise.all([
+                fetch('/api/screening/banner', { cache: 'no-store' }),
+                fetch('/api/prep/overview', { cache: 'no-store' }).catch(() => null)
+            ]);
+            const result = await bannerFetch.json();
+            if (!bannerFetch.ok) throw new Error(result.error || '加载失败');
             lastItems = result.items || [];
             lastOverrides = result.overrides || {};
             lastHidden = result.hidden || [];
+            if (prepFetch && prepFetch.ok) {
+                const prep = await prepFetch.json().catch(() => null);
+                batchByFood = {};
+                (prep?.batches || []).forEach(batch => {
+                    if (batch.portions_left > 0) batchByFood[batch.food_id] = batch;
+                });
+            }
             render(lastItems, lastOverrides);
         } catch (error) {
             banner.hidden = true;
@@ -76,6 +86,7 @@
     let lastItems = [];
     let lastOverrides = {};
     let lastHidden = [];
+    let batchByFood = {};   // food_id -> 有余量的备餐批次（✓ 快捷记录对备餐食物默认记 1 份）
     let todayContext = null;
 
     async function getContext() {
@@ -303,6 +314,7 @@
     // 临时调整餐次已并入 FoodMenu 动作面板（food-menu-actions.js）：换餐/替换/这餐不吃/加菜统一入口
 
     function suggestedAmount(item) {
+        if (batchByFood[item.food_id]?.portions_left > 0) return '1份';
         return AMOUNTS[Math.min(Math.max(item.position || 1, 1), 4) - 1];
     }
 
@@ -465,7 +477,7 @@
     function openFoodDialog(item) {
         closeDialog();
         const state = {
-            amount: item.amount || AMOUNTS[Math.min(Math.max(item.position || 1, 1), 4) - 1],
+            amount: item.amount || suggestedAmount(item),
             rating: null,
             symptoms: new Set(),
             // 默认取计划绑定的餐次；两餐都吃/无计划时按当前时段，但界面显式可选，不静默落餐
