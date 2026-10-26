@@ -32,6 +32,16 @@
         return String(value || '').split(',').filter(Boolean);
     }
 
+    // 份数取值：标量=各餐统一；对象（含JSON串）=按餐映射；null/缺键=不指定
+    function portionsFor(value, meal) {
+        if (value == null) return null;
+        if (typeof value === 'string' && value.startsWith('{')) {
+            try { value = JSON.parse(value); } catch (error) { return null; }
+        }
+        if (typeof value === 'object') return value[meal] ?? null;
+        return value;
+    }
+
     let toastTimer = null;
     function toast(text) {
         let box = document.querySelector('.fma-toast');
@@ -328,6 +338,9 @@
                     subScope = scopeSelector({ day: config.day, allowForever: !!dish.planId });
                     area.append(subScope.el);
                 }
+                if (config.meal) {
+                    area.append(node('p', `只改${MEALS[config.meal]}这一餐的份数，其他餐次不变。`, 'fma-hint'));
+                }
                 const save = node('button', '保存', 'fma-btn primary');
                 save.type = 'button';
                 save.addEventListener('click', () => {
@@ -337,7 +350,20 @@
                             return api(`normals/${dish.planId}`, 'PUT', { portions: state.value });
                         }
                         const mealValue = dish.meals.length === 1 ? dish.meals[0] : dish.meals;
-                        return writeOverride(config.day, dish.foodId, mealValue, days, state.value, true);
+                        // 按餐独立：保留其他餐次的现值，只覆盖锚定餐次
+                        let payloadPortions = state.value;
+                        if (config.meal && dish.meals.length > 1) {
+                            const map = {};
+                            dish.meals.forEach(meal => {
+                                const value = meal === config.meal
+                                    ? state.value : portionsFor(dish.plannedPortions, meal);
+                                if (value != null) map[meal] = value;
+                            });
+                            const values = Object.values(map);
+                            payloadPortions = !values.length ? null
+                                : (new Set(values).size === 1 ? values[0] : map);
+                        }
+                        return writeOverride(config.day, dish.foodId, mealValue, days, payloadPortions, true);
                     });
                 });
                 area.append(save);
@@ -546,5 +572,5 @@
         dialog.append(label);
     }
 
-    window.FoodMenu = { MEALS, mealsOf, openDishPanel, openAddDialog, closePanel };
+    window.FoodMenu = { MEALS, mealsOf, portionsFor, openDishPanel, openAddDialog, closePanel };
 })();

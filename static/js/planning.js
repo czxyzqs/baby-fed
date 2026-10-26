@@ -658,6 +658,10 @@
         });
     }
 
+    function config_meal_portion(dish, meal) {
+        return FoodMenu.portionsFor(dish.plannedPortions, meal);
+    }
+
     function mealRow(dish, meal, editable, coverage) {
         const row = node('div', '', 'planning-meal-row');
         const name = button(dish.name, () => editable && openDishPanelFor(dish, meal), 'planning-meal-name');
@@ -666,8 +670,9 @@
         if (dish.kind === 'screening') {
             row.append(node('span', `🧪 第${dish.position}/${dish.observeDays}天`, 'planning-meal-tag'));
         }
-        if (dish.plannedPortions) {
-            row.append(node('span', `${dish.plannedPortions}份`, 'planning-meal-portion'));
+        const mealPortion = config_meal_portion(dish, meal);
+        if (mealPortion) {
+            row.append(node('span', `${mealPortion}份`, 'planning-meal-portion'));
         }
         if (coverage) row.append(node('span', coverage.text(dish), 'planning-meal-cover'));
         if (editable) {

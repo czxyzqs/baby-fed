@@ -378,7 +378,9 @@
                 const stateRow = { value: dish.amount };
                 if (batch) {
                     let portion = portionOf(dish.amount);
-                    if (portion === null) portion = dish.plannedPortions ?? 1;
+                    if (portion === null) {
+                        portion = window.FoodMenu?.portionsFor(dish.plannedPortions, state.meal) ?? 1;
+                    }
                     stateRow.value = `${portion}份`;
                     row.append(stepper(
                         () => portion,

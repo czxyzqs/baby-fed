@@ -342,11 +342,27 @@ class FoodEntryStore(FoodLibraryStore):
                 'WHERE food_id = ? AND date >= ? AND date <= ?', (food_id, tomorrow, horizon)):
             overrides[row['date']] = dict(row)
 
-        def meal_count(value):
+        def meals_of(value):
             parts = str(value or '').split(',')
             if 'all' in parts or 'both' in parts:
                 parts = ['lunch', 'dinner']
-            return len([part for part in parts if part in MEALS])
+            return [part for part in parts if part in MEALS]
+
+        def stored(value):
+            if isinstance(value, str) and value.startswith('{'):
+                try:
+                    return json.loads(value)
+                except (ValueError, TypeError):
+                    return None
+            return value
+
+        def per_meal(portions, meal, fallback):
+            if portions is None:
+                return fallback
+            portions = stored(portions)
+            if isinstance(portions, dict):
+                return portions.get(meal) if portions.get(meal) is not None else fallback
+            return portions
 
         used = 0.0
         days_left = None
@@ -364,17 +380,19 @@ class FoodEntryStore(FoodLibraryStore):
                     end = start + timedelta(days=plan['days'] - 1)
                     if not start <= day_date <= end:
                         continue
-                    portions = plan['portions']
-                    meals = meal_count(plan['meal'])
                     if override is not None:
-                        meals = meal_count(override['meal'])
-                        if override['portions'] is not None:
-                            portions = override['portions']
-                    need += (portions or 0) * meals
+                        today_meals = meals_of(override['meal'])
+                        ov_portions = override['portions']
+                    else:
+                        today_meals = meals_of(plan['meal'])
+                        ov_portions = None
+                    need += sum(per_meal(ov_portions, meal, plan['portions']) or 0
+                                for meal in today_meals)
                     break
                 else:
                     if override is not None and override['portions'] is not None:
-                        need += override['portions'] * meal_count(override['meal'])
+                        need += sum(per_meal(override['portions'], meal, None) or 0
+                                    for meal in meals_of(override['meal']))
             if key == tomorrow:
                 daily = round(need, 1) if need else None
             if used + need > remaining + 1e-9:

@@ -31,12 +31,33 @@ def canonical_meal(value):
 
 
 def parse_portions(value):
-    """规划份数：None/缺省=不指定（记录时不预填）；允许 0.5~4 的半份步进值。"""
+    """规划份数：None/缺省=不指定；数值=各餐统一；字典=按餐独立（键限四餐，值 0.5~4 或 null）。
+    存储侧统一值存 REAL、按餐映射存 JSON 文本（SQLite 动态类型容忍）。"""
     if value is None:
         return None
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            if key not in NORMAL_MEALS:
+                raise FoodLibraryError('按餐份数的键只能是四餐')
+            cleaned[key] = None if item is None else parse_portions(item)
+        values = set(cleaned.values())
+        if len(values) == 1:
+            return next(iter(values))
+        return json.dumps(cleaned, ensure_ascii=False)
     if type(value) not in (int, float) or not 0.5 <= value <= 4:
         raise FoodLibraryError('份数只能是 0.5 到 4 份（半份步进）')
     return round(float(value), 1)
+
+
+def stored_portions(value):
+    """读取侧：DB 里按餐映射存的是 JSON 文本，输出前还原成字典。"""
+    if isinstance(value, str) and value.startswith('{'):
+        try:
+            return json.loads(value)
+        except (ValueError, TypeError):
+            return None
+    return value
 
 
 def parse_meal_selection(value):
@@ -521,7 +542,7 @@ class FoodScreeningStore(FoodLibraryStore):
         portions = {}
         for row in connection.execute(
                 'SELECT date, food_id, portions FROM food_menu_overrides WHERE portions IS NOT NULL'):
-            portions.setdefault(row['date'], {})[str(row['food_id'])] = row['portions']
+            portions.setdefault(row['date'], {})[str(row['food_id'])] = stored_portions(row['portions'])
         return portions
 
     def pack_start(self, connection):
@@ -1172,8 +1193,9 @@ class FoodScreeningStore(FoodLibraryStore):
             def planned_portions(food_id, default_portions):
                 override = overrides.get(food_id)
                 if override is None:
-                    return default_portions
-                return override['portions'] if override['portions'] is not None else default_portions
+                    return stored_portions(default_portions)
+                return stored_portions(override['portions']) if override['portions'] is not None \
+                    else stored_portions(default_portions)
             names = {row['id']: row['name'] for row in connection.execute('SELECT id, name FROM foods')}
             eaten_today_meals = {}
             for eaten_food_id, eaten_meal in connection.execute(
@@ -1255,7 +1277,7 @@ class FoodScreeningStore(FoodLibraryStore):
                 items.append({
                     'kind': 'extra', 'food_id': food_id, 'food': food_row['name'],
                     **eaten_fields(food_id), 'meal': canonical_meal(override['meal']),
-                    'portions': override['portions'], 'text': '',
+                    'portions': stored_portions(override['portions']), 'text': '',
                 })
             tomorrow = add_days(date.fromisoformat(today), 1)
             acked = {
@@ -1362,7 +1384,7 @@ class FoodScreeningStore(FoodLibraryStore):
                     return
                 item['meal'] = canonical_meal(override['meal'])
                 if override['portions'] is not None:
-                    item['portions'] = override['portions']
+                    item['portions'] = stored_portions(override['portions'])
                 items.append(item)
 
             # 进行中的观察：当天窗口内的轮次（预填时按 keep 记录）
@@ -1404,7 +1426,7 @@ class FoodScreeningStore(FoodLibraryStore):
                 (end, end),
             ):
                 push({'food_id': row['food_id'], 'food_name': row['food_name'],
-                      'is_new': False, 'meal': row['meal'], 'portions': row['portions']})
+                      'is_new': False, 'meal': row['meal'], 'portions': stored_portions(row['portions'])})
             # 当日加菜：override 里当天不在任何计划中的食物
             planned_ids = {item['food_id'] for item in items}
             for food_id, override in overrides.items():
@@ -1415,7 +1437,8 @@ class FoodScreeningStore(FoodLibraryStore):
                     continue
                 items.append({'food_id': food_id, 'food_name': food_row['name'],
                               'is_new': False, 'extra': True,
-                              'meal': canonical_meal(override['meal']), 'portions': override['portions']})
+                              'meal': canonical_meal(override['meal']),
+                              'portions': stored_portions(override['portions'])})
             return {'date': end, 'items': items}
 
     # ---------- stats ----------

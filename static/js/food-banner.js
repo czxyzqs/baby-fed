@@ -478,7 +478,12 @@
     function openFoodDialog(item) {
         closeDialog();
         const state = {
-            amount: item.amount || (item.portions ? `${item.portions}份` : suggestedAmount(item)),
+            amount: item.amount
+                || (() => {
+                    const anchored = mealsOf(item.meal)[0];
+                    const planned = window.FoodMenu?.portionsFor(item.portions, anchored);
+                    return planned ? `${planned}份` : suggestedAmount(item);
+                })(),
             rating: null,
             symptoms: new Set(),
             // 默认取计划绑定的餐次；两餐都吃/无计划时按当前时段，但界面显式可选，不静默落餐
