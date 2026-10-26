@@ -206,10 +206,11 @@
 
     // ---------- 写入 ----------
 
-    async function writeOverride(day, foodId, meal, days, portions) {
+    async function writeOverride(day, foodId, meal, days, portions, portionsExplicit = false) {
         const payload = { date: day, food_id: foodId, meal };
         if (days > 1) payload.days = days;
-        if (portions != null) payload.portions = portions;
+        if (portionsExplicit) payload.portions = portions ?? null;
+        else if (portions != null) payload.portions = portions;
         return api('menu-override', 'POST', payload);
     }
 
@@ -300,6 +301,49 @@
                 runWrite(() => writeOverride(config.day, dish.foodId, rest, effectiveDays()));
             });
             actions.append(skipBtn);
+        }
+
+        // 改每餐份数：从此以后直改计划段；这天/到几号写当日覆盖（排敏菜不规划份数）
+        if (dish.kind !== 'screening') {
+            const portionBtn = node('button', '改每餐份数', 'fma-btn');
+            portionBtn.type = 'button';
+            portionBtn.addEventListener('click', () => {
+                const area = node('div', '', 'fma-sub');
+                const state = { value: dish.plannedPortions ?? null };
+                const chips = node('div', '', 'fma-chips');
+                const buildChips = () => {
+                    chips.replaceChildren();
+                    [[null, '不指定'], ...PORTION_KEYS.map(value => [value, `${value}份`])].forEach(([value, label]) => {
+                        const chip = node('button', label, 'fma-chip' + (state.value === value ? ' active' : ''));
+                        chip.type = 'button';
+                        chip.addEventListener('click', () => { state.value = value; buildChips(); });
+                        chips.append(chip);
+                    });
+                };
+                buildChips();
+                area.append(node('p', '每餐份数：', 'fma-label'));
+                area.append(chips);
+                let subScope = null;
+                if (!lockedDays) {
+                    subScope = scopeSelector({ day: config.day, allowForever: !!dish.planId });
+                    area.append(subScope.el);
+                }
+                const save = node('button', '保存', 'fma-btn primary');
+                save.type = 'button';
+                save.addEventListener('click', () => {
+                    runWrite(async () => {
+                        const days = effectiveDays();
+                        if (days === null && dish.planId) {
+                            return api(`normals/${dish.planId}`, 'PUT', { portions: state.value });
+                        }
+                        const mealValue = dish.meals.length === 1 ? dish.meals[0] : dish.meals;
+                        return writeOverride(config.day, dish.foodId, mealValue, days, state.value, true);
+                    });
+                });
+                area.append(save);
+                portionBtn.replaceWith(area);
+            });
+            actions.append(portionBtn);
         }
 
         // 这天不吃
