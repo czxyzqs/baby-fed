@@ -134,45 +134,21 @@
         }
         // 今日餐单：固定四餐格（早/午/下午茶/晚）；点菜名打开菜品动作面板（换餐/替换/不吃/加菜）
         const menu = node('div', '', 'food-banner-menu');
-        [['breakfast', '🥣 早餐'], ['lunch', '☀️ 午餐'], ['snack', '🍎 下午茶'], ['dinner', '🌙 晚餐']].forEach(([meal, label]) => {
-            const column = node('div', '', 'food-banner-menu-col');
-            const title = node('div', '', 'food-banner-menu-title-row');
-            title.append(node('h4', label, 'food-banner-menu-title'));
-            if (window.FoodPrep) {
-                const record = node('button', '记一记', 'food-banner-record-btn');
-                record.type = 'button';
-                record.addEventListener('click', () => FoodPrep.recordSheet(today(), meal));
-                title.append(record);
-            }
-            column.append(title);
+        const labels = { breakfast: '🥣 早餐', lunch: '☀️ 午餐', snack: '🍎 下午茶', dinner: '🌙 晚餐' };
+        Object.entries(labels).forEach(([meal, label]) => {
             const columnFoods = foods.filter(item => mealsOf(item.meal).includes(meal));
-            const add = node('button', columnFoods.length ? '＋' : '＋ 加一道',
-                'food-banner-menu-add' + (columnFoods.length ? ' mini' : ''));
-            add.type = 'button';
-            add.addEventListener('click', async () => {
-                try {
-                    const context = await getContext();
-                    openAddForToday(meal, context);
-                } catch (error) {
-                    toast(`加载食物失败：${error.message}`);
-                }
-            });
+            // 纯预览：没有规划的餐次整列不展示
+            if (!columnFoods.length) return;
+            const column = node('div', '', 'food-banner-menu-col');
+            column.append(node('h4', label, 'food-banner-menu-title'));
             columnFoods.forEach(item => {
-                // ✓ 只反映「这一列的餐次」今天有没有记录；别餐已吃的提示放 title 里，避免药丸文字挤爆
+                // ✓ 只展示「这一列的餐次」是否已记录，预览不可点
                 const eatenMeals = item.eaten_meals || [];
                 const eaten = eatenMeals.includes(meal);
                 const elsewhere = eatenMeals.filter(other => other !== meal);
                 const pill = node('span', '', 'food-banner-pill' + (eaten ? ' eaten' : ''));
-                const check = node('button', eaten ? '✓' : '', 'banner-check' + (eaten ? ' checked' : ''));
-                check.type = 'button';
-                check.setAttribute('aria-pressed', String(eaten));
-                check.setAttribute('aria-label', `快速记录「${item.food}」${MEALS[meal]}${eaten ? '已吃（点按取消）' : '吃了'}`);
-                check.addEventListener('click', event => {
-                    event.stopPropagation();
-                    toggleEaten(item, meal);
-                });
-                const name = node('button', '', 'food-banner-pill-name');
-                name.type = 'button';
+                const check = node('span', eaten ? '✓' : '', 'banner-check' + (eaten ? ' checked' : ''));
+                const name = node('span', '', 'food-banner-pill-name');
                 name.append(node('span', item.food));
                 if (item.kind === 'screening' || item.kind === 'planned') {
                     name.append(node('small', `🧪 ${item.text || ''}`.trim()));
@@ -180,44 +156,24 @@
                 if (elsewhere.length) {
                     name.title = `今天已在${elsewhere.map(other => MEALS[other]).join('、')}吃过`;
                 }
-                name.addEventListener('click', async () => {
-                    try {
-                        const context = await getContext();
-                        openDishPanelForToday(item, meal, context);
-                    } catch (error) {
-                        toast(`加载食物失败：${error.message}`);
-                    }
-                });
                 pill.append(check, name);
                 column.append(pill);
             });
-            column.append(add);
             menu.append(column);
         });
+        if (!menu.children.length) return wrap;
         wrap.append(menu);
-        wrap.append(node('p', '点菜名可换餐/替换/这餐不吃；✓ 记入所在列的餐次。', 'food-banner-menu-hint'));
+        wrap.append(node('p', '本弹层只做计划预览；点横幅右侧「记」记录这一餐，调整计划请到排期页。', 'food-banner-menu-hint'));
         appendHiddenRow(wrap);
         return wrap;
     }
 
-    // 「今天不吃」的食物：底部提供一键恢复（清除当日覆盖）
+    // 「今天不吃」的食物：底部只读展示（恢复入口在排期页）
     function appendHiddenRow(wrap) {
         if (!lastHidden.length) return;
         const row = node('div', '', 'food-banner-hidden-row');
-        row.append(node('span', '今天不吃：', 'food-banner-hidden-label'));
-        lastHidden.forEach(item => {
-            const chipNode = node('button', `${item.food} ↺`, 'food-banner-hidden-chip');
-            chipNode.type = 'button';
-            chipNode.addEventListener('click', async () => {
-                try {
-                    await api('screening/menu-override', 'POST', { date: today(), food_id: item.food_id, meal: 'default' });
-                    await load();
-                } catch (error) {
-                    toast(`操作失败：${error.message}`);
-                }
-            });
-            row.append(chipNode);
-        });
+        const names = [...new Set(lastHidden.map(item => item.food))];
+        row.append(node('span', `今天不吃：${names.join('、')}`, 'food-banner-hidden-label'));
         wrap.append(row);
     }
 
@@ -298,13 +254,22 @@
             return;
         }
         banner.hidden = false;
-        // 首页只留一条单行入口，样式对齐补剂横幅；点开看完整餐单
-        const entry = node('button', '', 'food-plan-entry');
-        entry.type = 'button';
-        entry.append(node('span', '🥣', 'food-plan-entry-icon'));
-        entry.append(node('div', '今日辅食计划', 'food-plan-entry-title'));
-        entry.append(node('span', '›', 'food-plan-entry-arrow'));
-        entry.addEventListener('click', openPlanDialog);
+        // 单行入口双热区：主体打开计划预览，右侧「记」直达记录面板
+        const entry = node('div', '', 'food-plan-entry');
+        const preview = node('button', '', 'food-plan-entry-main');
+        preview.type = 'button';
+        preview.append(node('span', '🥣', 'food-plan-entry-icon'));
+        preview.append(node('div', '今日辅食计划', 'food-plan-entry-title'));
+        preview.append(node('span', '›', 'food-plan-entry-arrow'));
+        preview.addEventListener('click', openPlanDialog);
+        entry.append(preview);
+        const record = node('button', '记', 'food-plan-entry-record');
+        record.type = 'button';
+        record.setAttribute('aria-label', '记一餐辅食');
+        record.addEventListener('click', () => {
+            if (window.FoodPrep) FoodPrep.recordSheet(today());
+        });
+        entry.append(record);
         body.append(entry);
         // ✓ 勾选等操作会触发重渲染；餐单弹层开着时就地刷新内容
         if (overlay?.classList.contains('food-plan-overlay')) {
