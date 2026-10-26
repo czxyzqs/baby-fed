@@ -280,6 +280,7 @@
 
     function suggestedAmount(item) {
         if (batchByFood[item.food_id]?.portions_left > 0) return '1份';
+        if (item.gram_default != null && !batchByFood[item.food_id]) return `${item.gram_default}g`;
         return AMOUNTS[Math.min(Math.max(item.position || 1, 1), 4) - 1];
     }
 
@@ -517,9 +518,15 @@
         dialog.append(node('h3', '今天吃了吗？', 'banner-dialog-section'));
         const amountGroup = node('div', '', 'banner-chip-group');
         const portionValues = ['0.5份','1份','1.5份','2份','2.5份','3份','3.5份','4份'];
-        // 备餐过的食物按份记（自动扣库存折算克数），其余保持勺/碗档位
+        // 备餐过的按份（扣库存折算克数）、干粉主食按克，其余勺/碗档位
+        const gramChips = item.gram_default != null && !batchByFood[item.food_id]
+            ? [...new Set([4, 5, 6, 8, 10, 12, 15, 20, parseInt(state.amount) || item.gram_default])]
+                .sort((a, b) => a - b).map(value => `${value}g`)
+            : [];
         const amountOptions = batchByFood[item.food_id]?.portions_left > 0
-            ? portionValues : [...AMOUNTS, ...portionValues.filter(value => value === state.amount)];
+            ? portionValues
+            : (gramChips.length ? gramChips
+                : [...AMOUNTS, ...portionValues.filter(value => value === state.amount)]);
         amountOptions.forEach(value => {
             const option = chip(value, () => {
                 state.amount = value;

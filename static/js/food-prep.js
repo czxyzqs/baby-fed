@@ -47,6 +47,10 @@
         return typeof amount === 'string' && amount.endsWith('份') ? Number(amount.slice(0, -1)) : null;
     }
 
+    function gramOf(amount) {
+        return typeof amount === 'string' && amount.endsWith('g') ? Number(amount.slice(0, -1)) : null;
+    }
+
     // ---------- 弹层骨架（复用 .fma-* 样式） ----------
 
     let overlay = null;
@@ -315,6 +319,7 @@
                     position: item.position, entryId: entry?.id,
                     amount: entry ? entry.amount : null,
                     plannedPortions: item.portions ?? null,
+                    gramDefault: item.gram_default ?? null,
                     mode: item.kind === 'planned' ? 'start' : 'keep',
                     newItem: item.kind === 'planned'
                 });
@@ -386,6 +391,15 @@
                         () => portion,
                         value => { portion = value; stateRow.value = `${value}份`; },
                         0, 4, 0.5, value => value ? `${value}份` : '不吃'
+                    ));
+                } else if (dish.gramDefault != null) {
+                    // 干粉主食按克直记：默认 6g，克数直接入克数账本
+                    let gram = gramOf(dish.amount) ?? dish.gramDefault;
+                    stateRow.value = `${gram}g`;
+                    row.append(stepper(
+                        () => gram,
+                        value => { gram = value; stateRow.value = `${value}g`; },
+                        2, 30, 1, value => `${value}g`
                     ));
                 } else {
                     const select = node('select', '', 'fma-scope-date');

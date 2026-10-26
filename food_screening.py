@@ -1197,6 +1197,10 @@ class FoodScreeningStore(FoodLibraryStore):
                 return stored_portions(override['portions']) if override['portions'] is not None \
                     else stored_portions(default_portions)
             names = {row['id']: row['name'] for row in connection.execute('SELECT id, name FROM foods')}
+            # 干粉主食（谷薯类）按克直记：默认 6g，有备餐批次时前端仍优先按份
+            gram_foods = {row['id'] for row in connection.execute(
+                '''SELECT f.id FROM foods f JOIN categories c ON c.id = f.category_id
+                   WHERE c.name = '谷薯类' ''')}
             eaten_today_meals = {}
             for eaten_food_id, eaten_meal in connection.execute(
                     'SELECT DISTINCT food_id, meal FROM food_entries WHERE date = ?', (today,)):
@@ -1262,6 +1266,7 @@ class FoodScreeningStore(FoodLibraryStore):
                     items.append({
                         'kind': 'normal', 'food_id': row['food_id'], 'food': row['food_name'],
                         'plan_id': row['id'], 'portions': planned_portions(row['food_id'], row['portions']),
+                        'gram_default': 6 if row['food_id'] in gram_foods else None,
                         **eaten_fields(row['food_id']), 'meal': meal, 'text': '',
                     })
                 else:
@@ -1277,7 +1282,8 @@ class FoodScreeningStore(FoodLibraryStore):
                 items.append({
                     'kind': 'extra', 'food_id': food_id, 'food': food_row['name'],
                     **eaten_fields(food_id), 'meal': canonical_meal(override['meal']),
-                    'portions': stored_portions(override['portions']), 'text': '',
+                    'portions': stored_portions(override['portions']),
+                    'gram_default': 6 if food_id in gram_foods else None, 'text': '',
                 })
             tomorrow = add_days(date.fromisoformat(today), 1)
             acked = {
@@ -1372,6 +1378,10 @@ class FoodScreeningStore(FoodLibraryStore):
             rounds = self.latest_round_map(connection)
             overrides = self.menu_overrides_in(connection, end)
             names = {row['id']: row['name'] for row in connection.execute('SELECT id, name FROM foods')}
+            # 干粉主食（谷薯类）按克直记：默认 6g，有备餐批次时前端仍优先按份
+            gram_foods = {row['id'] for row in connection.execute(
+                '''SELECT f.id FROM foods f JOIN categories c ON c.id = f.category_id
+                   WHERE c.name = '谷薯类' ''')}
             items = []
 
             def push(item):

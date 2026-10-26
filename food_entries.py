@@ -26,6 +26,17 @@ SPOON_EQUIV = {'一勺尖': 0.5, '一勺': 1, '两勺': 2, '三勺': 3, '半碗'
 CN_TZ = timezone(timedelta(hours=8))
 
 
+def gram_value(amount):
+    """'6g' → 6；克数量值（干粉主食按克直记），1~99 的整数克。"""
+    if not isinstance(amount, str) or not amount.endswith('g'):
+        return None
+    try:
+        value = int(amount[:-1])
+    except ValueError:
+        return None
+    return value if 1 <= value <= 99 else None
+
+
 def portion_value(amount):
     """'1.5份' → 1.5；非份量返回 None。"""
     if not isinstance(amount, str) or not amount.endswith('份'):
@@ -142,7 +153,7 @@ class FoodEntryStore(FoodLibraryStore):
                 if type(entry_id) is not int or entry_id <= 0 or entry_id in entry_ids:
                     raise FoodLibraryError('记录编号无效或重复')
                 entry_ids.add(entry_id)
-            if entry.get('amount') not in ALL_AMOUNTS:
+            if entry.get('amount') not in ALL_AMOUNTS and gram_value(entry.get('amount')) is None:
                 raise FoodLibraryError('请为每种食物选择进食量')
             if entry.get('rating') not in (None, '', *RATINGS):
                 raise FoodLibraryError('接受度只能是喜欢、一般或拒绝')
@@ -208,7 +219,8 @@ class FoodEntryStore(FoodLibraryStore):
                     grams, used = self.deduct_portions(connection, entry['food_id'], portion)
                     deduction = json.dumps(used, ensure_ascii=False) if used else None
                 else:
-                    grams, deduction = None, None
+                    gram = gram_value(entry['amount'])
+                    grams, deduction = (float(gram), None) if gram is not None else (None, None)
                 prepared.append((
                     old['id'] if old else None, selected_date, meal, entry['food_id'],
                     old['food_name'] if unchanged_food else food['name'], round_id,
@@ -295,7 +307,10 @@ class FoodEntryStore(FoodLibraryStore):
             if row['food_name'] not in group['foods']:
                 group['foods'].append(row['food_name'])
             portion = portion_value(row['amount'])
-            if portion is not None:
+            gram = gram_value(row['amount'])
+            if gram is not None:
+                group['grams'] += gram
+            elif portion is not None:
                 if row['grams']:
                     group['grams'] += row['grams']
                 else:
