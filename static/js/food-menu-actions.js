@@ -7,6 +7,7 @@
 
     const MEALS = { breakfast: '🥣 早餐', lunch: '☀️ 午餐', snack: '🍎 下午茶', dinner: '🌙 晚餐' };
     const MEAL_KEYS = Object.keys(MEALS);
+    const PORTION_KEYS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
 
     function node(tag, text, className = '') {
         const result = document.createElement(tag);
@@ -205,9 +206,10 @@
 
     // ---------- 写入 ----------
 
-    async function writeOverride(day, foodId, meal, days) {
+    async function writeOverride(day, foodId, meal, days, portions) {
         const payload = { date: day, food_id: foodId, meal };
         if (days > 1) payload.days = days;
+        if (portions != null) payload.portions = portions;
         return api('menu-override', 'POST', payload);
     }
 
@@ -393,6 +395,25 @@
         const picker = mealPicker(config.meal ? [config.meal] : ['lunch']);
         dialog.append(picker.el);
 
+        dialog.append(node('p', '每餐份数：', 'fma-label'));
+        const portionsState = { value: 1 };
+        const portionsWrap = node('div', '', 'fma-chips');
+        const buildPortionsChips = () => {
+            portionsWrap.replaceChildren();
+            [['', '不指定'], ...PORTION_KEYS.map(value => [value, `${value}份`])].forEach(([value, label]) => {
+                const active = (portionsState.value ?? '') === value;
+                const chip = node('button', label, 'fma-chip' + (active ? ' active' : ''));
+                chip.type = 'button';
+                chip.addEventListener('click', () => {
+                    portionsState.value = value === '' ? null : Number(value);
+                    buildPortionsChips();
+                });
+                portionsWrap.append(chip);
+            });
+        };
+        buildPortionsChips();
+        dialog.append(portionsWrap);
+
         let scope = null;
         if (!lockedDays) {
             scope = scopeSelector({ day: config.day, allowForever: false });
@@ -421,7 +442,7 @@
                 const days = lockedDays || scope.days();
                 save.disabled = true;
                 for (const food of chosenFoods.values()) {
-                    await writeOverride(config.day, food.id, mealValue, days);
+                    await writeOverride(config.day, food.id, mealValue, days, portionsState.value);
                 }
                 closePanel();
                 toast(`已加：${[...chosenFoods.values()].map(food => food.name).join('、')}`);

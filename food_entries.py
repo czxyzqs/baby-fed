@@ -317,14 +317,72 @@ class FoodEntryStore(FoodLibraryStore):
             WHERE b.portions_left > 0
             ORDER BY b.id DESC
         '''):
+            daily, days_left = self._forecast_food(connection, row['food_id'], row['portions_left'])
             batches.append({
                 'id': row['id'], 'food_id': row['food_id'], 'food_name': row['food_name'],
                 'category_name': row['category_name'], 'emoji': row['category_emoji'] or '🧊',
                 'portions_left': row['portions_left'], 'portions_total': row['portions_total'],
                 'grams_per_portion': row['grams_per_portion'], 'low': row['portions_left'] <= 1,
+                'daily': daily, 'days_left': days_left,
             })
         return {'date': selected_date, 'today': {'groups': [groups[key] for key in MACRO_GROUPS if key in groups]},
                 'batches': batches}
+
+    def _forecast_food(self, connection, food_id, remaining):
+        """按计划从明天起逐日累计需求，返回 (明日计划份数, 余量够吃的整天数)。
+        days_left=None 表示未来14天都够；daily=None 表示计划里没排这个食物。"""
+        tomorrow = (datetime.now(CN_TZ).date() + timedelta(days=1)).isoformat()
+        horizon = (datetime.now(CN_TZ).date() + timedelta(days=14)).isoformat()
+        plans = [dict(row) for row in connection.execute(
+            'SELECT start_date, days, meal, portions FROM food_normal_plans '
+            'WHERE food_id = ? AND portions IS NOT NULL AND start_date <= ?', (food_id, horizon))]
+        overrides = {}
+        for row in connection.execute(
+                'SELECT date, meal, portions FROM food_menu_overrides '
+                'WHERE food_id = ? AND date >= ? AND date <= ?', (food_id, tomorrow, horizon)):
+            overrides[row['date']] = dict(row)
+
+        def meal_count(value):
+            parts = str(value or '').split(',')
+            if 'all' in parts or 'both' in parts:
+                parts = ['lunch', 'dinner']
+            return len([part for part in parts if part in MEALS])
+
+        used = 0.0
+        days_left = None
+        daily = None
+        day_date = date.fromisoformat(tomorrow)
+        while day_date.isoformat() <= horizon:
+            key = day_date.isoformat()
+            need = 0.0
+            override = overrides.get(key)
+            if override is not None and override['meal'] == 'none':
+                need = 0.0   # 这天不吃：当天计划被覆盖掉
+            else:
+                for plan in plans:
+                    start = date.fromisoformat(plan['start_date'])
+                    end = start + timedelta(days=plan['days'] - 1)
+                    if not start <= day_date <= end:
+                        continue
+                    portions = plan['portions']
+                    meals = meal_count(plan['meal'])
+                    if override is not None:
+                        meals = meal_count(override['meal'])
+                        if override['portions'] is not None:
+                            portions = override['portions']
+                    need += (portions or 0) * meals
+                    break
+                else:
+                    if override is not None and override['portions'] is not None:
+                        need += override['portions'] * meal_count(override['meal'])
+            if key == tomorrow:
+                daily = round(need, 1) if need else None
+            if used + need > remaining + 1e-9:
+                days_left = (day_date - date.fromisoformat(tomorrow)).days
+                break
+            used += need
+            day_date += timedelta(days=1)
+        return daily, days_left
 
     def prep_overview(self, selected_date):
         selected_date = intake_date(selected_date)

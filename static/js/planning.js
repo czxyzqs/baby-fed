@@ -561,7 +561,8 @@
                 dish = {
                     foodId: entry.plan.food_id, name: foodName(entry.plan.food_id),
                     kind: 'normal', planId: entry.plan.id,
-                    meals: FoodMenu.mealsOf(entry.plan.meal)
+                    meals: FoodMenu.mealsOf(entry.plan.meal),
+                    plannedPortions: entry.plan.portions ?? null
                 };
             }
             if (!dish || seen.has(dish.foodId)) return;
@@ -574,6 +575,8 @@
             if (override) {
                 dish.meals = FoodMenu.mealsOf(override);
                 dish.hasOverride = true;
+                const overridePortions = schedule.override_portions?.[day]?.[String(dish.foodId)];
+                if (overridePortions != null) dish.plannedPortions = overridePortions;
             }
             dishes.push(dish);
         });
@@ -583,7 +586,11 @@
             if (seen.has(foodId) || meal === 'none') return;
             const name = foodName(foodId);
             if (name === '?') return;
-            dishes.push({ foodId, name, kind: 'extra', meals: FoodMenu.mealsOf(meal), hasOverride: true });
+            const extraPortions = schedule.override_portions?.[day]?.[String(foodId)];
+            dishes.push({
+                foodId, name, kind: 'extra', meals: FoodMenu.mealsOf(meal), hasOverride: true,
+                plannedPortions: extraPortions ?? null
+            });
         });
         return { dishes, hidden };
     }
@@ -658,6 +665,9 @@
         row.append(name);
         if (dish.kind === 'screening') {
             row.append(node('span', `🧪 第${dish.position}/${dish.observeDays}天`, 'planning-meal-tag'));
+        }
+        if (dish.plannedPortions) {
+            row.append(node('span', `${dish.plannedPortions}份`, 'planning-meal-portion'));
         }
         if (coverage) row.append(node('span', coverage.text(dish), 'planning-meal-cover'));
         if (editable) {
@@ -1466,6 +1476,22 @@
         const chosenDays = { days: 1 };
         daysLabel.append(daysStepper(chosenDays, 1, 14, days => `连续${days}天`));
         body.append(daysLabel);
+        const portionsWrap = node('div', '', 'planning-chip-group');
+        const portionsState = { value: 1 };
+        const buildPortionsChips = () => {
+            portionsWrap.replaceChildren();
+            [['', '不指定'], ...[0.5, 1, 1.5, 2, 2.5, 3].map(value => [value, `${value}份`])].forEach(([value, label]) => {
+                const chip = button(label, () => {
+                    portionsState.value = value === '' ? null : Number(value);
+                    buildPortionsChips();
+                }, 'planning-chip' + ((portionsState.value ?? '') === value ? ' active' : ''));
+                portionsWrap.append(chip);
+            });
+        };
+        buildPortionsChips();
+        const portionsLabel = node('label', '每餐份数（记录时预填）');
+        portionsLabel.append(portionsWrap);
+        body.append(portionsLabel);
         const mealLabel = node('label', '餐次（可多选）');
         const mealGroup = node('div', '', 'planning-chip-group');
         const chosenMeals = new Set(['lunch', 'dinner']);
@@ -1496,7 +1522,8 @@
             }
             try {
                 const result = await api('normals', 'POST', {
-                    food_ids: [...chosen], start_date: dateStr, days: chosenDays.days, meal: [...chosenMeals]
+                    food_ids: [...chosen], start_date: dateStr, days: chosenDays.days,
+                    meal: [...chosenMeals], portions: portionsState.value
                 });
                 applySchedule(result);
                 closeDialog();

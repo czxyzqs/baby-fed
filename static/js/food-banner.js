@@ -242,6 +242,7 @@
                 || Object.prototype.hasOwnProperty.call(lastOverrides, item.food_id),
             position: item.position, observeDays: item.observe_days,
             planId: item.plan_id, blockId: item.block_id,
+            plannedPortions: item.portions ?? null,
             screeningReplaceable: item.kind === 'planned' && item.position === 1
         };
     }
@@ -477,7 +478,7 @@
     function openFoodDialog(item) {
         closeDialog();
         const state = {
-            amount: item.amount || suggestedAmount(item),
+            amount: item.amount || (item.portions ? `${item.portions}份` : suggestedAmount(item)),
             rating: null,
             symptoms: new Set(),
             // 默认取计划绑定的餐次；两餐都吃/无计划时按当前时段，但界面显式可选，不静默落餐
@@ -546,8 +547,10 @@
         // 记录进食
         dialog.append(node('h3', '今天吃了吗？', 'banner-dialog-section'));
         const amountGroup = node('div', '', 'banner-chip-group');
-        const amountOptions = [...AMOUNTS, ...(['0.5份','1份','1.5份','2份','2.5份','3份','3.5份','4份'].filter(
-            value => value === state.amount))];
+        const portionValues = ['0.5份','1份','1.5份','2份','2.5份','3份','3.5份','4份'];
+        // 备餐过的食物按份记（自动扣库存折算克数），其余保持勺/碗档位
+        const amountOptions = batchByFood[item.food_id]?.portions_left > 0
+            ? portionValues : [...AMOUNTS, ...portionValues.filter(value => value === state.amount)];
         amountOptions.forEach(value => {
             const option = chip(value, () => {
                 state.amount = value;

@@ -400,3 +400,9 @@ body.elder .planning-range-btn { font-size: 17px; padding: 10px 16px; }
 .planning-cell.range-in { background: rgba(77, 163, 255, 0.12); }
 .planning-cell.range-edge { box-shadow: inset 0 0 0 2px var(--accent, #4da3ff); }
 .planning-meal-add.mini { padding: 4px 12px; font-size: 13px; align-self: flex-start; margin-top: 2px; }
+.planning-meal-portion {
+    font-size: 12px; color: var(--text-secondary, #8a94a3);
+    background: var(--card-bg, rgba(255, 255, 255, 0.06));
+    padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+}
+body.elder .planning-meal-portion { font-size: 14px; }

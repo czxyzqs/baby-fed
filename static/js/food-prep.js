@@ -215,7 +215,12 @@
         const meta = batch.grams_per_portion
             ? `剩${batch.portions_left}/${batch.portions_total}份 · ${batch.grams_per_portion}g/份`
             : `剩${batch.portions_left}/${batch.portions_total}份`;
-        row.append(node('span', (batch.low ? '⚠️ ' : '') + meta, 'fp-batch-meta'));
+        const forecast = batch.daily
+            ? ` · 计划每天${batch.daily}份`
+                + (batch.days_left == null ? '' : ` · 够吃${batch.days_left}天`)
+            : '';
+        const warn = batch.days_left != null && batch.days_left <= 1 ? '⚠️ ' : (batch.low ? '⚠️ ' : '');
+        row.append(node('span', warn + meta + forecast, 'fp-batch-meta'));
         const fix = node('button', '修正', 'fma-btn');
         fix.type = 'button';
         fix.addEventListener('click', () => {
@@ -309,6 +314,7 @@
                     tag: (item.kind === 'screening' || item.kind === 'planned') ? `🧪 ${item.text}` : '',
                     position: item.position, entryId: entry?.id,
                     amount: entry ? entry.amount : null,
+                    plannedPortions: item.portions ?? null,
                     mode: item.kind === 'planned' ? 'start' : 'keep',
                     newItem: item.kind === 'planned'
                 });
@@ -372,7 +378,7 @@
                 const stateRow = { value: dish.amount };
                 if (batch) {
                     let portion = portionOf(dish.amount);
-                    if (portion === null) portion = 1;
+                    if (portion === null) portion = dish.plannedPortions ?? 1;
                     stateRow.value = `${portion}份`;
                     row.append(stepper(
                         () => portion,
