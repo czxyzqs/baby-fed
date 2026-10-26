@@ -147,7 +147,6 @@
                 const eaten = eatenMeals.includes(meal);
                 const elsewhere = eatenMeals.filter(other => other !== meal);
                 const pill = node('span', '', 'food-banner-pill' + (eaten ? ' eaten' : ''));
-                const check = node('span', eaten ? '✓' : '', 'banner-check' + (eaten ? ' checked' : ''));
                 const name = node('span', '', 'food-banner-pill-name');
                 name.append(node('span', item.food));
                 if (item.kind === 'screening' || item.kind === 'planned') {
@@ -156,7 +155,7 @@
                 if (elsewhere.length) {
                     name.title = `今天已在${elsewhere.map(other => MEALS[other]).join('、')}吃过`;
                 }
-                pill.append(check, name);
+                pill.append(name);
                 column.append(pill);
             });
             menu.append(column);
