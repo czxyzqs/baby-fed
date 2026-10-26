@@ -198,6 +198,7 @@
             position: item.position, observeDays: item.observe_days,
             planId: item.plan_id, blockId: item.block_id,
             plannedPortions: item.portions ?? null,
+            gramFood: item.gram_default != null && !batchByFood[item.food_id],
             screeningReplaceable: item.kind === 'planned' && item.position === 1
         };
     }

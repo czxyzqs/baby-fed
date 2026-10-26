@@ -45,8 +45,8 @@ def parse_portions(value):
         if len(values) == 1:
             return next(iter(values))
         return json.dumps(cleaned, ensure_ascii=False)
-    if type(value) not in (int, float) or not 0.5 <= value <= 4:
-        raise FoodLibraryError('份数只能是 0.5 到 4 份（半份步进）')
+    if type(value) not in (int, float) or not 0.5 <= value <= 30:
+        raise FoodLibraryError('份数/克数只能是 0.5 到 30')
     return round(float(value), 1)
 
 
@@ -530,6 +530,13 @@ class FoodScreeningStore(FoodLibraryStore):
             # 临时餐次调整：{日期: {食物id: 餐次}}，供排期页当天详情展示与修改；份数为平行映射
             'overrides': self.all_overrides_in(connection),
             'override_portions': self.all_override_portions_in(connection),
+            # 克模式食物：谷薯类且当前没有备餐批次（计划值单位=克）
+            'gram_foods': [row['id'] for row in connection.execute('''
+                SELECT f.id FROM foods f
+                JOIN categories c ON c.id = f.category_id
+                WHERE c.name = '谷薯类'
+                  AND f.id NOT IN (SELECT food_id FROM food_prep_batches WHERE portions_left > 0)
+            ''')],
         }
 
     def all_overrides_in(self, connection):

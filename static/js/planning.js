@@ -562,7 +562,8 @@
                     foodId: entry.plan.food_id, name: foodName(entry.plan.food_id),
                     kind: 'normal', planId: entry.plan.id,
                     meals: FoodMenu.mealsOf(entry.plan.meal),
-                    plannedPortions: entry.plan.portions ?? null
+                    plannedPortions: entry.plan.portions ?? null,
+                    gramFood: (schedule.gram_foods || []).includes(entry.plan.food_id)
                 };
             }
             if (!dish || seen.has(dish.foodId)) return;
@@ -672,7 +673,7 @@
         }
         const mealPortion = config_meal_portion(dish, meal);
         if (mealPortion) {
-            row.append(node('span', `${mealPortion}份`, 'planning-meal-portion'));
+            row.append(node('span', `${mealPortion}${dish.gramFood ? 'g' : '份'}`, 'planning-meal-portion'));
         }
         if (coverage) row.append(node('span', coverage.text(dish), 'planning-meal-cover'));
         if (editable) {
@@ -1485,7 +1486,8 @@
         const portionsState = { value: 1 };
         const buildPortionsChips = () => {
             portionsWrap.replaceChildren();
-            [['', '不指定'], ...[0.5, 1, 1.5, 2, 2.5, 3].map(value => [value, `${value}份`])].forEach(([value, label]) => {
+            [['', '不指定'], ...[0.5, 1, 1.5, 2, 2.5, 3].map(value => [value, `${value}份`]),
+             ...[4, 5, 6, 8, 10, 15, 20].map(value => [value, `${value}g`])].forEach(([value, label]) => {
                 const chip = button(label, () => {
                     portionsState.value = value === '' ? null : Number(value);
                     buildPortionsChips();
@@ -1494,7 +1496,7 @@
             });
         };
         buildPortionsChips();
-        const portionsLabel = node('label', '每餐份数（记录时预填）');
+        const portionsLabel = node('label', '每餐份数/克数（谷薯类选克；记录时预填）');
         portionsLabel.append(portionsWrap);
         body.append(portionsLabel);
         const mealLabel = node('label', '餐次（可多选）');

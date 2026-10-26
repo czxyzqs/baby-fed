@@ -394,7 +394,9 @@
                     ));
                 } else if (dish.gramDefault != null) {
                     // 干粉主食按克直记：默认 6g，克数直接入克数账本
-                    let gram = gramOf(dish.amount) ?? dish.gramDefault;
+                    let gram = gramOf(dish.amount)
+                        ?? window.FoodMenu?.portionsFor(dish.plannedPortions, state.meal)
+                        ?? dish.gramDefault;
                     stateRow.value = `${gram}g`;
                     row.append(stepper(
                         () => gram,

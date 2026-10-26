@@ -319,11 +319,16 @@
             portionBtn.type = 'button';
             portionBtn.addEventListener('click', () => {
                 const area = node('div', '', 'fma-sub');
-                const state = { value: dish.plannedPortions ?? null };
+                const base = config.meal ? portionsFor(dish.plannedPortions, config.meal) : dish.plannedPortions;
+                const state = { value: base ?? null };
                 const chips = node('div', '', 'fma-chips');
+                const gram = !!dish.gramFood;
+                const options = gram
+                    ? [...[4, 5, 6, 8, 10, 12, 15, 20].map(value => [value, `${value}g`])]
+                    : PORTION_KEYS.map(value => [value, `${value}份`]);
                 const buildChips = () => {
                     chips.replaceChildren();
-                    [[null, '不指定'], ...PORTION_KEYS.map(value => [value, `${value}份`])].forEach(([value, label]) => {
+                    [[null, '不指定'], ...options].forEach(([value, label]) => {
                         const chip = node('button', label, 'fma-chip' + (state.value === value ? ' active' : ''));
                         chip.type = 'button';
                         chip.addEventListener('click', () => { state.value = value; buildChips(); });
@@ -331,7 +336,7 @@
                     });
                 };
                 buildChips();
-                area.append(node('p', '每餐份数：', 'fma-label'));
+                area.append(node('p', gram ? '每餐克数：' : '每餐份数：', 'fma-label'));
                 area.append(chips);
                 let subScope = null;
                 if (!lockedDays) {
@@ -339,7 +344,7 @@
                     area.append(subScope.el);
                 }
                 if (config.meal) {
-                    area.append(node('p', `只改${MEALS[config.meal]}这一餐的份数，其他餐次不变。`, 'fma-hint'));
+                    area.append(node('p', `只改${MEALS[config.meal]}这一餐的量，其他餐次不变。`, 'fma-hint'));
                 }
                 const save = node('button', '保存', 'fma-btn primary');
                 save.type = 'button';
