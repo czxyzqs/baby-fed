@@ -1247,7 +1247,7 @@ class FoodScreeningStore(FoodLibraryStore):
             # 当日加菜：override 里当天不在任何计划中的食物（作为独立条目展示，可正常勾选记录）
             planned_ids = {item['food_id'] for item in items}
             for food_id, override in overrides.items():
-                if food_id in planned_ids or override == 'none':
+                if food_id in planned_ids or override['meal'] == 'none':
                     continue
                 food_row = connection.execute('SELECT name FROM foods WHERE id = ?', (food_id,)).fetchone()
                 if food_row is None:
@@ -1408,7 +1408,7 @@ class FoodScreeningStore(FoodLibraryStore):
             # 当日加菜：override 里当天不在任何计划中的食物
             planned_ids = {item['food_id'] for item in items}
             for food_id, override in overrides.items():
-                if food_id in planned_ids or override == 'none':
+                if food_id in planned_ids or override['meal'] == 'none':
                     continue
                 food_row = connection.execute('SELECT name FROM foods WHERE id = ?', (food_id,)).fetchone()
                 if food_row is None:
