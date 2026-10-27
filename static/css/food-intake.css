@@ -97,9 +97,13 @@
     gap: 12px;
 }
 
-/* 已知餐次的编辑态：只剩时间一个输入，整行展示 */
+/* 已知餐次的编辑态：只剩时间一个输入，按内容宽度排，不横贯弹窗 */
 .food-intake-date-meal.time-only {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 160px);
+}
+
+.food-intake-date-meal input[type="time"] {
+    max-width: 150px;
 }
 
 .food-intake-block,
