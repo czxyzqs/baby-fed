@@ -175,10 +175,11 @@
             context = result;
             batchByFood = {};
             (prepData?.batches || []).forEach(batch => { batchByFood[batch.food_id] = batch; });
-            const mealTimes = context.entries
-                .filter(entry => entry.meal === mealValue && entry.eaten_time)
-                .map(entry => entry.eaten_time).sort();
-            element('time').value = mealTimes[0] || '';
+            const mealEntries = context.entries.filter(entry => entry.meal === mealValue);
+            const mealTimes = mealEntries.map(entry => entry.eaten_time).filter(Boolean).sort();
+            // 没设过进食时间时默认带出记录时刻，改起来直观
+            const fallback = (mealEntries.map(entry => entry.created_at || '').sort()[0] || '').slice(11, 16);
+            element('time').value = mealTimes[0] || fallback || '';
             selectedDate = dateValue;
             selectedMeal = mealValue;
             element('date').value = selectedDate;
