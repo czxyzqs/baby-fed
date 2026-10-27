@@ -6,6 +6,20 @@
     const portionAmounts = ['0.5份', '1份', '1.5份', '2份', '2.5份', '3份', '3.5份', '4份'];
     const gramAmount = value => (/^\d{1,2}g$/.test(value) ? value : null);
     const allAmounts = [...amounts, ...portionAmounts];
+    const portionOfV = value => (typeof value === 'string' && value.endsWith('份') ? Number(value.slice(0, -1)) : null);
+    const gramOfV = value => (typeof value === 'string' && value.endsWith('g') ? Number(value.slice(0, -1)) : null);
+    // 备餐批次与克模式（谷薯类）：决定每种食物的计量单位
+    let batchByFood = {};
+    const isGramFood = food => {
+        if (!food || batchByFood[food.id]) return false;
+        const category = context.categories.find(item => item.id === food.category_id);
+        return category?.name === '谷薯类';
+    };
+    function unitAwareAmount(food) {
+        if (batchByFood[food.id]) return '1份';
+        if (isGramFood(food)) return '6g';
+        return amounts[Math.min(Math.max(food.position || 1, 1), 4) - 1];
+    }
     const ratings = { 喜欢: '😋 喜欢', 一般: '😐 一般', 拒绝: '🥴 拒绝' };
     const statuses = { untouched: '未排敏', screening: '排敏中', normal: '正常', allergic: '过敏' };
     let context = null;
@@ -99,7 +113,7 @@
     }
 
     function suggestedAmount(food) {
-        return amounts[Math.min(Math.max(food.position, 1), 4) - 1];
+        return unitAwareAmount(food);
     }
 
     function selectMeal() {
@@ -153,8 +167,14 @@
         setBusy(true);
         message('正在加载食物和本餐记录…');
         try {
-            const result = await api(`entries?date=${encodeURIComponent(dateValue)}`);
+            const [result, prepData] = await Promise.all([
+                api(`entries?date=${encodeURIComponent(dateValue)}`),
+                fetch('/api/prep/overview', { cache: 'no-store' })
+                    .then(response => response.ok ? response.json() : null).catch(() => null)
+            ]);
             context = result;
+            batchByFood = {};
+            (prepData?.batches || []).forEach(batch => { batchByFood[batch.food_id] = batch; });
             selectedDate = dateValue;
             selectedMeal = mealValue;
             element('date').value = selectedDate;
@@ -198,6 +218,16 @@
             element('title').textContent = `${meals[mealValue]} · ${Number(month)}月${Number(day)}日`;
         }
         element('date').focus();
+    }
+
+    function stepperControl(get, set, min, max, step, format) {
+        const row = node('div', '', 'food-intake-stepper');
+        const refresh = () => { value.textContent = format(get()); };
+        const minus = button('−', () => { if (get() - step >= min) { set(Math.round((get() - step) * 10) / 10); refresh(); } });
+        const value = node('span', format(get()), 'food-intake-stepper-value');
+        const plus = button('＋', () => { if (get() + step <= max) { set(Math.round((get() + step) * 10) / 10); refresh(); } });
+        row.append(minus, value, plus);
+        return row;
     }
 
     function choices(label, options, selected, onChange) {
@@ -261,15 +291,39 @@
                 }));
             }
             card.append(node('h3', '进食量（必选）'));
-            const options = [...amounts,
-                ...portionAmounts.filter(value => value === block.amount),
-                ...(gramAmount(block.amount) ? [block.amount] : [])];
-            card.append(choices('进食量', options.map(value => [value, value]), block.amount, value => {
-                block.amount = value;
-                block.auto_amount = false;
-                dirty = true;
-                renderBlocks();
-            }));
+            const foodInfo = context.foods.find(item => item.id === block.food_id);
+            const batch = batchByFood[block.food_id];
+            if (batch) {
+                // 备餐食物按份：步进器 + 余量提示
+                if (portionOfV(block.amount) == null && block.amount !== '0份') block.amount = '1份';
+                card.append(stepperControl(
+                    () => portionOfV(block.amount) ?? 1,
+                    value => { block.amount = `${value}份`; block.auto_amount = false; dirty = true; },
+                    0, 4, 0.5, value => (value ? `${value}份` : '不吃')
+                ));
+                card.append(node('p',
+                    batch.exhausted ? '此批次已用完，仍按份记录（不扣库存）。'
+                        : `剩${batch.portions_left}份${batch.grams_per_portion ? ` · 每份约${batch.grams_per_portion}g` : ''}`,
+                    'food-intake-hint'));
+            } else if (isGramFood(foodInfo)) {
+                // 干粉主食按克
+                if (gramOfV(block.amount) == null) block.amount = '6g';
+                card.append(stepperControl(
+                    () => gramOfV(block.amount) ?? 6,
+                    value => { block.amount = `${value}g`; block.auto_amount = false; dirty = true; },
+                    2, 30, 1, value => `${value}g`
+                ));
+            } else {
+                const options = [...amounts,
+                    ...portionAmounts.filter(value => value === block.amount),
+                    ...(gramAmount(block.amount) ? [block.amount] : [])];
+                card.append(choices('进食量', options.map(value => [value, value]), block.amount, value => {
+                    block.amount = value;
+                    block.auto_amount = false;
+                    dirty = true;
+                    renderBlocks();
+                }));
+            }
             card.append(node('h3', '接受度（选填，再点可取消）'));
             card.append(choices('接受度', Object.entries(ratings), block.rating, value => {
                 block.rating = block.rating === value ? null : value;

@@ -530,3 +530,14 @@ body.elder .food-banner-record-btn { font-size: 14px; padding: 5px 12px; }
 .food-banner-menu .banner-check { pointer-events: none; }
 body.elder .food-plan-entry-main { font-size: 17px; }
 body.elder .food-plan-entry-record { font-size: 17px; padding: 12px 18px; }
+
+/* 编辑器步进器（份/克）：风格对齐选项按钮 */
+.food-intake-stepper { display: inline-flex; align-items: center; gap: 12px; margin: 4px 0; }
+.food-intake-stepper button {
+    background: var(--bg-card, rgba(255, 255, 255, 0.05)); color: var(--text-primary, #fff);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.1)); border-radius: 12px;
+    min-width: 44px; min-height: 40px; font-size: 17px; cursor: pointer; font-family: inherit;
+}
+.food-intake-stepper-value { min-width: 64px; text-align: center; font-size: 17px; font-weight: 600; }
+body.elder .food-intake-stepper button { min-width: 52px; min-height: 48px; font-size: 20px; }
+body.elder .food-intake-stepper-value { font-size: 20px; }
