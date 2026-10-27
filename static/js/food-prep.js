@@ -43,6 +43,12 @@
         return hour < 11 ? 'breakfast' : hour < 14 ? 'lunch' : hour < 17 ? 'snack' : 'dinner';
     }
 
+    function nowTime() {
+        return new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+        }).format(new Date());
+    }
+
     function portionOf(amount) {
         return typeof amount === 'string' && amount.endsWith('份') ? Number(amount.slice(0, -1)) : null;
     }
@@ -291,6 +297,15 @@
             batchByFood[batch.food_id] = batch; // 含已用完批次：备餐过的食物始终按份记
         });
 
+        // 这餐几点吃的：默认带出已有记录的进食时间/记录时刻，可手动改
+        function mealTimeDefault(meal) {
+            const rows = context.entries.filter(row => row.meal === meal);
+            const eaten = rows.map(row => row.eaten_time).filter(Boolean).sort();
+            if (eaten.length) return eaten[0];
+            const created = rows.map(row => row.created_at || '').sort()[0] || '';
+            return created ? created.slice(11, 16) : nowTime();
+        }
+
         function renderMealChips() {
             const chips = node('div', '', 'fma-chips');
             Object.entries(MEALS).forEach(([value, label]) => {
@@ -303,7 +318,14 @@
                 });
                 chips.append(chip);
             });
-            mealHost.replaceChildren(chips);
+            const timeLabel = node('label', '', 'fp-time');
+            timeLabel.append(node('span', '时间'));
+            const timeInput = document.createElement('input');
+            timeInput.type = 'time';
+            timeInput.className = 'form-input';
+            timeInput.value = mealTimeDefault(state.meal);
+            timeLabel.append(timeInput);
+            mealHost.replaceChildren(chips, timeLabel);
         }
 
         // 该餐的行 = 计划菜品 ∪ 已有记录，再加一个「＋加一个」入口
@@ -454,16 +476,19 @@
         save.type = 'button';
         save.addEventListener('click', async () => {
             const rowEls = [...body.querySelectorAll('.fp-row')];
-            const selected = rowEls.filter(row => {
-                const amount = row._amount();
-                return amount !== '不吃' && amount !== '' && Number(portionOf(amount)) !== 0;
-            });
-            // 拨到0/不吃 = 这餐真的没吃：其旧记录也不进入"未勾选保留"，保存即删除
+            // 0/不吃/空 = 没吃；份数与克数分别判（'7g' 不是份数，不能因 Number(null)===0 误判为零）
+            function amountKept(amount) {
+                if (amount === '不吃' || amount === '') return false;
+                const portion = portionOf(amount);
+                if (portion !== null) return portion > 0;
+                const grams = gramOf(amount);
+                if (grams !== null) return grams > 0;
+                return true;
+            }
+            const selected = rowEls.filter(row => amountKept(row._amount()));
+            // 拨到0/不吃 = 这餐真的没吃：其旧记录也不进入“未勾选保留”，保存即删除
             const zeroedIds = rowEls
-                .filter(row => {
-                    const amount = row._amount();
-                    return amount === '不吃' || amount === '' || Number(portionOf(amount)) === 0;
-                })
+                .filter(row => !amountKept(row._amount()))
                 .map(row => row._dish.foodId);
             if (!selected.length && !zeroedIds.length) {
                 toast('每样都拨到 0 就等于没吃，先加点份数或加个菜');
@@ -473,12 +498,13 @@
                 toast('这餐全拨 0 了，旧记录将一并清除');
             }
             const selectedIds = selected.map(row => row._dish.foodId);
+            const timeValue = body.querySelector('.fp-time input')?.value || null;
             const others = context.entries
                 .filter(row => row.meal === state.meal
                     && !selectedIds.includes(row.food_id) && !zeroedIds.includes(row.food_id))
                 .map(row => ({
                     id: row.id, food_id: row.food_id, amount: row.amount, rating: row.rating,
-                    note: row.note, mode: 'keep'
+                    note: row.note, mode: 'keep', time: timeValue
                 }));
             const entries = [...others];
             for (const row of selected) {
@@ -489,7 +515,7 @@
                 entries.push({
                     id: dish.entryId || undefined,
                     food_id: dish.foodId, amount: row._amount(), rating: null, note: '',
-                    mode: dish.mode || 'keep'
+                    mode: dish.mode || 'keep', time: timeValue
                 });
             }
             try {

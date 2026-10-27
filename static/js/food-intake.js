@@ -212,9 +212,13 @@
         element('add').disabled = true;
         element('save').disabled = true;
         element('empty').textContent = '';
-        // 从记录页的餐次卡片进入时日期餐次已知，隐藏选择器，标题直接说明
+        // 从记录页的餐次卡片进入时日期餐次已知：标题直接说明，日期/餐次不重复展示；时间框必须保留可改
         const contextKnown = Boolean(mealValue);
-        element('date-meal').hidden = contextKnown;
+        const dateMeal = element('date-meal');
+        dateMeal.hidden = false;
+        element('date').closest('label').hidden = contextKnown;
+        element('meal').closest('label').hidden = contextKnown;
+        dateMeal.classList.toggle('time-only', contextKnown);
         element('modal').classList.add('active');
         document.body.style.overflow = 'hidden';
         await loadEditor(selectedDate, selectedMeal);
@@ -222,7 +226,7 @@
             const [month, day] = selectedDate.slice(5).split('-');
             element('title').textContent = `${meals[mealValue]} · ${Number(month)}月${Number(day)}日`;
         }
-        element('date').focus();
+        element(contextKnown ? 'time' : 'date').focus();
     }
 
     function stepperControl(get, set, min, max, step, format) {

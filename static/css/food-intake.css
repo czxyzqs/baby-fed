@@ -97,6 +97,11 @@
     gap: 12px;
 }
 
+/* 已知餐次的编辑态：只剩时间一个输入，整行展示 */
+.food-intake-date-meal.time-only {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .food-intake-block,
 #food-intake-picker,
 .food-intake-meal-card {
