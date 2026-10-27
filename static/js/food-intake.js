@@ -175,6 +175,10 @@
             context = result;
             batchByFood = {};
             (prepData?.batches || []).forEach(batch => { batchByFood[batch.food_id] = batch; });
+            const mealTimes = context.entries
+                .filter(entry => entry.meal === mealValue && entry.eaten_time)
+                .map(entry => entry.eaten_time).sort();
+            element('time').value = mealTimes[0] || '';
             selectedDate = dateValue;
             selectedMeal = mealValue;
             element('date').value = selectedDate;
@@ -452,7 +456,8 @@
                 revision: targetRevisions[targetMeal],
                 entries: blocks.map(block => ({
                     id: block.id, food_id: block.food_id, amount: block.amount,
-                    rating: block.rating, note: block.note, mode: block.mode
+                    rating: block.rating, note: block.note, mode: block.mode,
+                    time: element('time').value || null
                 }))
             };
             if (moving) {
@@ -491,7 +496,8 @@
             Object.entries(meals).forEach(([meal, label]) => {
                 const entries = result.entries.filter(entry => entry.meal === meal);
                 const card = node('article', '', 'food-intake-meal-card');
-                card.append(node('h3', label));
+                const mealTimes = entries.map(entry => entry.eaten_time).filter(Boolean).sort();
+                card.append(node('h3', mealTimes.length ? `${label} · ${mealTimes[0]}` : label));
                 entries.forEach(entry => {
                     card.append(node('p', `${entry.food_name} · ${entry.amount}${entry.rating ? ` · ${ratings[entry.rating]}` : ''}${entry.note ? ` · ${entry.note}` : ''}`));
                 });

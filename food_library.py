@@ -209,7 +209,7 @@ class FoodLibraryStore:
                 )''')
                 connection.execute('PRAGMA user_version = 3')
                 version = 3
-            elif version not in (3, 4, 5, 6, 7):
+            elif version not in (3, 4, 5, 6, 7, 8):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 3:
                 connection.execute('ALTER TABLE foods ADD COLUMN family TEXT')
@@ -218,7 +218,7 @@ class FoodLibraryStore:
                         'UPDATE foods SET family = ? WHERE name = ? AND family IS NULL', (family, food))
                 connection.execute('PRAGMA user_version = 4')
                 version = 4
-            elif version not in (3, 4, 5, 6, 7):
+            elif version not in (3, 4, 5, 6, 7, 8):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 4:
                 # 餐次规划：排敏块默认午餐，常规计划默认两餐都吃；当日覆盖支持临时调整
@@ -232,7 +232,7 @@ class FoodLibraryStore:
                 )''')
                 connection.execute('PRAGMA user_version = 5')
                 version = 5
-            elif version not in (4, 5, 6, 7):
+            elif version not in (4, 5, 6, 7, 8):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 5:
                 # 备餐批次：按份记录摄入（份×每份含量折算克数）与库存扣减
@@ -250,7 +250,7 @@ class FoodLibraryStore:
                 connection.execute('ALTER TABLE food_entries ADD COLUMN deduction TEXT')
                 connection.execute('PRAGMA user_version = 6')
                 version = 6
-            elif version not in (5, 6, 7):
+            elif version not in (5, 6, 7, 8):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 6:
                 # 规划份数：计划/当日覆盖带"每餐份数"，用于记录预填与库存预测
@@ -258,7 +258,14 @@ class FoodLibraryStore:
                 connection.execute('ALTER TABLE food_menu_overrides ADD COLUMN portions REAL')
                 connection.execute('PRAGMA user_version = 7')
                 version = 7
-            elif version != 7:
+            elif version not in (6, 7, 8):
+                raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
+            if version == 7:
+                # 精确进食时间：晚记的可改回实际吃的时间（HH:MM）
+                connection.execute('ALTER TABLE food_entries ADD COLUMN eaten_time TEXT')
+                connection.execute('PRAGMA user_version = 8')
+                version = 8
+            elif version != 8:
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             yield connection
             connection.commit()

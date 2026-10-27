@@ -26,6 +26,17 @@ SPOON_EQUIV = {'一勺尖': 0.5, '一勺': 1, '两勺': 2, '三勺': 3, '半碗'
 CN_TZ = timezone(timedelta(hours=8))
 
 
+def valid_time(value):
+    """进食时间 HH:MM。"""
+    if not isinstance(value, str) or len(value) != 5 or value[2] != ':':
+        return False
+    try:
+        hour, minute = int(value[:2]), int(value[3:])
+    except ValueError:
+        return False
+    return 0 <= hour <= 23 and 0 <= minute <= 59
+
+
 def gram_value(amount):
     """'6g' → 6；克数量值（干粉主食按克直记），1~99 的整数克。"""
     if not isinstance(amount, str) or not amount.endswith('g'):
@@ -102,19 +113,23 @@ class FoodEntryStore(FoodLibraryStore):
         with self.connect() as connection:
             rows = connection.execute(
                 '''SELECT date, meal, MAX(created_at) AS latest, COUNT(*) AS item_count,
-                          GROUP_CONCAT(food_name, '、') AS foods
+                          GROUP_CONCAT(food_name, '、') AS foods,
+                          MIN(eaten_time) AS eaten
                    FROM food_entries WHERE date >= ?
                    GROUP BY date, meal ORDER BY latest DESC''', (since_date,)
             ).fetchall()
         records = []
         for row in rows:
-            try:
-                created = datetime.fromisoformat(row['latest'])
-                if created.tzinfo is not None:
-                    created = created.astimezone(CN_TZ).replace(tzinfo=None)
-                time_text = created.isoformat(timespec='seconds')
-            except (TypeError, ValueError):
-                time_text = row['date']
+            if row['eaten']:
+                time_text = f"{row['date']}T{row['eaten']}:00"
+            else:
+                try:
+                    created = datetime.fromisoformat(row['latest'])
+                    if created.tzinfo is not None:
+                        created = created.astimezone(CN_TZ).replace(tzinfo=None)
+                    time_text = created.isoformat(timespec='seconds')
+                except (TypeError, ValueError):
+                    time_text = row['date']
             records.append({
                 'id': f"food-{row['date']}-{row['meal']}",
                 'type': 'food',
@@ -166,6 +181,8 @@ class FoodEntryStore(FoodLibraryStore):
                 raise FoodLibraryError('备注包含无效字符') from error
             if entry.get('mode', 'keep') not in ('keep', 'start', 'normal', 'retry', 'only'):
                 raise FoodLibraryError('请选择有效的排敏记录方式')
+            if entry.get('time') is not None and not valid_time(entry.get('time')):
+                raise FoodLibraryError('进食时间格式应为 HH:MM')
         with self.connect() as connection:
             current = connection.execute(
                 'SELECT revision FROM food_meal_versions WHERE date = ? AND meal = ?', (selected_date, meal)
@@ -250,14 +267,16 @@ class FoodEntryStore(FoodLibraryStore):
                     (old['food_name'] if unchanged_food else food['name']), round_id,
                     entry['amount'], entry.get('rating') or None, entry.get('note', '').strip(),
                     old['created_at'] if old else now, grams, deduction,
+                    entry.get('time') or None,
                 ))
             connection.execute('DELETE FROM food_entries WHERE date = ? AND meal = ?', (selected_date, meal))
             if move_from:
                 connection.execute('DELETE FROM food_entries WHERE date = ? AND meal = ?', move_from)
             connection.executemany(
                 '''INSERT INTO food_entries
-                   (id, date, meal, food_id, food_name, round_id, amount, rating, note, created_at, grams, deduction)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', prepared
+                   (id, date, meal, food_id, food_name, round_id, amount, rating, note,
+                    created_at, grams, deduction, eaten_time)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', prepared
             )
             for target_date, target_meal, target_revision in (
                     [(selected_date, meal, revision + 1)] +
