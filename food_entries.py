@@ -172,18 +172,42 @@ class FoodEntryStore(FoodLibraryStore):
             ).fetchone()
             if revision != (current['revision'] if current else 0):
                 raise FoodLibraryError('这餐已在其他设备更新，请重新载入后再编辑；当前输入尚未保存', 409)
+            # 移动来源：把整餐从原日期/餐次搬到目标位置（原位置清空、扣减随记随退）
+            move_from = None
+            from_info = data.get('from')
+            if isinstance(from_info, dict):
+                from_date = intake_date(from_info.get('date'))
+                from_meal = from_info.get('meal')
+                if from_meal not in MEALS:
+                    raise FoodLibraryError('请选择有效的原餐次')
+                if (from_date, from_meal) != (selected_date, meal):
+                    from_revision = from_info.get('revision')
+                    if type(from_revision) is not int or not 0 <= from_revision < 9223372036854775807:
+                        raise FoodLibraryError('缺少有效的原餐次版本，请重新打开表单')
+                    current_from = connection.execute(
+                        'SELECT revision FROM food_meal_versions WHERE date = ? AND meal = ?', (from_date, from_meal)
+                    ).fetchone()
+                    if from_revision != (current_from['revision'] if current_from else 0):
+                        raise FoodLibraryError('原餐次已在其他设备更新，请重新载入后再编辑', 409)
+                    move_from = (from_date, from_meal)
             previous = {row['id']: dict(row) for row in connection.execute(
                 'SELECT * FROM food_entries WHERE date = ? AND meal = ?', (selected_date, meal)
             )}
-            if not entry_ids.issubset(previous):
+            from_previous = {}
+            if move_from:
+                from_previous = {row['id']: dict(row) for row in connection.execute(
+                    'SELECT * FROM food_entries WHERE date = ? AND meal = ?', move_from
+                )}
+            combined = {**previous, **from_previous}
+            if not entry_ids.issubset(combined):
                 raise FoodLibraryError('记录不属于当前餐次，请重新载入', 409)
             now = datetime.now(CN_TZ).isoformat()
             # 整餐替换前，先按旧记录的扣减明细退还批次份数（未变的条目随后会重新扣回，净值为零）
-            for old in previous.values():
+            for old in list(previous.values()) + list(from_previous.values()):
                 self.refund_deduction(connection, old['deduction'])
             prepared = []
             for entry in entries:
-                old = previous.get(entry.get('id'))
+                old = combined.get(entry.get('id'))
                 food = connection.execute('SELECT * FROM foods WHERE id = ?', (entry['food_id'],)).fetchone()
                 unchanged_food = old is not None and old['food_id'] == entry['food_id']
                 if food is None and not unchanged_food:
@@ -223,21 +247,30 @@ class FoodEntryStore(FoodLibraryStore):
                     grams, deduction = (float(gram), None) if gram is not None else (None, None)
                 prepared.append((
                     old['id'] if old else None, selected_date, meal, entry['food_id'],
-                    old['food_name'] if unchanged_food else food['name'], round_id,
+                    (old['food_name'] if unchanged_food else food['name']), round_id,
                     entry['amount'], entry.get('rating') or None, entry.get('note', '').strip(),
                     old['created_at'] if old else now, grams, deduction,
                 ))
             connection.execute('DELETE FROM food_entries WHERE date = ? AND meal = ?', (selected_date, meal))
+            if move_from:
+                connection.execute('DELETE FROM food_entries WHERE date = ? AND meal = ?', move_from)
             connection.executemany(
                 '''INSERT INTO food_entries
                    (id, date, meal, food_id, food_name, round_id, amount, rating, note, created_at, grams, deduction)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', prepared
             )
-            connection.execute(
-                '''INSERT INTO food_meal_versions (date, meal, revision) VALUES (?, ?, ?)
-                   ON CONFLICT(date, meal) DO UPDATE SET revision = excluded.revision''',
-                (selected_date, meal, revision + 1),
-            )
+            for target_date, target_meal, target_revision in (
+                    [(selected_date, meal, revision + 1)] +
+                    ([(move_from[0], move_from[1],
+                       (connection.execute(
+                           'SELECT revision FROM food_meal_versions WHERE date = ? AND meal = ?',
+                           move_from).fetchone() or {'revision': 0})['revision'] + 1)]
+                     if move_from else [])):
+                connection.execute(
+                    '''INSERT INTO food_meal_versions (date, meal, revision) VALUES (?, ?, ?)
+                       ON CONFLICT(date, meal) DO UPDATE SET revision = excluded.revision''',
+                    (target_date, target_meal, target_revision),
+                )
             return self.context_in(connection, selected_date)
 
     # ---------- 备餐批次：按份记录的库存与含量标定 ----------

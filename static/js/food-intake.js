@@ -419,17 +419,48 @@
         }
         const removed = oldEntries.some(entry => !blocks.some(block => block.id === entry.id));
         if (removed && !window.confirm('保存后会删除从本餐移除的记录，确定保存吗？')) return;
+        // 日期/餐次改了 = 整餐移动：以表单当前值为目标，原位置保存时清空
+        const targetDate = element('date').value;
+        const targetMeal = element('meal').value;
+        const moving = targetDate !== selectedDate || targetMeal !== selectedMeal;
         setBusy(true);
         message('正在保存本餐…');
         try {
-            context = await api('meals', {
-                date: selectedDate, meal: selectedMeal,
-                revision: context.revisions[selectedMeal],
+            let targetRevisions = context.revisions;
+            let targetEntries = context.entries;
+            if (targetDate !== selectedDate) {
+                const targetContext = await api(`entries?date=${encodeURIComponent(targetDate)}`);
+                targetRevisions = targetContext.revisions;
+                targetEntries = targetContext.entries;
+            }
+            if (moving) {
+                const existing = targetEntries
+                    .filter(entry => entry.meal === targetMeal
+                        && !blocks.some(block => block.id === entry.id));
+                if (existing.length) {
+                    message(`目标餐次（${meals[targetMeal]}）已有 ${existing.length} 条记录，请先在该餐编辑合并，不能直接覆盖。`, true);
+                    setBusy(false);
+                    return;
+                }
+                if (!window.confirm(`把本餐移到 ${targetDate.slice(5).replace('-', '/')} 的${meals[targetMeal]}？原位置将清空。`)) {
+                    setBusy(false);
+                    return;
+                }
+            }
+            const payload = {
+                date: targetDate, meal: targetMeal,
+                revision: targetRevisions[targetMeal],
                 entries: blocks.map(block => ({
                     id: block.id, food_id: block.food_id, amount: block.amount,
                     rating: block.rating, note: block.note, mode: block.mode
                 }))
-            });
+            };
+            if (moving) {
+                payload.from = { date: selectedDate, meal: selectedMeal, revision: context.revisions[selectedMeal] };
+            }
+            context = await api('meals', payload);
+            selectedDate = targetDate;
+            selectedMeal = targetMeal;
             dirty = false;
             if (element('history-date')) {
                 element('history-date').value = selectedDate;
@@ -437,7 +468,9 @@
             }
             setBusy(false);
             close();
-            showToast(`已保存${meals[selectedMeal]}辅食记录`);
+            showToast(moving
+                ? `已移到${targetDate.slice(5).replace('-', '/')}的${meals[targetMeal]}`
+                : `已保存${meals[selectedMeal]}辅食记录`);
         } catch (error) {
             message(`保存失败：${error.message}。输入已保留。`, true);
         } finally {
