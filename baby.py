@@ -90,6 +90,10 @@ def test_version():
 @app.after_request
 def add_build_header(response):
     response.headers['X-Build-Id'] = BUILD_ID
+    # 页面模板不带版本号，移动端浏览器会启发式缓存 HTML 导致改版不生效；
+    # 静态资源自带内容哈希无需处理，这里只对页面强制走协商缓存
+    if response.mimetype == 'text/html':
+        response.headers['Cache-Control'] = 'no-cache'
     return response
 
 
