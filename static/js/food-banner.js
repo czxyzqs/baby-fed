@@ -74,7 +74,7 @@
                 const prep = await prepFetch.json().catch(() => null);
                 batchByFood = {};
                 (prep?.batches || []).forEach(batch => {
-                    if (batch.portions_left > 0) batchByFood[batch.food_id] = batch;
+                    batchByFood[batch.food_id] = batch;   // 含已用完批次：备餐过的食物始终按份记
                 });
             }
             render(lastItems, lastOverrides);
@@ -280,7 +280,7 @@
     // 临时调整餐次已并入 FoodMenu 动作面板（food-menu-actions.js）：换餐/替换/这餐不吃/加菜统一入口
 
     function suggestedAmount(item) {
-        if (batchByFood[item.food_id]?.portions_left > 0) return '1份';
+        if (batchByFood[item.food_id]) return '1份';
         if (item.gram_default != null && !batchByFood[item.food_id]) return `${item.gram_default}g`;
         return AMOUNTS[Math.min(Math.max(item.position || 1, 1), 4) - 1];
     }
@@ -524,7 +524,7 @@
             ? [...new Set([4, 5, 6, 8, 10, 12, 15, 20, parseInt(state.amount) || item.gram_default])]
                 .sort((a, b) => a - b).map(value => `${value}g`)
             : [];
-        const amountOptions = batchByFood[item.food_id]?.portions_left > 0
+        const amountOptions = batchByFood[item.food_id]
             ? portionValues
             : (gramChips.length ? gramChips
                 : [...AMOUNTS, ...portionValues.filter(value => value === state.amount)]);

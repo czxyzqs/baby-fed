@@ -329,7 +329,6 @@ class FoodEntryStore(FoodLibraryStore):
             FROM food_prep_batches b
             JOIN foods f ON f.id = b.food_id
             LEFT JOIN categories c ON c.id = f.category_id
-            WHERE b.portions_left > 0
             ORDER BY b.id DESC
         '''):
             daily, days_left = self._forecast_food(connection, row['food_id'], row['portions_left'])
@@ -337,7 +336,9 @@ class FoodEntryStore(FoodLibraryStore):
                 'id': row['id'], 'food_id': row['food_id'], 'food_name': row['food_name'],
                 'category_name': row['category_name'], 'emoji': row['category_emoji'] or '🧊',
                 'portions_left': row['portions_left'], 'portions_total': row['portions_total'],
-                'grams_per_portion': row['grams_per_portion'], 'low': row['portions_left'] <= 1,
+                'grams_per_portion': row['grams_per_portion'],
+                'low': 0 < row['portions_left'] <= 1,
+                'exhausted': row['portions_left'] == 0,
                 'daily': daily, 'days_left': days_left,
             })
         return {'date': selected_date, 'today': {'groups': [groups[key] for key in MACRO_GROUPS if key in groups]},

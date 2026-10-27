@@ -216,14 +216,18 @@
     function batchRow(batch, body) {
         const row = node('div', '', 'fp-batch-row' + (batch.low ? ' low' : ''));
         row.append(node('span', `${batch.emoji} ${batch.food_name}`, 'fp-batch-name'));
-        const meta = batch.grams_per_portion
-            ? `剩${batch.portions_left}/${batch.portions_total}份 · ${batch.grams_per_portion}g/份`
-            : `剩${batch.portions_left}/${batch.portions_total}份`;
-        const forecast = batch.daily
-            ? ` · 计划每天${batch.daily}份`
-                + (batch.days_left == null ? '' : ` · 够吃${batch.days_left}天`)
-            : '';
-        const warn = batch.days_left != null && batch.days_left <= 1 ? '⚠️ ' : (batch.low ? '⚠️ ' : '');
+        const meta = batch.exhausted
+            ? `已用完（共${batch.portions_total}份）`
+            : batch.grams_per_portion
+                ? `剩${batch.portions_left}/${batch.portions_total}份 · ${batch.grams_per_portion}g/份`
+                : `剩${batch.portions_left}/${batch.portions_total}份`;
+        const forecast = batch.exhausted
+            ? ' · 该备新批次了'
+            : batch.daily
+                ? ` · 计划每天${batch.daily}份`
+                    + (batch.days_left == null ? '' : ` · 够吃${batch.days_left}天`)
+                : '';
+        const warn = (batch.days_left != null && batch.days_left <= 1) || batch.low || batch.exhausted ? '⚠️ ' : '';
         row.append(node('span', warn + meta + forecast, 'fp-batch-meta'));
         const fix = node('button', '修正', 'fma-btn');
         fix.type = 'button';
@@ -284,7 +288,7 @@
         const state = { meal: mealValue || suggestedMeal() };
         const batchByFood = {};
         (overview.batches || []).forEach(batch => {
-            batchByFood[batch.food_id] = batch; // 列表按新到旧，保留最新的展示（扣减仍由后端 FIFO）
+            batchByFood[batch.food_id] = batch; // 含已用完批次：备餐过的食物始终按份记
         });
 
         function renderMealChips() {
@@ -303,6 +307,7 @@
         }
 
         // 该餐的行 = 计划菜品 ∪ 已有记录，再加一个「＋加一个」入口
+        const addedRows = new Map();   // ＋加一个的行：跨餐次切换与重渲染保持
         function dishRows() {
             const rows = [];
             const seen = new Set();
@@ -332,6 +337,11 @@
                     entryId: entry.id, amount: entry.amount, mode: 'keep', newItem: false
                 });
             });
+            addedRows.forEach(dish => {
+                if (seen.has(dish.foodId)) return;
+                seen.add(dish.foodId);
+                rows.push(dish);
+            });
             return rows;
         }
 
@@ -351,11 +361,11 @@
             add.addEventListener('click', () => {
                 const picker = node('div', '', 'fp-picker');
                 const candidates = context.foods.filter(food =>
-                    food.status !== 'allergic' && !rows.some(dish => dish.foodId === food.id));
+                    food.status !== 'allergic' && !dishRows().some(dish => dish.foodId === food.id));
                 foodChips(picker, candidates, food => {
-                    rows.push({
+                    addedRows.set(food.id, {
                         foodId: food.id, name: food.name, tag: '', position: food.position || 0,
-                        entryId: null, amount: null, mode: 'keep', newItem: false, added: true
+                        entryId: null, amount: null, mode: 'keep', newItem: false
                     });
                     closePicker();
                     renderRows();
@@ -410,7 +420,12 @@
                         option.value = value;
                         select.append(option);
                     });
-                    select.value = dish.amount && PRESETS.includes(dish.amount)
+                    if (dish.amount && !PRESETS.includes(dish.amount)) {
+                        const option = node('option', dish.amount);
+                        option.value = dish.amount;
+                        select.append(option);
+                    }
+                    select.value = dish.amount && (PRESETS.includes(dish.amount) || dish.amount)
                         ? dish.amount
                         : PRESETS[Math.min(Math.max(dish.position || 1, 1), 4) - 1];
                     stateRow.value = select.value;
@@ -443,13 +458,24 @@
                 const amount = row._amount();
                 return amount !== '不吃' && amount !== '' && Number(portionOf(amount)) !== 0;
             });
-            if (!selected.length) {
+            // 拨到0/不吃 = 这餐真的没吃：其旧记录也不进入"未勾选保留"，保存即删除
+            const zeroedIds = rowEls
+                .filter(row => {
+                    const amount = row._amount();
+                    return amount === '不吃' || amount === '' || Number(portionOf(amount)) === 0;
+                })
+                .map(row => row._dish.foodId);
+            if (!selected.length && !zeroedIds.length) {
                 toast('每样都拨到 0 就等于没吃，先加点份数或加个菜');
                 return;
             }
+            if (!selected.length) {
+                toast('这餐全拨 0 了，旧记录将一并清除');
+            }
             const selectedIds = selected.map(row => row._dish.foodId);
             const others = context.entries
-                .filter(row => row.meal === state.meal && !selectedIds.includes(row.food_id))
+                .filter(row => row.meal === state.meal
+                    && !selectedIds.includes(row.food_id) && !zeroedIds.includes(row.food_id))
                 .map(row => ({
                     id: row.id, food_id: row.food_id, amount: row.amount, rating: row.rating,
                     note: row.note, mode: 'keep'
