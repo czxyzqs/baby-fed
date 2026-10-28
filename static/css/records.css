@@ -29,7 +29,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg-primary); color: 
 .filter-row { display: flex; align-items: center; gap: 12px; }
 .filter-group { display: flex; align-items: center; gap: 8px; flex: 1; }
 .filter-label { font-size: 30px; color: rgb(250 241 241 / 89%); min-width: 36px; }
-.filter-select { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 10px 12px; color: var(--text-primary); font-size: 14px; cursor: pointer; flex: 1; }
+.filter-select { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 10px 12px; color: var(--text-primary); font-size: 16px; cursor: pointer; flex: 1; }
 .filter-select:focus { outline: none; border-color: var(--accent-primary); }
 .records-calendar .cal-day {
     padding: 8px 4px;
