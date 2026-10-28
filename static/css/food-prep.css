@@ -37,6 +37,7 @@
 }
 .fp-row-name small { font-size: 12px; color: #7fd8f7; }
 .fp-row-hint { font-size: 12px; color: var(--text-secondary, rgba(255, 255, 255, 0.7)); }
+.fp-row-controls { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .fp-row .fma-scope-date { flex: 0 0 auto; }
 .fp-row .fma-btn { padding: 8px 11px; font-size: 14px; border-radius: 9px; }
 .fp-add {

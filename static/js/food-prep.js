@@ -471,9 +471,11 @@
                 name.append(node('span', dish.name));
                 if (dish.tag) name.append(node('small', dish.tag));
                 row.append(name);
+                // 剩量提示并入名字列，控件区（步进器+⚠️）整组换行，避免⚠️被单独挤到下一行
+                const controls = node('div', '', 'fp-row-controls');
                 const batch = batchByFood[dish.foodId];
                 if (batch) {
-                    row.append(node('span', `剩${batch.portions_left}份${batch.grams_per_portion ? ` · ${batch.grams_per_portion}g/份` : ''}`, 'fp-row-hint'));
+                    name.append(node('small', `剩${batch.portions_left}份${batch.grams_per_portion ? ` · ${batch.grams_per_portion}g/份` : ''}`, 'fp-row-hint'));
                 }
                 const stateRow = { value: dish.amount };
                 if (batch) {
@@ -482,7 +484,7 @@
                         portion = window.FoodMenu?.portionsFor(dish.plannedPortions, state.meal) ?? 1;
                     }
                     stateRow.value = `${portion}份`;
-                    row.append(stepper(
+                    controls.append(stepper(
                         () => portion,
                         value => { portion = value; stateRow.value = `${value}份`; },
                         0, 4, 0.5, value => value ? `${value}份` : '不吃'
@@ -493,7 +495,7 @@
                         ?? window.FoodMenu?.portionsFor(dish.plannedPortions, state.meal)
                         ?? dish.gramDefault;
                     stateRow.value = `${gram}g`;
-                    row.append(stepper(
+                    controls.append(stepper(
                         () => gram,
                         value => { gram = value; stateRow.value = `${value}g`; },
                         2, 30, 1, value => `${value}g`
@@ -515,8 +517,9 @@
                         : PRESETS[Math.min(Math.max(dish.position || 1, 1), 4) - 1];
                     stateRow.value = select.value;
                     select.addEventListener('change', () => { stateRow.value = select.value; });
-                    row.append(select);
+                    controls.append(select);
                 }
+                row.append(controls);
                 const react = node('button', '⚠️', 'fma-btn');
                 react.type = 'button';
                 react.setAttribute('aria-label', `记录${dish.name}的反应`);
@@ -528,7 +531,7 @@
                         meal: state.meal, amount: row._amount()
                     });
                 });
-                row.append(react);
+                controls.append(react);
                 row._dish = dish;
                 row._amount = () => stateRow.value;
                 return row;
@@ -595,7 +598,7 @@
             }
         });
         body.append(save);
-        body.append(node('p', '备餐过的食物按份记（自动折算克数、扣库存）；其他按勺/碗。⚠️ 可记录反应。', 'fma-hint'));
+        body.append(node('p', '备餐食物按份记、自动扣库存；其余按勺/碗。⚠️ 记反应。', 'fma-hint'));
     }
 
     // ---------- 通用步进器（复用 .amount-control 样式） ----------
