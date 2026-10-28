@@ -263,8 +263,9 @@
         preview.append(node('span', '›', 'food-plan-entry-arrow'));
         preview.addEventListener('click', openPlanDialog);
         entry.append(preview);
-        const record = node('button', '记', 'food-plan-entry-record');
+        const record = node('button', '', 'food-plan-entry-record');
         record.type = 'button';
+        record.append(node('span', '记', 'food-plan-entry-record-ring'));
         record.setAttribute('aria-label', '记一餐辅食');
         record.addEventListener('click', () => {
             if (window.FoodPrep) FoodPrep.recordSheet(today());
