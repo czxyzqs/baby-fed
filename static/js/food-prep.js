@@ -168,25 +168,59 @@
         const state = { food: null, raw: '', portions: 8 };
         const form = node('div', '', 'fp-form');
 
-        // 食物选择：默认收起，点开才出现搜索选择器，选中即收起
-        const pickBtn = node('button', '选择食物', 'fma-btn fp-pick-btn');
-        pickBtn.type = 'button';
-        const pickerHost = node('div', '', 'fp-picker');
-        pickerHost.hidden = true;
-        const candidates = context.foods.filter(food => food.status !== 'allergic'); // 排除过敏
-        pickBtn.addEventListener('click', () => {
-            pickerHost.hidden = !pickerHost.hidden;
-            if (!pickerHost.hidden) pickerHost.querySelector('input')?.focus();
-        });
-        foodChips(pickerHost, candidates, food => {
+        // 食物选择：搜索框联想，点击联想项即完成选择（排除过敏）
+        const candidates = context.foods.filter(food => food.status !== 'allergic');
+        const searchHost = node('div', '', 'fp-food-search');
+        const search = node('input', '', 'fma-search');
+        search.type = 'search';
+        search.placeholder = '搜索食材，如：牛肉';
+        search.setAttribute('aria-label', '搜索食材');
+        const suggest = node('div', '', 'fp-suggest');
+        suggest.hidden = true;
+
+        function pick(food) {
             state.food = food;
-            const category = (context.categories || []).find(row => row.id === food.category_id);
-            pickBtn.textContent = `已选：${category?.emoji ? `${category.emoji} ` : ''}${food.name}`;
-            pickBtn.classList.add('picked');
-            pickerHost.hidden = true;
+            search.value = food.name;
+            suggest.hidden = true;
             refreshHint();
+        }
+
+        function renderSuggest() {
+            const query = (search.value || '').trim().toLocaleLowerCase();
+            suggest.replaceChildren();
+            if (!query) {
+                suggest.hidden = true;
+                return;
+            }
+            const matched = candidates.filter(food =>
+                food.name.toLocaleLowerCase().includes(query));
+            if (!matched.length) {
+                suggest.append(node('p', '没有匹配的食材，可先去辅食库添加。', 'fma-hint'));
+            } else {
+                const group = node('div', '', 'fma-chips');
+                matched.forEach(food => {
+                    const category = (context.categories || []).find(row => row.id === food.category_id);
+                    const chip = node('button', `${category?.emoji ? `${category.emoji} ` : ''}${food.name}`, 'fma-chip');
+                    chip.type = 'button';
+                    chip.addEventListener('click', () => pick(food));
+                    group.append(chip);
+                });
+                suggest.append(group);
+            }
+            suggest.hidden = false;
+        }
+
+        search.addEventListener('input', renderSuggest);
+        search.addEventListener('keydown', event => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            const query = (search.value || '').trim().toLocaleLowerCase();
+            const matched = query ? candidates.filter(food =>
+                food.name.toLocaleLowerCase().includes(query)) : [];
+            if (matched[0]) pick(matched[0]);
         });
-        form.append(pickBtn, pickerHost);
+        searchHost.append(search, suggest);
+        form.append(searchHost);
 
         const rawLabel = node('label', '', 'fp-field');
         rawLabel.append(node('span', '生肉/生菜总克数（选填）', 'fma-label'));
@@ -212,9 +246,13 @@
         const hint = node('p', '', 'fma-hint');
         function refreshHint() {
             const grams = Number(state.raw);
-            hint.textContent = (!state.food || !grams)
-                ? '填了克数会自动算出每份含量；不填则只记份数。'
-                : `每份约含 ${Math.round(grams * 10 / state.portions) / 10}g`;
+            if (!state.food) {
+                hint.textContent = '输入食材名搜索并点选联想项；填了克数会自动算出每份含量。';
+            } else if (!grams) {
+                hint.textContent = `已选：${state.food.name}。填了克数会自动算出每份含量；不填则只记份数。`;
+            } else {
+                hint.textContent = `已选：${state.food.name} · 每份约含 ${Math.round(grams * 10 / state.portions) / 10}g`;
+            }
         }
         refreshHint();
         form.append(hint);
@@ -223,9 +261,8 @@
         save.type = 'button';
         save.addEventListener('click', async () => {
             if (!state.food) {
-                toast('请先选择食物');
-                pickerHost.hidden = false;
-                pickerHost.querySelector('input')?.focus();
+                toast('请先搜索并选择食材');
+                search.focus();
                 return;
             }
             try {
