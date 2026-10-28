@@ -775,6 +775,17 @@ def food_meal_records(now):
         return []
 
 
+@app.context_processor
+def inject_active_meals():
+    """把「每天吃几餐」配置注入所有模板，前端据此收敛餐次入口。"""
+    store = app.extensions.get('food_entry_store')
+    try:
+        value = json.dumps(store.active_meals()) if store else json.dumps(['breakfast', 'lunch', 'snack', 'dinner'])
+    except Exception:
+        value = json.dumps(['breakfast', 'lunch', 'snack', 'dinner'])
+    return {'active_meals_json': value}
+
+
 def records_with_food(date_filter):
     """记录列表并入辅食条目；有日期过滤时只保留该日的辅食。"""
     records = load_records(date_prefix=date_filter)

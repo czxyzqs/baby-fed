@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-menu-actions.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-prep.css') }}">
 
+    <script>window.APP_ACTIVE_MEALS = {{ active_meals_json|safe }};</script>
 </head>
 <body class="page-index">
     <script>
@@ -827,6 +828,7 @@
 
     <script defer src="{{ url_for('static', filename='js/date-picker.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/index.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/meal-config.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-menu-actions.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-banner.js') }}"></script>

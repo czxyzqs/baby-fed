@@ -6,6 +6,7 @@
     <title>全部记录 - 宝宝喂养记录</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/records.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-intake.css') }}">
+    <script>window.APP_ACTIVE_MEALS = {{ active_meals_json|safe }};</script>
 </head>
 <body>
     <div class="container">

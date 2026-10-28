@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from pathlib import Path
+import json
 import sqlite3
 
 from flask import Blueprint, current_app, jsonify, request
@@ -90,8 +91,29 @@ def required_text(data, key, label, maximum):
 
 
 class FoodLibraryStore:
+    # 四餐全集；「每天吃几餐」配置存 food_settings.active_meals，两处 store 共用
+    ACTIVE_MEALS = ('breakfast', 'lunch', 'snack', 'dinner')
+
     def __init__(self, data_dir):
         self.path = Path(data_dir) / 'baby-food.db'
+
+    def get_active_meals(self, connection):
+        """每天展示哪几餐（默认全部四餐）；配置无效时回退默认。"""
+        row = connection.execute("SELECT value FROM food_settings WHERE key = 'active_meals'").fetchone()
+        if row is not None:
+            try:
+                value = json.loads(row['value'])
+            except (TypeError, ValueError):
+                value = None
+            if isinstance(value, list) and value:
+                ordered = [meal for meal in self.ACTIVE_MEALS if meal in value]
+                if ordered:
+                    return ordered
+        return list(self.ACTIVE_MEALS)
+
+    def active_meals(self):
+        with self.connect() as connection:
+            return self.get_active_meals(connection)
 
     @contextmanager
     def connect(self):

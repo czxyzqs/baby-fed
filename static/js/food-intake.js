@@ -1,6 +1,6 @@
 (() => {
     const element = name => document.getElementById(`food-intake-${name}`);
-    const meals = { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐' };
+    const meals = window.MealConfig?.labels || { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐' };
     const amounts = ['一勺尖', '一勺', '两勺', '三勺', '半碗', '一碗'];
     // 备餐按份记录的量值（与后端 PORTION_AMOUNTS 对齐）；编辑器里作为额外选项呈现
     const portionAmounts = ['0.5份', '1份', '1.5份', '2份', '2.5份', '3份', '3.5份', '4份'];
@@ -44,7 +44,8 @@
         const hour = Number(new Intl.DateTimeFormat('en-GB', {
             timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23'
         }).format(new Date()));
-        return hour < 11 ? 'breakfast' : hour < 14 ? 'lunch' : hour < 17 ? 'snack' : 'dinner';
+        const guess = hour < 11 ? 'breakfast' : hour < 14 ? 'lunch' : hour < 17 ? 'snack' : 'dinner';
+        return window.MealConfig?.adjustSuggestion(guess) ?? guess;
     }
 
     async function api(path, data) {
@@ -573,6 +574,12 @@
         event.returnValue = '';
     });
     window.addEventListener('pageshow', event => { if (event.persisted) loadHistory(); });
+    // 餐次下拉只留活跃餐次（每天吃几餐的配置）
+    if (window.MealConfig) {
+        [...element('meal').options]
+            .filter(option => option.value && !window.MealConfig.keys.includes(option.value))
+            .forEach(option => option.remove());
+    }
     if (element('history-date')) {
         element('history-date').value = today();
         element('history-date').max = today();

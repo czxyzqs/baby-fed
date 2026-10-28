@@ -18,8 +18,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-intake.css') }}">
     <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/date-picker.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/meal-config.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-history.js') }}"></script>
+    <script>window.APP_ACTIVE_MEALS = {{ active_meals_json|safe }};</script>
 </head>
 <body>
     <main class="food-history-page" id="food-history-page" aria-labelledby="food-history-title">

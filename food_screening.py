@@ -116,19 +116,35 @@ class FoodScreeningStore(FoodLibraryStore):
 
     def settings(self):
         with self.connect() as connection:
-            return {'observe_days_default': self.get_int_setting(connection, 'observe_days_default', 3, 1, 7)}
+            return {
+                'observe_days_default': self.get_int_setting(connection, 'observe_days_default', 3, 1, 7),
+                'active_meals': self.get_active_meals(connection),
+            }
 
     def save_settings(self, data):
-        value = data.get('observe_days_default')
-        if type(value) is not int or not 1 <= value <= 7:
-            raise FoodLibraryError('默认观察天数只能是 1 到 7 天')
+        updates = {}
+        if 'observe_days_default' in data:
+            value = data['observe_days_default']
+            if type(value) is not int or not 1 <= value <= 7:
+                raise FoodLibraryError('默认观察天数只能是 1 到 7 天')
+            updates['observe_days_default'] = value
+        if 'active_meals' in data:
+            meals = data['active_meals']
+            if (not isinstance(meals, list) or not meals
+                    or not all(meal in self.ACTIVE_MEALS for meal in meals)):
+                raise FoodLibraryError('餐次配置无效：至少选一餐，且只能是早/午/下午茶/晚')
+            updates['active_meals'] = [meal for meal in self.ACTIVE_MEALS if meal in meals]
+        if not updates:
+            raise FoodLibraryError('没有可保存的设置')
+        result = dict(updates)
         with self.connect() as connection:
-            connection.execute(
-                'INSERT INTO food_settings (key, value) VALUES (?, ?) '
-                'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-                ('observe_days_default', json.dumps(value)),
-            )
-        return {'observe_days_default': value}
+            for key, value in updates.items():
+                connection.execute(
+                    'INSERT INTO food_settings (key, value) VALUES (?, ?) '
+                    'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+                    (key, json.dumps(value)),
+                )
+        return result
 
     # ---------- shared reads ----------
 

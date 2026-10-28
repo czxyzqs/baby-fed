@@ -20,6 +20,7 @@
     <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-families.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/screening.js') }}"></script>
+    <script>window.APP_ACTIVE_MEALS = {{ active_meals_json|safe }};</script>
 </head>
 <body>
     <main class="screening-page" id="screening-page" aria-labelledby="screening-title">

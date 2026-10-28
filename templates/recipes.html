@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>辅食食谱 · 豚豚喂养记录</title>
     <script>
         try {
@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/recipes.css') }}">
     <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/recipes.js') }}"></script>
+    <script>window.APP_ACTIVE_MEALS = {{ active_meals_json|safe }};</script>
 </head>
 <body>
     <main class="recipes recipes-page" id="recipes-page" aria-labelledby="recipes-title">

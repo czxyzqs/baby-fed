@@ -7,7 +7,7 @@
     const AMOUNTS = ['一勺尖', '一勺', '两勺', '三勺', '半碗', '一碗'];
     const RATINGS = [['喜欢', '😋 喜欢'], ['一般', '😐 一般'], ['拒绝', '🥴 拒绝']];
     const SYMPTOMS = ['口周红疹', '荨麻疹', '呕吐', '腹泻', '便秘', '湿疹加重', '其他'];
-    const MEALS = { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐' };
+    const MEALS = window.MealConfig?.labels || { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐' };
 
     // 计划餐次可能是多选（逗号分隔）或旧值 both/all（午晚两餐），统一展开成数组
     function mealsOf(value) {

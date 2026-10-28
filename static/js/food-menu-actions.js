@@ -5,7 +5,7 @@
 (() => {
     'use strict';
 
-    const MEALS = { breakfast: '🥣 早餐', lunch: '☀️ 午餐', snack: '🍎 下午茶', dinner: '🌙 晚餐' };
+    const MEALS = window.MealConfig?.emojiLabels || { breakfast: '🥣 早餐', lunch: '☀️ 午餐', snack: '🍎 下午茶', dinner: '🌙 晚餐' };
     const MEAL_KEYS = Object.keys(MEALS);
     const PORTION_KEYS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
 

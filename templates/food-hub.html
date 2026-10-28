@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-hub.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-menu-actions.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-prep.css') }}">
+    <script>window.APP_ACTIVE_MEALS = {{ active_meals_json|safe }};</script>
 </head>
 <body>
     <main class="food-hub food-hub-page" aria-labelledby="food-hub-title">
@@ -48,6 +49,11 @@
                 <span class="food-hub-name">排敏规划</span>
                 <span class="food-hub-desc">排期日历、暂停段与队列</span>
             </a>
+            <button type="button" class="food-hub-card" data-meal-settings>
+                <span class="food-hub-icon" aria-hidden="true">🕐</span>
+                <span class="food-hub-name">餐次配置</span>
+                <span class="food-hub-desc">每天吃几餐、哪几餐，加餐时改这里</span>
+            </button>
             <a class="food-hub-card food-hub-card-new" href="/recipes">
                 <span class="food-hub-icon" aria-hidden="true">📖</span>
                 <span class="food-hub-name">辅食食谱</span>
@@ -56,6 +62,7 @@
         </nav>
     </main>
     <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/meal-config.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-prep.js') }}"></script>
 </body>
 </html>

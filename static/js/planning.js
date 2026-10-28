@@ -1501,8 +1501,11 @@
         body.append(portionsLabel);
         const mealLabel = node('label', '餐次（可多选）');
         const mealGroup = node('div', '', 'planning-chip-group');
-        const chosenMeals = new Set(['lunch', 'dinner']);
-        [['breakfast', '早餐'], ['lunch', '午餐'], ['snack', '下午茶'], ['dinner', '晚餐']].forEach(([value, label]) => {
+        const mealChoices = window.MealConfig?.keys || ['breakfast', 'lunch', 'snack', 'dinner'];
+        const chosenMeals = new Set(mealChoices.includes('lunch') && mealChoices.includes('dinner')
+            ? ['lunch', 'dinner'] : mealChoices.slice(0, 2));
+        mealChoices.forEach((value) => {
+            const label = window.MealConfig?.labels?.[value] || value;
             const chip = button(label, () => {
                 if (chosenMeals.has(value)) {
                     chosenMeals.delete(value);

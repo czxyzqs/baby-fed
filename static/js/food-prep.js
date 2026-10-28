@@ -4,7 +4,7 @@
 (() => {
     'use strict';
 
-    const MEALS = { breakfast: '🥣 早餐', lunch: '☀️ 午餐', snack: '🍎 下午茶', dinner: '🌙 晚餐' };
+    const MEALS = window.MealConfig?.emojiLabels || { breakfast: '🥣 早餐', lunch: '☀️ 午餐', snack: '🍎 下午茶', dinner: '🌙 晚餐' };
     const PRESETS = ['一勺尖', '一勺', '两勺', '三勺', '半碗', '一碗'];
     const PORTIONS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
 
@@ -40,7 +40,8 @@
         const hour = Number(new Intl.DateTimeFormat('en-GB', {
             timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23'
         }).format(new Date()));
-        return hour < 11 ? 'breakfast' : hour < 14 ? 'lunch' : hour < 17 ? 'snack' : 'dinner';
+        const guess = hour < 11 ? 'breakfast' : hour < 14 ? 'lunch' : hour < 17 ? 'snack' : 'dinner';
+        return window.MealConfig?.adjustSuggestion(guess) ?? guess;
     }
 
     function nowTime() {
