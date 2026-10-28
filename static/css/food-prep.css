@@ -15,6 +15,9 @@
 .fp-field { display: flex; align-items: center; gap: 10px; }
 .fp-field .fma-label { margin: 0; min-width: 140px; }
 .fp-picker { margin: 2px 0; }
+.fp-add-batch { width: 100%; justify-content: center; margin-top: 10px; padding: 12px; font-size: 15px; }
+.fp-pick-btn { width: 100%; justify-content: center; }
+.fp-pick-btn.picked { border-color: var(--accent-tertiary, #4cc9f0); color: var(--accent-tertiary, #4cc9f0); }
 
 .fp-meal-host { margin-bottom: 4px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .fp-time { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 13px; color: var(--text-secondary, rgba(255, 255, 255, 0.7)); }

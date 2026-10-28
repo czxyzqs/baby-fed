@@ -60,15 +60,20 @@
     // ---------- 弹层骨架（复用 .fma-* 样式） ----------
 
     let overlay = null;
+    let overlayOnClose = null;
 
     function closePanel() {
+        const onClose = overlayOnClose;
         overlay?.remove();
         overlay = null;
+        overlayOnClose = null;
         document.body.style.overflow = '';
+        onClose?.();
     }
 
-    function openOverlay(title) {
+    function openOverlay(title, onClose = null) {
         closePanel();
+        overlayOnClose = onClose;
         overlay = node('div', '', 'fma-overlay');
         overlay.addEventListener('click', event => {
             if (event.target === overlay) closePanel();
@@ -142,27 +147,46 @@
         body.append(node('p', '进行中的批次', 'fma-label'));
         const list = node('div', '', 'fp-batches');
         if (!overview.batches.length) {
-            list.append(node('p', '还没有批次。备餐后登记：记份数，顺手标定“生肉多少克×分几份”。', 'fma-hint'));
+            list.append(node('p', '还没有批次。点下方按钮登记：记份数，顺手标定“生肉多少克×分几份”。', 'fma-hint'));
         }
         overview.batches.forEach(batch => {
             list.append(batchRow(batch, body));
         });
         body.append(list);
 
-        body.append(node('p', '登记新批次', 'fma-label'));
-        const form = node('div', '', 'fp-form');
+        const add = node('button', '＋ 登记新批次', 'fma-btn primary fp-add-batch');
+        add.type = 'button';
+        add.addEventListener('click', () => openBatchForm(context));
+        body.append(add);
+    }
+
+    function openBatchForm(context) {
+        const dialog = openOverlay('登记新批次', () => { window.FoodPrep?.open(); });
+        const body = node('div', '', 'fp-body');
+        dialog.append(body);
+
         const state = { food: null, raw: '', portions: 8 };
-        const picked = node('p', '未选择食物', 'fma-hint');
-        form.append(picked);
-        // 食物选择：弹内嵌选菜区（排除过敏）
-        const candidates = context.foods.filter(food => food.status !== 'allergic');
+        const form = node('div', '', 'fp-form');
+
+        // 食物选择：默认收起，点开才出现搜索选择器，选中即收起
+        const pickBtn = node('button', '选择食物', 'fma-btn fp-pick-btn');
+        pickBtn.type = 'button';
         const pickerHost = node('div', '', 'fp-picker');
+        pickerHost.hidden = true;
+        const candidates = context.foods.filter(food => food.status !== 'allergic'); // 排除过敏
+        pickBtn.addEventListener('click', () => {
+            pickerHost.hidden = !pickerHost.hidden;
+            if (!pickerHost.hidden) pickerHost.querySelector('input')?.focus();
+        });
         foodChips(pickerHost, candidates, food => {
             state.food = food;
-            picked.textContent = `已选：${food.name}`;
+            const category = (context.categories || []).find(row => row.id === food.category_id);
+            pickBtn.textContent = `已选：${category?.emoji ? `${category.emoji} ` : ''}${food.name}`;
+            pickBtn.classList.add('picked');
+            pickerHost.hidden = true;
             refreshHint();
         });
-        form.append(pickerHost);
+        form.append(pickBtn, pickerHost);
 
         const rawLabel = node('label', '', 'fp-field');
         rawLabel.append(node('span', '生肉/生菜总克数（选填）', 'fma-label'));
@@ -200,6 +224,8 @@
         save.addEventListener('click', async () => {
             if (!state.food) {
                 toast('请先选择食物');
+                pickerHost.hidden = false;
+                pickerHost.querySelector('input')?.focus();
                 return;
             }
             try {
@@ -209,7 +235,7 @@
                     portions: state.portions
                 });
                 toast(`已登记：${state.food.name} ${state.portions}份`);
-                await renderPrepBody(body);
+                closePanel(); // onClose 会重新打开批次列表
                 refreshBanner();
             } catch (error) {
                 toast(`登记失败：${error.message}`);
