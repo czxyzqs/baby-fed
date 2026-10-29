@@ -371,9 +371,17 @@
             fetch('/api/screening/banner', { cache: 'no-store' }).then(response => response.json())
         ]);
         const state = { meal: mealValue || suggestedMeal() };
+        // 批次按食物聚合：只要有批次（含已用完）就按份记；余量提示汇总全部批次，
+        // 每份克数取还有余量的批次（多批不同含量给区间），不再误取最老的用完批次
         const batchByFood = {};
         (overview.batches || []).forEach(batch => {
-            batchByFood[batch.food_id] = batch; // 含已用完批次：备餐过的食物始终按份记
+            const info = batchByFood[batch.food_id]
+                || (batchByFood[batch.food_id] = { left: 0, grams: [] });
+            info.left += batch.portions_left || 0;
+            if (batch.portions_left > 0 && batch.grams_per_portion
+                && !info.grams.includes(batch.grams_per_portion)) {
+                info.grams.push(batch.grams_per_portion);
+            }
         });
 
         // 这餐几点吃的：默认带出已有记录的进食时间/记录时刻，可手动改
@@ -491,7 +499,11 @@
                 const controls = node('div', '', 'fp-row-controls');
                 const batch = batchByFood[dish.foodId];
                 if (batch) {
-                    name.append(node('small', `剩${batch.portions_left}份${batch.grams_per_portion ? ` · ${batch.grams_per_portion}g/份` : ''}`, 'fp-row-hint'));
+                    const gramText = !batch.grams.length ? ''
+                        : batch.grams.length === 1 ? ` · ${batch.grams[0]}g/份`
+                        : ` · ${Math.min(...batch.grams)}~${Math.max(...batch.grams)}g/份`;
+                    name.append(node('small',
+                        batch.left ? `剩${batch.left}份${gramText}` : `已吃完，备新批次按新含量折算`, 'fp-row-hint'));
                 }
                 const stateRow = { value: dish.amount };
                 if (batch) {
