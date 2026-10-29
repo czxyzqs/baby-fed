@@ -145,15 +145,30 @@
         const [overview, context] = await Promise.all([
             api('prep/overview'), api(`entries?date=${today()}`)
         ]);
+        const active = (overview.batches || []).filter(batch => !batch.exhausted);
+        const done = (overview.batches || []).filter(batch => batch.exhausted);
         body.append(node('p', '进行中的批次', 'fma-label'));
         const list = node('div', '', 'fp-batches');
-        if (!overview.batches.length) {
-            list.append(node('p', '还没有批次。点下方按钮登记：记份数，顺手标定“生肉多少克×分几份”。', 'fma-hint'));
+        if (!active.length) {
+            list.append(node('p', done.length
+                ? '进行中的批次都吃完了，点下方按钮备新的一批。'
+                : '还没有批次。点下方按钮登记：记份数，顺手标定“生肉多少克×分几份”。', 'fma-hint'));
         }
-        overview.batches.forEach(batch => {
-            list.append(batchRow(batch, body));
-        });
+        active.forEach(batch => list.append(batchRow(batch, body)));
         body.append(list);
+
+        // 已用完的批次默认收起：不占余量列表，只留修正/删除的清理入口
+        if (done.length) {
+            const details = document.createElement('details');
+            details.className = 'fp-batches-done';
+            const summary = document.createElement('summary');
+            summary.textContent = `已用完的批次（${done.length}）`;
+            details.append(summary);
+            const doneList = node('div', '', 'fp-batches');
+            done.forEach(batch => doneList.append(batchRow(batch, body)));
+            details.append(doneList);
+            body.append(details);
+        }
 
         const add = node('button', '＋ 登记新批次', 'fma-btn primary fp-add-batch');
         add.type = 'button';

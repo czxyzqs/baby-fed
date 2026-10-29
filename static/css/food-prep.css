@@ -1,6 +1,14 @@
 /* 备餐批次 + 按餐记录面板（food-prep.js）；弹层骨架复用 food-menu-actions.css 的 .fma-* */
 .fp-body { display: flex; flex-direction: column; gap: 6px; }
 .fp-batches { display: flex; flex-direction: column; gap: 8px; }
+.fp-batches-done { margin-top: 2px; }
+.fp-batches-done summary {
+    cursor: pointer; font-size: 13px; color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+    padding: 6px 2px; user-select: none;
+}
+.fp-batches-done[open] summary { margin-bottom: 8px; }
+.fp-batches-done .fp-batches { gap: 6px; }
+.fp-batches-done .fp-batch-meta { opacity: 0.75; }
 .fp-batch-row {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     background: var(--bg-card, rgba(255, 255, 255, 0.03));
@@ -58,5 +66,6 @@
 
 body.elder .fp-row-name { font-size: 18px; }
 body.elder .fp-batch-meta { font-size: 15px; }
+body.elder .fp-batches-done summary { font-size: 15px; }
 body.elder .fp-stepper .amount-btn { width: 44px; height: 44px; }
 body.elder .fp-stepper-value { font-size: 18px; }
