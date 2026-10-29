@@ -141,6 +141,31 @@ class FoodEntryStore(FoodLibraryStore):
             })
         return records
 
+    def first_observe_days(self, connection, food_id, day):
+        """首次排敏轮次的观察天数：沿用排期块 → 队列设定 → 全局默认，都缺才兜底 3 天。
+        只看覆盖「当天」的块：轮次从实际开吃那天起算，不该拿别的日期段的天数。"""
+        day_iso = day.isoformat() if isinstance(day, date) else str(day)
+        row = connection.execute(
+            "SELECT days FROM food_plan_blocks WHERE food_id = ? AND status = 'scheduled' "
+            "AND start_date <= ? AND date(start_date, '+' || (days - 1) || ' days') >= ? LIMIT 1",
+            (food_id, day_iso, day_iso)).fetchone()
+        if row is not None:
+            return row['days']
+        row = connection.execute(
+            'SELECT observe_days FROM food_queue WHERE food_id = ?', (food_id,)).fetchone()
+        if row is not None and row['observe_days']:
+            return row['observe_days']
+        row = connection.execute(
+            "SELECT value FROM food_settings WHERE key = 'observe_days_default'").fetchone()
+        if row is not None:
+            try:
+                value = int(json.loads(row['value']))
+            except (TypeError, ValueError):
+                value = 3
+            if 1 <= value <= 14:
+                return value
+        return 3
+
     def save_meal(self, data):
         selected_date = intake_date(data.get('date'))
         meal = data.get('meal')
@@ -241,7 +266,8 @@ class FoodEntryStore(FoodLibraryStore):
                             raise FoodLibraryError('食物排敏状态已变化，请重新载入并确认记录方式', 409)
                         if mode != 'only':
                             status = 'normal' if mode == 'normal' else 'active'
-                            days = latest['observe_days'] if latest else 3
+                            days = latest['observe_days'] if latest \
+                                else self.first_observe_days(connection, entry['food_id'], selected_date)
                             cursor = connection.execute(
                                 '''INSERT INTO food_rounds (food_id, start_date, observe_days, status, created_at)
                                    VALUES (?, ?, ?, ?, ?)''', (entry['food_id'], selected_date, days, status, now)

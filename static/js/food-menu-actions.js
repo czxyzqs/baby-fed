@@ -216,9 +216,14 @@
 
     // ---------- 写入 ----------
 
-    async function writeOverride(day, foodId, meal, days, portions, portionsExplicit = false) {
+    async function writeOverride(day, foodId, meal, days, portions, portionsExplicit = false, merge = null, anchorMeal = null) {
+        // merge: add/remove/move 增量语义（后端以当天计划∪现有覆盖为基数），缺省=整组替换
         const payload = { date: day, food_id: foodId, meal };
         if (days > 1) payload.days = days;
+        if (merge) {
+            payload.merge = merge;
+            if (anchorMeal) payload.anchor_meal = anchorMeal;
+        }
         if (portionsExplicit) payload.portions = portions ?? null;
         else if (portions != null) payload.portions = portions;
         return api('menu-override', 'POST', payload);
@@ -275,8 +280,10 @@
         moveBtn.type = 'button';
         moveBtn.addEventListener('click', () => {
             const area = node('div', '', 'fma-sub');
-            const picker = mealPicker(dish.meals.length ? dish.meals : ['lunch']);
+            // 换=替换：不预选当前餐次，选中的餐次取代原餐，没选的餐不再吃
+            const picker = mealPicker([]);
             area.append(picker.el);
+            area.append(node('p', '选择要改到哪几餐；原来那餐会被替换掉。', 'fma-hint'));
             const save = node('button', '保存', 'fma-btn primary');
             save.type = 'button';
             save.addEventListener('click', () => {
@@ -294,7 +301,8 @@
                             ? api(`normals/${dish.planId}`, 'PUT', payload)
                             : api(`blocks/${dish.blockId}`, 'PUT', payload);
                     }
-                    return writeOverride(config.day, dish.foodId, meals.length === 1 ? meals[0] : meals, days);
+                    return writeOverride(config.day, dish.foodId,
+                        meals.length === 1 ? meals[0] : meals, days, undefined, false, 'move', config.meal);
                 });
             });
             area.append(save);
@@ -307,8 +315,8 @@
             const skipBtn = node('button', `这餐不吃（${MEALS[config.meal]}）`, 'fma-btn');
             skipBtn.type = 'button';
             skipBtn.addEventListener('click', () => {
-                const rest = dish.meals.filter(meal => meal !== config.meal);
-                runWrite(() => writeOverride(config.day, dish.foodId, rest, effectiveDays()));
+                runWrite(() => writeOverride(config.day, dish.foodId, config.meal, effectiveDays(),
+                    undefined, false, 'remove'));
             });
             actions.append(skipBtn);
         }
@@ -411,11 +419,15 @@
                     foods: config.replaceCandidates,
                     hint: '替换只调整所选日期，长期计划不变。',
                     onPick: food => {
-                        const meals = dish.meals.length ? dish.meals : ['lunch'];
+                        // 只替换锚定餐次：旧食物移出这一餐（其他餐照吃），新食物补进这一餐
+                        const meals = config.meal
+                            ? [config.meal]
+                            : (dish.meals.length ? dish.meals : ['lunch']);
                         runWrite(async () => {
                             const days = effectiveDays();
-                            await writeOverride(config.day, dish.foodId, 'none', days);
-                            return writeOverride(config.day, food.id, meals.length === 1 ? meals[0] : meals, days);
+                            await writeOverride(config.day, dish.foodId, meals, days, undefined, false, 'remove');
+                            return writeOverride(config.day, food.id,
+                                meals.length === 1 ? meals[0] : meals, days, undefined, false, 'add');
                         });
                     }
                 });
@@ -517,7 +529,8 @@
                 const days = lockedDays || scope.days();
                 save.disabled = true;
                 for (const food of chosenFoods.values()) {
-                    await writeOverride(config.day, food.id, mealValue, days, portionsState.value);
+                    // 并入所选餐次：同食物当天其他餐次的计划不会被盖掉
+                    await writeOverride(config.day, food.id, mealValue, days, portionsState.value, false, 'add');
                 }
                 closePanel();
                 toast(`已加：${[...chosenFoods.values()].map(food => food.name).join('、')}`);

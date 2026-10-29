@@ -1279,11 +1279,7 @@ class FoodScreeningStore(FoodLibraryStore):
                     })
                 else:
                     hidden.append({'food_id': row['food_id'], 'food': row['food_name']})
-            for row in connection.execute(
-                "SELECT n.*, foods.name AS food_name FROM food_normal_plans n JOIN foods ON foods.id = n.food_id "
-                "WHERE n.start_date <= ? AND date(n.start_date, '+' || (n.days - 1) || ' days') >= ? ORDER BY n.start_date",
-                (today, today),
-            ):
+            for row in self.normal_plans_in(connection, today):
                 meal = menu_meal(row['food_id'], row['meal'])
                 if meal is not None:
                     items.append({
@@ -1356,8 +1352,76 @@ class FoodScreeningStore(FoodLibraryStore):
         return {row['food_id']: dict(row) for row in connection.execute(
             'SELECT food_id, meal, portions FROM food_menu_overrides WHERE date = ?', (day,))}
 
+    def planned_meals_in(self, connection, food_id, day):
+        """某天某食物的长期计划餐次集合：排敏块 + 进行中观察轮次 + 常规计划，不含当日覆盖。"""
+        meals = set()
+        for (meal,) in connection.execute(
+                "SELECT meal FROM food_plan_blocks WHERE food_id = ? AND status = 'scheduled' "
+                "AND start_date <= ? AND date(start_date, '+' || (days - 1) || ' days') >= ?",
+                (food_id, day, day)):
+            meals.update(expand_normal_meal(meal))
+        for (start_date, observe_days) in connection.execute(
+                "SELECT start_date, observe_days FROM food_rounds WHERE food_id = ? AND status = 'active'",
+                (food_id,)):
+            if start_date <= day <= add_days(date.fromisoformat(start_date), observe_days - 1):
+                meals.update(expand_normal_meal(self.block_meal_in(connection, food_id, day)))
+                break
+        for (meal,) in connection.execute(
+                'SELECT meal FROM food_normal_plans WHERE food_id = ? '
+                "AND start_date <= ? AND date(start_date, '+' || (days - 1) || ' days') >= ?",
+                (food_id, day, day)):
+            meals.update(expand_normal_meal(meal))
+        return meals
+
+    def normal_plans_in(self, connection, day):
+        """当天常规计划按食物归并：同食物多段计划合成一条，餐次取并集、份数按餐合并，
+        首段作为编辑锚点（plan_id/portions）。避免同食物多段在同一天重复展示或互相顶掉。"""
+        grouped = {}
+        for row in connection.execute(
+                'SELECT n.*, foods.name AS food_name FROM food_normal_plans n JOIN foods ON foods.id = n.food_id '
+                'WHERE n.start_date <= ? AND date(n.start_date, "+" || (n.days - 1) || " days") >= ? '
+                'ORDER BY n.start_date, n.id', (day, day),
+        ):
+            meals = expand_normal_meal(row['meal'])
+            item = grouped.get(row['food_id'])
+            if item is None:
+                item = dict(row)
+                item['_meals'] = list(meals)
+                item['_portions'] = {}
+                grouped[row['food_id']] = item
+            else:
+                item['_meals'] = list(dict.fromkeys(item['_meals'] + meals))
+            portions = stored_portions(row['portions'])
+            if portions is not None:
+                if isinstance(portions, dict):
+                    item['_portions'].update(
+                        {key: value for key, value in portions.items() if value is not None})
+                else:
+                    for meal in meals:
+                        item['_portions'][meal] = portions
+        items = []
+        for item in grouped.values():
+            meals = [meal for meal in NORMAL_MEALS if meal in item['_meals']]
+            values = [item['_portions'][meal] for meal in meals if meal in item['_portions']]
+            if not values:
+                item['portions'] = None
+            elif len(values) == len(meals) and len(set(values)) == 1:
+                item['portions'] = values[0]
+            else:
+                item['portions'] = json.dumps(
+                    {meal: item['_portions'][meal] for meal in meals if meal in item['_portions']},
+                    ensure_ascii=False)
+            item['meal'] = ','.join(meals)
+            del item['_meals']
+            del item['_portions']
+            items.append(item)
+        return items
+
     def set_menu_override(self, data):
-        # 允许未来日期：排期页可对任意一天做临时餐次调整；days>1 时连续多天一起调
+        # 允许未来日期：排期页可对任意一天做临时餐次调整；days>1 时连续多天一起调。
+        # merge 增量语义以「当天计划餐次 ∪ 现有覆盖」为基数：
+        #   add=并入所选餐次（加菜/替换的新食物）、remove=移除所选餐次（这餐不吃/替换的旧食物）、
+        #   move=锚定餐次换成所选餐次（换到别的餐）；缺省仍是整组替换（改份数等走这条）。
         start = parse_date(data.get('date'), '日期', allow_future=True)
         days = data.get('days', 1)
         if type(days) is not int or not 1 <= days <= 14:
@@ -1367,24 +1431,65 @@ class FoodScreeningStore(FoodLibraryStore):
         if type(food_id) is not int:
             raise FoodLibraryError('请选择有效食物')
         meal = data.get('meal')
-        if meal not in ('default', 'none'):
-            # 单值 both/all 之外还接受四餐多选（数组或逗号串），统一成规范存储值
+        merge = data.get('merge')
+        if merge not in (None, 'add', 'remove', 'move'):
+            raise FoodLibraryError('餐次调整选项无效')
+        if meal == 'default':
+            merge = None
+        elif meal != 'none':
             try:
                 meal = parse_meal_selection(meal)
             except FoodLibraryError:
                 raise FoodLibraryError('餐次调整选项无效')
-        portions = parse_portions(data.get('portions')) if meal not in ('default', 'none') else None
+        anchor = None
+        if merge == 'move':
+            anchor = data.get('anchor_meal')
+            if anchor is not None and anchor not in NORMAL_MEALS:
+                raise FoodLibraryError('餐次调整选项无效')
+        has_portions = 'portions' in data
         with self.connect() as connection:
             if connection.execute('SELECT 1 FROM foods WHERE id = ?', (food_id,)).fetchone() is None:
                 raise FoodLibraryError('该食物已不存在，请刷新后重试', 404)
             for day in day_list:
-                if meal == 'default':
-                    connection.execute(
-                        'DELETE FROM food_menu_overrides WHERE date = ? AND food_id = ?', (day, food_id))
+                existing = connection.execute(
+                    'SELECT meal, portions FROM food_menu_overrides WHERE date = ? AND food_id = ?',
+                    (day, food_id)).fetchone()
+                if merge is None:
+                    if meal == 'default':
+                        connection.execute(
+                            'DELETE FROM food_menu_overrides WHERE date = ? AND food_id = ?', (day, food_id))
+                        continue
+                    stored_meal = meal
+                    portions = parse_portions(data.get('portions')) if meal != 'none' else None
                 else:
-                    connection.execute(
-                        'INSERT OR REPLACE INTO food_menu_overrides (date, food_id, meal, portions) '
-                        'VALUES (?, ?, ?, ?)', (day, food_id, meal, portions))
+                    # 覆盖一旦存在就整体代表当天生效餐次：以它为基数演化，
+                    # 不再并入长期计划（否则之前被换掉/移除的计划餐次会复活）；
+                    # 没有覆盖时才以当天计划餐次为基数
+                    if existing is None:
+                        base = self.planned_meals_in(connection, food_id, day)
+                    elif existing['meal'] == 'none':
+                        base = set()
+                    else:
+                        base = set(expand_normal_meal(existing['meal']))
+                    chosen = set(expand_normal_meal(meal))
+                    if merge == 'add':
+                        final = base | chosen
+                    elif merge == 'remove':
+                        final = base - chosen
+                    elif anchor is None:
+                        final = chosen
+                    else:
+                        final = (base - {anchor}) | chosen
+                    stored_meal = ','.join(m for m in NORMAL_MEALS if m in final) or 'none'
+                    if stored_meal == 'none':
+                        portions = None
+                    elif has_portions:
+                        portions = parse_portions(data['portions'])
+                    else:
+                        portions = existing['portions'] if existing is not None else None
+                connection.execute(
+                    'INSERT OR REPLACE INTO food_menu_overrides (date, food_id, meal, portions) '
+                    'VALUES (?, ?, ?, ?)', (day, food_id, stored_meal, portions))
         # banner 在事务外重查，避免嵌套连接锁库
         result = self.banner()
         result['success'] = True
@@ -1453,11 +1558,7 @@ class FoodScreeningStore(FoodLibraryStore):
                     'is_new': True, 'position': index, 'observe_days': row['days'],
                     'meal': row['meal'],
                 })
-            for row in connection.execute(
-                'SELECT n.*, foods.name AS food_name FROM food_normal_plans n JOIN foods ON foods.id = n.food_id '
-                'WHERE n.start_date <= ? AND date(n.start_date, "+" || (n.days - 1) || " days") >= ?',
-                (end, end),
-            ):
+            for row in self.normal_plans_in(connection, end):
                 push({'food_id': row['food_id'], 'food_name': row['food_name'],
                       'is_new': False, 'meal': row['meal'], 'portions': stored_portions(row['portions'])})
             # 当日加菜：override 里当天不在任何计划中的食物

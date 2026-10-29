@@ -534,12 +534,26 @@
         return (schedule.board_foods || []).filter(food => food.status === 'untouched');
     }
 
-    // 某天的菜品清单：排敏块/观察轮次/常规计划应用当日覆盖后，再补上「当日加菜」
+    // 计划段的份数展开成按餐映射：标量作用于该段全部餐次，按餐映射原样，不指定返回 null
+    function portionMapOf(dish) {
+        let value = dish.plannedPortions ?? null;
+        if (value == null) return null;
+        if (typeof value === 'string' && value.startsWith('{')) {
+            try { value = JSON.parse(value); } catch (error) { return null; }
+        }
+        if (typeof value === 'object') return value;
+        const map = {};
+        dish.meals.forEach(meal => { map[meal] = value; });
+        return map;
+    }
+
+    // 某天的菜品清单：排敏块/观察轮次/常规计划先按食物归并（同食物多段计划合成一条，
+    // 餐次并集、份数按餐合并，编辑仍锚定首段），应用当日覆盖后再补「当日加菜」
     function dishesForDay(day) {
         const dishes = [];
         const hidden = [];
-        const seen = new Set();
         const overrides = schedule.overrides?.[day] || {};
+        const byFood = new Map();
         itemsForDate(day).forEach(entry => {
             let dish = null;
             if (entry.kind === 'round') {
@@ -566,8 +580,25 @@
                     gramFood: (schedule.gram_foods || []).includes(entry.plan.food_id)
                 };
             }
-            if (!dish || seen.has(dish.foodId)) return;
-            seen.add(dish.foodId);
+            if (!dish) return;
+            const known = byFood.get(dish.foodId);
+            if (known) {
+                const picked = portionMapOf(dish);
+                if (picked) Object.assign(known._portionMap, picked);
+                known.meals = [...new Set([...known.meals, ...dish.meals])];
+                return;
+            }
+            dish._portionMap = portionMapOf(dish) || {};
+            byFood.set(dish.foodId, dish);
+        });
+        byFood.forEach(dish => {
+            const values = dish.meals.map(meal => dish._portionMap[meal]).filter(value => value != null);
+            dish.plannedPortions = !values.length ? null
+                : (values.length === dish.meals.length && new Set(values).size === 1 ? values[0]
+                    : Object.fromEntries(dish.meals
+                        .filter(meal => dish._portionMap[meal] != null)
+                        .map(meal => [meal, dish._portionMap[meal]])));
+            delete dish._portionMap;
             const override = overrides[String(dish.foodId)];
             if (override === 'none') {
                 hidden.push({ foodId: dish.foodId, name: dish.name });
@@ -584,7 +615,7 @@
         // 当日加菜：override 里当天不在任何计划中的食物
         Object.entries(overrides).forEach(([foodIdStr, meal]) => {
             const foodId = Number(foodIdStr);
-            if (seen.has(foodId) || meal === 'none') return;
+            if (byFood.has(foodId) || meal === 'none') return;
             const name = foodName(foodId);
             if (name === '?') return;
             const extraPortions = schedule.override_portions?.[day]?.[String(foodId)];
