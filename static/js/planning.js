@@ -1256,8 +1256,8 @@
                 (start !== dateStr ? '（已避开暂停段）' : '') +
                 (conflicts.length ? `，与 ${conflicts.join('、')} 的观察期重叠` : '');
             strategyGroup.replaceChildren();
+            strategyGroup.hidden = !conflicts.length;
             if (conflicts.length) {
-                body.append(strategyGroup);
                 [['defer', '现有排敏顺延'], ['overlap', '保持重叠，稍后自行调整']].forEach(([value, label]) => {
                     const option = button(label, () => {
                         state.strategy = value;
