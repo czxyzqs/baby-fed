@@ -145,12 +145,25 @@
     z-index: 1100;
 }
 
+/* 弹窗高度只随视口定、不随内容变：搜索筛选时弹窗尺寸稳定，只有列表区在内部滚动 */
 #food-intake-picker .modal {
     max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    height: min(600px, 82vh);
+    height: min(600px, 82dvh);
+}
+
+#food-intake-picker .modal-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 #food-intake-picker-list {
-    max-height: 52vh;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     margin-bottom: 12px;
 }
@@ -226,9 +239,10 @@ body.elder .food-intake-picker-food-status {
         align-items: flex-end;
     }
 
-    /* 窄屏压低列表高度，保证取消按钮留在首屏内 */
-    #food-intake-picker-list {
-        max-height: 40vh;
+    /* 窄屏底部抽屉固定高度，键盘弹起只随动态视口变一次，筛选输入不再引起跳动 */
+    #food-intake-picker .modal {
+        height: 78vh;
+        height: 78dvh;
     }
 
     .food-intake .modal-body,
