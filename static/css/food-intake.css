@@ -107,7 +107,6 @@
 }
 
 .food-intake-block,
-#food-intake-picker,
 .food-intake-meal-card {
     padding: 16px;
     margin-bottom: 16px;
@@ -136,14 +135,61 @@
     flex: 1 0 auto;
 }
 
-.food-intake-block h3,
-#food-intake-picker h3 {
+.food-intake-block h3 {
     font-size: 20px;
     margin-bottom: 12px;
 }
 
+/* 新增/更换食物：二层弹窗叠在编辑弹窗上，列表独立滚动，不再内联铺满编辑器 */
 #food-intake-picker {
-    margin-top: 16px;
+    z-index: 1100;
+}
+
+#food-intake-picker .modal {
+    max-width: 520px;
+}
+
+#food-intake-picker-list {
+    max-height: 52vh;
+    overflow-y: auto;
+    margin-bottom: 12px;
+}
+
+#food-intake-picker-list h3 {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin: 14px 0 8px;
+}
+
+/* 食物行：名称在左、状态弱化居右，扫一眼不用读整行文字 */
+#food-intake-picker-list .food-intake-options {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+#food-intake-picker-list .food-intake-options button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    text-align: left;
+}
+
+.food-intake-picker-food-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.food-intake-picker-food-status {
+    flex: none;
+    font-size: 15px;
+    color: var(--text-secondary);
+}
+
+body.elder .food-intake-picker-food-status {
+    font-size: 17px;
 }
 
 .food-intake-footer {
@@ -174,9 +220,15 @@
 }
 
 @media (max-width: 480px) {
-    #food-intake-modal {
+    #food-intake-modal,
+    #food-intake-picker {
         padding: 10px;
         align-items: flex-end;
+    }
+
+    /* 窄屏压低列表高度，保证取消按钮留在首屏内 */
+    #food-intake-picker-list {
+        max-height: 40vh;
     }
 
     .food-intake .modal-body,

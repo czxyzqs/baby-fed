@@ -29,6 +29,7 @@
     let dirty = false;
     let busy = false;
     let pickerIndex = null;
+    let pickerOpener = null;
     let opener = null;
     let historyVersion = 0;
 
@@ -94,6 +95,7 @@
 
     function close() {
         if (busy || !discard()) return false;
+        closePicker(false);
         element('modal').classList.remove('active');
         document.body.style.overflow = '';
         dirty = false;
@@ -122,7 +124,7 @@
             ...entry, original_food_id: entry.food_id, mode: 'keep'
         }));
         dirty = false;
-        element('picker').hidden = true;
+        closePicker(false);
         element('title').textContent = blocks.length ? '编辑辅食记录' : '添加辅食记录';
         renderBlocks();
     }
@@ -208,7 +210,7 @@
         element('date').max = today();
         element('date').value = selectedDate;
         element('meal').value = selectedMeal;
-        element('picker').hidden = true;
+        closePicker(false);
         element('blocks').replaceChildren();
         element('add').disabled = true;
         element('save').disabled = true;
@@ -271,7 +273,7 @@
             const remove = button('×', () => {
                 blocks.splice(index, 1);
                 dirty = true;
-                element('picker').hidden = true;
+                closePicker(false);
                 renderBlocks();
             });
             remove.setAttribute('aria-label', `移除${block.food_name}`);
@@ -363,15 +365,25 @@
 
     function showPicker(index = null) {
         pickerIndex = index;
+        pickerOpener = document.activeElement;
         element('search').value = '';
         element('category').replaceChildren(new Option('全部品类', ''));
         context.categories.forEach(category => {
             element('category').add(new Option(`${category.emoji} ${category.name}`, String(category.id)));
         });
-        element('picker').hidden = false;
+        element('picker-title').textContent = index === null ? '选择食物' : '更换食物';
+        element('picker').classList.add('active');
         renderPicker();
         element('search').focus();
-        element('picker').scrollIntoView({ block: 'nearest' });
+    }
+
+    function closePicker(restoreFocus = true) {
+        const wasOpen = element('picker').classList.contains('active');
+        element('picker').classList.remove('active');
+        pickerIndex = null;
+        if (wasOpen && restoreFocus) {
+            (pickerOpener?.isConnected ? pickerOpener : element('add')).focus();
+        }
     }
 
     function renderPicker() {
@@ -388,8 +400,9 @@
             const group = node('div', '', 'food-intake-options');
             foods.forEach(food => {
                 const duplicate = blocks.some((block, index) => index !== pickerIndex && block.food_id === food.id);
-                const select = button(`${food.name} · ${statuses[food.status]}${duplicate ? '（已添加）' : ''}`, () => {
-                    const previous = pickerIndex === null ? null : blocks[pickerIndex];
+                const select = button('', () => {
+                    const index = pickerIndex;
+                    const previous = index === null ? null : blocks[index];
                     const block = {
                         id: previous?.id ?? null,
                         original_food_id: previous?.original_food_id ?? null,
@@ -400,13 +413,21 @@
                         rating: previous?.rating ?? null, note: previous?.note ?? '', mode: defaultMode(food)
                     };
                     block.auto_amount = !previous && ['untouched', 'screening'].includes(food.status);
-                    if (pickerIndex === null) blocks.push(block);
-                    else blocks[pickerIndex] = block;
+                    if (index === null) blocks.push(block);
+                    else blocks[index] = block;
                     dirty = true;
-                    element('picker').hidden = true;
+                    closePicker(false);
                     renderBlocks();
-                    element('blocks').children[pickerIndex ?? blocks.length - 1].scrollIntoView({ block: 'nearest' });
+                    // 焦点落回新增/更换后的食物块，键盘流不被弹窗打断
+                    const target = element('blocks').children[index ?? blocks.length - 1];
+                    target?.scrollIntoView({ block: 'nearest' });
+                    target?.querySelector('button')?.focus({ preventScroll: true });
                 });
+                select.classList.add('food-intake-picker-food');
+                select.append(
+                    node('span', food.name, 'food-intake-picker-food-name'),
+                    node('span', duplicate ? '已添加' : statuses[food.status], 'food-intake-picker-food-status')
+                );
                 select.disabled = duplicate;
                 group.append(select);
             });
@@ -544,7 +565,30 @@
         if (event.key === 'Enter') event.preventDefault();
     });
     element('category').addEventListener('change', renderPicker);
-    element('picker-cancel').addEventListener('click', () => { element('picker').hidden = true; });
+    element('picker-cancel').addEventListener('click', () => closePicker());
+    element('picker-close').addEventListener('click', () => closePicker());
+    element('picker').addEventListener('click', event => {
+        if (event.target === element('picker')) closePicker();
+    });
+    element('picker').addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closePicker();
+        }
+        if (event.key === 'Tab') {
+            const controls = [...element('picker').querySelectorAll('button, input, select')]
+                .filter(control => !control.matches(':disabled') && control.getClientRects().length);
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last?.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first?.focus();
+            }
+        }
+    });
     element('library').addEventListener('click', event => {
         if (busy || !discard()) event.preventDefault();
         else dirty = false;
