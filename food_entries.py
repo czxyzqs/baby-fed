@@ -109,8 +109,10 @@ class FoodEntryStore(FoodLibraryStore):
                 'occasions': occasions, 'day_revision': row['revision'] if row else 0}
 
     def latest_entry_time(self):
+        """最近一次辅食的进食时刻：按事实（日期+进食时间），补记晚保存不再把"距上一顿"算小。"""
         with self.connect() as connection:
-            row = connection.execute('SELECT MAX(created_at) AS latest FROM food_entries').fetchone()
+            row = connection.execute(
+                "SELECT MAX(date || 'T' || eaten_time || ':00') AS latest FROM food_entries").fetchone()
         return row['latest'] if row else None
 
     def recent_meal_records(self, since_date):
