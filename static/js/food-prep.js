@@ -430,25 +430,30 @@
         const rowsHost = node('div', '', 'fp-rows');
         body.replaceChildren(mealHost, trayHost, rowsHost);
 
-        let timeInput = null;
+        // 时间输入只在打开弹窗时建一次；change 只更新状态、槽标签文字和托盘，
+        // 绝不重建头部 DOM——原生时间选择器（尤其 iPad 轮盘）选完小时就提交一次
+        // change，此时替换输入框会把选择器整个关掉，分钟来不及选
+        const timeLabel = node('label', '', 'fp-time');
+        timeLabel.append(node('span', '这餐几点'));
+        const timeInput = document.createElement('input');
+        timeInput.type = 'time';
+        timeInput.className = 'form-input';
+        timeInput.value = state.time;
+        timeLabel.append(timeInput);
+        const slotTag = node('span', '', 'fp-slot-tag');
+        const chipsHost = node('div', '', 'fma-chips fp-occasion-chips');
+        mealHost.replaceChildren(timeLabel, slotTag, chipsHost);
+
+        timeInput.addEventListener('change', () => {
+            if (timeInput.value) state.time = timeInput.value;
+            slotTag.textContent = slotLabel();
+            renderTray();
+        });
 
         function renderHead() {
-            const timeLabel = node('label', '', 'fp-time');
-            timeLabel.append(node('span', '这餐几点'));
-            timeInput = document.createElement('input');
-            timeInput.type = 'time';
-            timeInput.className = 'form-input';
             timeInput.value = state.time;
-            timeInput.addEventListener('change', () => {
-                state.time = timeInput.value || nowTime();
-                renderHead();
-                renderTray();
-            });
-            timeLabel.append(timeInput);
-            const slotTag = node('span', slotLabel(), 'fp-slot-tag');
-            mealHost.replaceChildren(timeLabel, slotTag);
-
-            const chips = node('div', '', 'fma-chips fp-occasion-chips');
+            slotTag.textContent = slotLabel();
+            chipsHost.replaceChildren();
             occasions.forEach((occasion, index) => {
                 const chip = node('button', occasionChipLabel(occasion, index),
                     'fma-chip' + (state.editing === occasion ? ' active' : ''));
@@ -462,7 +467,7 @@
                     renderTray();
                     renderRows();
                 });
-                chips.append(chip);
+                chipsHost.append(chip);
             });
             const fresh = node('button', '＋ 新记一笔',
                 'fma-chip' + (state.editing === null ? ' active' : ''));
@@ -476,8 +481,7 @@
                 renderTray();
                 renderRows();
             });
-            chips.append(fresh);
-            mealHost.append(chips);
+            chipsHost.append(fresh);
         }
 
         function renderTray() {
