@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/recipes.css') }}">
     <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/recipes.js') }}"></script>
-    <script>window.APP_ACTIVE_MEALS = {{ active_meals_json|safe }};</script>
+    <script>window.APP_MEAL_SLOTS = {{ meal_slots_json|safe }};</script>
 </head>
 <body>
     <main class="recipes recipes-page" id="recipes-page" aria-labelledby="recipes-title">

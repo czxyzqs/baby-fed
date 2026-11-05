@@ -1,4 +1,4 @@
-"""Whole-meal food intake records stored alongside the food library."""
+"""Food intake records stored alongside the food library: 一笔=同日同进食时间的条目组."""
 
 from datetime import date, datetime, timedelta, timezone
 import json
@@ -6,9 +6,10 @@ import sqlite3
 
 from flask import Blueprint, current_app, jsonify, request
 
-from food_library import FoodLibraryError, FoodLibraryStore
+from food_library import FoodLibraryError, FoodLibraryStore, slot_for_time
 
 
+# 槽位代号全集（计划侧词汇；记录侧不存餐次，展示时按时间落槽推导）
 MEALS = ('breakfast', 'lunch', 'snack', 'dinner')
 AMOUNTS = ('一勺尖', '一勺', '两勺', '三勺', '半碗', '一碗')
 PORTION_AMOUNTS = ('0.5份', '1份', '1.5份', '2份', '2.5份', '3份', '3.5份', '4份')
@@ -97,11 +98,15 @@ class FoodEntryStore(FoodLibraryStore):
         entries = [dict(row) for row in connection.execute(
             'SELECT * FROM food_entries WHERE date = ? ORDER BY id', (selected_date,)
         )]
-        revisions = {meal: 0 for meal in MEALS}
-        revisions.update({row['meal']: row['revision'] for row in connection.execute(
-            'SELECT meal, revision FROM food_meal_versions WHERE date = ?', (selected_date,)
-        )})
-        return {'date': selected_date, 'categories': categories, 'foods': foods, 'entries': entries, 'revisions': revisions}
+        # 一笔 = 同日同进食时间的条目组；按时间升序供前端直接渲染
+        grouped = {}
+        for entry in entries:
+            grouped.setdefault(entry['eaten_time'], []).append(entry)
+        occasions = [{'time': eaten_time, 'entries': rows} for eaten_time, rows in sorted(grouped.items())]
+        row = connection.execute(
+            'SELECT revision FROM food_day_versions WHERE date = ?', (selected_date,)).fetchone()
+        return {'date': selected_date, 'categories': categories, 'foods': foods, 'entries': entries,
+                'occasions': occasions, 'day_revision': row['revision'] if row else 0}
 
     def latest_entry_time(self):
         with self.connect() as connection:
@@ -109,35 +114,29 @@ class FoodEntryStore(FoodLibraryStore):
         return row['latest'] if row else None
 
     def recent_meal_records(self, since_date):
-        """近段日期的辅食按（日期, 餐次）聚合成首页最近记录条目。"""
+        """近段日期的辅食按（日期, 进食时间）聚合成首页最近记录条目，一笔一卡。
+        序号 ordinal 是同日内按时间排序算出的展示值，永不入库。"""
         with self.connect() as connection:
             rows = connection.execute(
-                '''SELECT date, meal, MAX(created_at) AS latest, COUNT(*) AS item_count,
-                          GROUP_CONCAT(food_name, '、') AS foods,
-                          MIN(eaten_time) AS eaten
+                '''SELECT date, eaten_time, COUNT(*) AS item_count,
+                          GROUP_CONCAT(food_name, '、') AS foods
                    FROM food_entries WHERE date >= ?
-                   GROUP BY date, meal ORDER BY latest DESC''', (since_date,)
+                   GROUP BY date, eaten_time ORDER BY date DESC, eaten_time ASC''', (since_date,)
             ).fetchall()
+        slots = self.meal_slots()
         records = []
+        ordinal_by_date = {}
         for row in rows:
-            if row['eaten']:
-                time_text = f"{row['date']}T{row['eaten']}:00"
-            else:
-                try:
-                    created = datetime.fromisoformat(row['latest'])
-                    if created.tzinfo is not None:
-                        created = created.astimezone(CN_TZ).replace(tzinfo=None)
-                    time_text = created.isoformat(timespec='seconds')
-                except (TypeError, ValueError):
-                    time_text = row['date']
+            ordinal_by_date[row['date']] = ordinal_by_date.get(row['date'], 0) + 1
             records.append({
-                'id': f"food-{row['date']}-{row['meal']}",
+                'id': f"food-{row['date']}-{row['eaten_time'].replace(':', '')}",
                 'type': 'food',
-                'time': time_text,
+                'time': f"{row['date']}T{row['eaten_time']}:00",
                 'date': row['date'],
-                'meal': row['meal'],
                 'foods': row['foods'] or '',
                 'itemCount': row['item_count'],
+                'slot': slot_for_time(slots, row['eaten_time']),
+                'ordinal': ordinal_by_date[row['date']],
             })
         return records
 
@@ -166,19 +165,28 @@ class FoodEntryStore(FoodLibraryStore):
                 return value
         return 3
 
-    def save_meal(self, data):
+    def save_occasion(self, data):
+        """按笔替换：ids=被替换的旧条目编号全集（可为空=新记一笔），entries=这笔的新状态。
+        改时间/改日期就是挪移——旧行按 id 删除、以新日期新时间重插。"""
         selected_date = intake_date(data.get('date'))
-        meal = data.get('meal')
-        if meal not in MEALS:
-            raise FoodLibraryError('请选择早餐、午餐、下午茶或晚餐')
+        eaten_time = data.get('time')
+        if not valid_time(eaten_time):
+            raise FoodLibraryError('请填写这笔的进食时间（HH:MM）')
         revision = data.get('revision')
         if type(revision) is not int or not 0 <= revision < 9223372036854775807:
-            raise FoodLibraryError('缺少有效的餐次版本，请重新打开表单')
+            raise FoodLibraryError('缺少有效的当日版本，请重新打开表单')
+        replace_ids = data.get('ids')
+        if not isinstance(replace_ids, list) or len(replace_ids) > 100:
+            raise FoodLibraryError('请提交有效的记录编号列表')
+        entry_ids = set()
+        for identifier in replace_ids:
+            if type(identifier) is not int or identifier <= 0 or identifier in entry_ids:
+                raise FoodLibraryError('记录编号无效或重复')
+            entry_ids.add(identifier)
         entries = data.get('entries')
         if not isinstance(entries, list) or len(entries) > 100:
-            raise FoodLibraryError('请提交有效的食物列表，一餐最多 100 种食物')
+            raise FoodLibraryError('请提交有效的食物列表，一笔最多 100 种食物')
         identifiers = set()
-        entry_ids = set()
         for entry in entries:
             if not isinstance(entry, dict):
                 raise FoodLibraryError('食物记录格式错误')
@@ -186,13 +194,14 @@ class FoodEntryStore(FoodLibraryStore):
             if type(food_id) is not int or not 0 < food_id <= 9223372036854775807:
                 raise FoodLibraryError('请选择有效食物')
             if food_id in identifiers:
-                raise FoodLibraryError('同一餐不能重复添加同一种食物')
+                raise FoodLibraryError('同一笔不能重复添加同一种食物')
             identifiers.add(food_id)
             entry_id = entry.get('id')
             if entry_id is not None:
-                if type(entry_id) is not int or entry_id <= 0 or entry_id in entry_ids:
-                    raise FoodLibraryError('记录编号无效或重复')
-                entry_ids.add(entry_id)
+                if type(entry_id) is not int or entry_id <= 0:
+                    raise FoodLibraryError('记录编号无效')
+                if entry_id not in entry_ids:
+                    raise FoodLibraryError('记录不属于当前这笔，请重新载入', 409)
             if entry.get('amount') not in ALL_AMOUNTS and gram_value(entry.get('amount')) is None:
                 raise FoodLibraryError('请为每种食物选择进食量')
             if entry.get('rating') not in (None, '', *RATINGS):
@@ -206,50 +215,32 @@ class FoodEntryStore(FoodLibraryStore):
                 raise FoodLibraryError('备注包含无效字符') from error
             if entry.get('mode', 'keep') not in ('keep', 'start', 'normal', 'retry', 'only'):
                 raise FoodLibraryError('请选择有效的排敏记录方式')
-            if entry.get('time') is not None and not valid_time(entry.get('time')):
-                raise FoodLibraryError('进食时间格式应为 HH:MM')
         with self.connect() as connection:
+            # 来源日：被替换的旧行必须全部存在且同属一个日期（改日期=挪到目标日）
+            source_date = selected_date
+            previous = {}
+            if entry_ids:
+                marks = ','.join('?' * len(entry_ids))
+                rows = connection.execute(
+                    f'SELECT * FROM food_entries WHERE id IN ({marks})', tuple(entry_ids)).fetchall()
+                previous = {row['id']: dict(row) for row in rows}
+                if len(previous) != len(entry_ids):
+                    raise FoodLibraryError('记录已不存在，请重新载入', 409)
+                dates = {row['date'] for row in previous.values()}
+                if len(dates) != 1:
+                    raise FoodLibraryError('这笔跨了多个日期，请重新载入', 409)
+                source_date = dates.pop()
             current = connection.execute(
-                'SELECT revision FROM food_meal_versions WHERE date = ? AND meal = ?', (selected_date, meal)
-            ).fetchone()
+                'SELECT revision FROM food_day_versions WHERE date = ?', (source_date,)).fetchone()
             if revision != (current['revision'] if current else 0):
-                raise FoodLibraryError('这餐已在其他设备更新，请重新载入后再编辑；当前输入尚未保存', 409)
-            # 移动来源：把整餐从原日期/餐次搬到目标位置（原位置清空、扣减随记随退）
-            move_from = None
-            from_info = data.get('from')
-            if isinstance(from_info, dict):
-                from_date = intake_date(from_info.get('date'))
-                from_meal = from_info.get('meal')
-                if from_meal not in MEALS:
-                    raise FoodLibraryError('请选择有效的原餐次')
-                if (from_date, from_meal) != (selected_date, meal):
-                    from_revision = from_info.get('revision')
-                    if type(from_revision) is not int or not 0 <= from_revision < 9223372036854775807:
-                        raise FoodLibraryError('缺少有效的原餐次版本，请重新打开表单')
-                    current_from = connection.execute(
-                        'SELECT revision FROM food_meal_versions WHERE date = ? AND meal = ?', (from_date, from_meal)
-                    ).fetchone()
-                    if from_revision != (current_from['revision'] if current_from else 0):
-                        raise FoodLibraryError('原餐次已在其他设备更新，请重新载入后再编辑', 409)
-                    move_from = (from_date, from_meal)
-            previous = {row['id']: dict(row) for row in connection.execute(
-                'SELECT * FROM food_entries WHERE date = ? AND meal = ?', (selected_date, meal)
-            )}
-            from_previous = {}
-            if move_from:
-                from_previous = {row['id']: dict(row) for row in connection.execute(
-                    'SELECT * FROM food_entries WHERE date = ? AND meal = ?', move_from
-                )}
-            combined = {**previous, **from_previous}
-            if not entry_ids.issubset(combined):
-                raise FoodLibraryError('记录不属于当前餐次，请重新载入', 409)
+                raise FoodLibraryError('今天已在其他设备更新，请重新载入后再编辑；当前输入尚未保存', 409)
             now = datetime.now(CN_TZ).isoformat()
-            # 整餐替换前，先按旧记录的扣减明细退还批次份数（未变的条目随后会重新扣回，净值为零）
-            for old in list(previous.values()) + list(from_previous.values()):
+            # 按笔替换前，先按旧记录的扣减明细退还批次份数（未变的条目随后会重新扣回，净值为零）
+            for old in previous.values():
                 self.refund_deduction(connection, old['deduction'])
             prepared = []
             for entry in entries:
-                old = combined.get(entry.get('id'))
+                old = previous.get(entry.get('id'))
                 food = connection.execute('SELECT * FROM foods WHERE id = ?', (entry['food_id'],)).fetchone()
                 unchanged_food = old is not None and old['food_id'] == entry['food_id']
                 if food is None and not unchanged_food:
@@ -280,7 +271,7 @@ class FoodEntryStore(FoodLibraryStore):
                             round_id = latest['id']
                     elif mode not in ('keep', 'normal'):
                         raise FoodLibraryError('食物已标记正常，请重新载入确认', 409)
-                # 备餐扣减与克数折算：整餐先退后扣，未变条目同样重扣（净值为零），批次变化时按现状重算
+                # 备餐扣减与克数折算：按笔先退后扣，未变条目同样重扣（净值为零），批次变化时按现状重算
                 portion = portion_value(entry['amount'])
                 if portion is not None:
                     grams, used = self.deduct_portions(connection, entry['food_id'], portion)
@@ -289,32 +280,29 @@ class FoodEntryStore(FoodLibraryStore):
                     gram = gram_value(entry['amount'])
                     grams, deduction = (float(gram), None) if gram is not None else (None, None)
                 prepared.append((
-                    old['id'] if old else None, selected_date, meal, entry['food_id'],
+                    old['id'] if old else None, selected_date, entry['food_id'],
                     (old['food_name'] if unchanged_food else food['name']), round_id,
                     entry['amount'], entry.get('rating') or None, entry.get('note', '').strip(),
                     old['created_at'] if old else now, grams, deduction,
-                    entry.get('time') or None,
+                    eaten_time,
                 ))
-            connection.execute('DELETE FROM food_entries WHERE date = ? AND meal = ?', (selected_date, meal))
-            if move_from:
-                connection.execute('DELETE FROM food_entries WHERE date = ? AND meal = ?', move_from)
+            if entry_ids:
+                marks = ','.join('?' * len(entry_ids))
+                connection.execute(f'DELETE FROM food_entries WHERE id IN ({marks})', tuple(entry_ids))
             connection.executemany(
                 '''INSERT INTO food_entries
-                   (id, date, meal, food_id, food_name, round_id, amount, rating, note,
+                   (id, date, food_id, food_name, round_id, amount, rating, note,
                     created_at, grams, deduction, eaten_time)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', prepared
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', prepared
             )
-            for target_date, target_meal, target_revision in (
-                    [(selected_date, meal, revision + 1)] +
-                    ([(move_from[0], move_from[1],
-                       (connection.execute(
-                           'SELECT revision FROM food_meal_versions WHERE date = ? AND meal = ?',
-                           move_from).fetchone() or {'revision': 0})['revision'] + 1)]
-                     if move_from else [])):
+            # 当日版本：来源日与目标日各 +1（同日即一次），乐观锁按日
+            for target_date in {source_date, selected_date}:
+                existing = connection.execute(
+                    'SELECT revision FROM food_day_versions WHERE date = ?', (target_date,)).fetchone()
                 connection.execute(
-                    '''INSERT INTO food_meal_versions (date, meal, revision) VALUES (?, ?, ?)
-                       ON CONFLICT(date, meal) DO UPDATE SET revision = excluded.revision''',
-                    (target_date, target_meal, target_revision),
+                    '''INSERT INTO food_day_versions (date, revision) VALUES (?, ?)
+                       ON CONFLICT(date) DO UPDATE SET revision = excluded.revision''',
+                    (target_date, (existing['revision'] if existing else 0) + 1),
                 )
             return self.context_in(connection, selected_date)
 
@@ -584,7 +572,7 @@ def register_food_entries(app, data_dir):
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             raise FoodLibraryError('请提交有效的 JSON 对象')
-        result = store.save_meal(data)
+        result = store.save_occasion(data)
         return jsonify({'success': True, **result})
 
     @blueprint.get('/prep/overview')

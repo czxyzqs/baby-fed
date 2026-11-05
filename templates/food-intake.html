@@ -9,23 +9,16 @@
             <fieldset id="food-intake-fields">
                 <div class="food-intake-date-meal" id="food-intake-date-meal">
                     <label>日期<input type="date" id="food-intake-date" class="form-input" required></label>
-                    <label>时间<input type="time" id="food-intake-time" class="form-input"></label>
-                    <label>餐次<select id="food-intake-meal" class="form-input" required>
-                        <option value="">请选择餐次</option>
-                        <option value="breakfast">早餐</option>
-                        <option value="lunch">午餐</option>
-                        <option value="snack">下午茶</option>
-                        <option value="dinner">晚餐</option>
-                    </select></label>
+                    <label>时间<input type="time" id="food-intake-time" class="form-input" required></label>
                 </div>
                 <p id="food-intake-empty" class="food-intake-hint"></p>
                 <div id="food-intake-blocks"></div>
                 <button type="button" id="food-intake-add">＋ 新增食物</button>
                 <div class="food-intake-footer">
-                    <button type="submit" id="food-intake-save" class="food-intake-primary">保存本餐</button>
+                    <button type="submit" id="food-intake-save" class="food-intake-primary">保存这笔</button>
                     <button type="button" id="food-intake-cancel">取消</button>
                 </div>
-                <button type="button" id="food-intake-reload">重新载入本餐</button>
+                <button type="button" id="food-intake-reload">重新载入这笔</button>
                 <p class="food-intake-hint">找不到食物？<a href="{{ url_for('food_library_page') }}" id="food-intake-library">管理辅食库</a></p>
             </fieldset>
         </form>

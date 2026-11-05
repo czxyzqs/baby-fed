@@ -7,7 +7,7 @@
     const AMOUNTS = ['一勺尖', '一勺', '两勺', '三勺', '半碗', '一碗'];
     const RATINGS = [['喜欢', '😋 喜欢'], ['一般', '😐 一般'], ['拒绝', '🥴 拒绝']];
     const SYMPTOMS = ['口周红疹', '荨麻疹', '呕吐', '腹泻', '便秘', '湿疹加重', '其他'];
-    const MEALS = window.MealConfig?.labels || { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐' };
+    const MEALS = window.MealConfig?.labels || { breakfast: '早餐', lunch: '上午餐', snack: '下午茶', dinner: '下午餐' };
 
     // 计划餐次可能是多选（逗号分隔）或旧值 both/all（午晚两餐），统一展开成数组
     function mealsOf(value) {
@@ -37,11 +37,10 @@
         return `${values.year}-${values.month}-${values.day}`;
     }
 
-    function suggestedMeal() {
-        const hour = Number(new Intl.DateTimeFormat('en-GB', {
-            timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23'
-        }).format(new Date()));
-        return hour < 11 ? 'breakfast' : hour < 14 ? 'lunch' : hour < 17 ? 'snack' : 'dinner';
+    function nowTime() {
+        return new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+        }).format(new Date());
     }
 
     async function api(path, method = 'GET', data) {
@@ -132,9 +131,10 @@
             appendHiddenRow(wrap);
             return wrap;
         }
-        // 今日餐单：固定四餐格（早/午/下午茶/晚）；点菜名打开菜品动作面板（换餐/替换/不吃/加菜）
+        // 今日餐单：按当前配置的槽分列（餐次配置改了列就跟着变）；点菜名打开菜品动作面板（换餐/替换/不吃/加菜）
         const menu = node('div', '', 'food-banner-menu');
-        const labels = { breakfast: '🥣 早餐', lunch: '☀️ 午餐', snack: '🍎 下午茶', dinner: '🌙 晚餐' };
+        const labels = window.MealConfig?.emojiLabels
+            || { breakfast: '🥣 早餐', lunch: '☀️ 上午餐', snack: '🍎 下午茶', dinner: '🌙 下午餐' };
         Object.entries(labels).forEach(([meal, label]) => {
             const columnFoods = foods.filter(item => mealsOf(item.meal).includes(meal));
             // 纯预览：没有规划的餐次整列不展示
@@ -299,45 +299,7 @@
             `「${other.food}」正在排敏观察中。同时引入「${name}」会让过敏反应难以归因，建议等观察期结束。确定仍要记录吗？`);
     }
 
-    // 横幅 ✓ 快捷勾选：只针对所在列的餐次——没吃 → 按建议量记一笔记食；已吃 → 撤销该餐记录
-    async function toggleEaten(item, meal) {
-        try {
-            const dateValue = today();
-            const result = await api(`entries?date=${dateValue}`);
-            const entry = result.entries.find(row => row.food_id === item.food_id && row.meal === meal);
-            const keepOthers = result.entries
-                .filter(row => row.meal === meal && row.food_id !== item.food_id)
-                .map(row => ({
-                    id: row.id, food_id: row.food_id, amount: row.amount,
-                    rating: row.rating, note: row.note, mode: 'keep'
-                }));
-            if (entry) {
-                await api('meals', 'POST', {
-                    date: dateValue, meal,
-                    revision: result.revisions[meal], entries: keepOthers
-                });
-                toast(`已取消「${item.food}」${MEALS[meal]}的进食记录`);
-                window.fetchRecords?.();
-            } else {
-                const mode = item.kind === 'planned' ? 'start' : 'keep';
-                if (mode === 'start' && !await confirmNoOtherScreening([item.food_id], item.food)) return;
-                const amount = suggestedAmount(item);
-                await api('meals', 'POST', {
-                    date: dateValue, meal,
-                    revision: result.revisions[meal],
-                    entries: [...keepOthers, {
-                        food_id: item.food_id, amount, rating: null, note: '', mode
-                    }]
-                });
-                toast(`已记录${MEALS[meal]}：${item.food} ${amount}`);
-                window.fetchRecords?.();
-            }
-            todayContext = null;
-            load();
-        } catch (error) {
-            toast(`操作失败：${error.message}`);
-        }
-    }
+    // （横幅 ✓ 快捷勾选已随整餐替换接口移除：记录统一走「记」按钮的按笔面板）
 
     // ---------- 记录弹窗：进食 + 反应 ----------
 
@@ -453,8 +415,8 @@
                 })(),
             rating: null,
             symptoms: new Set(),
-            // 默认取计划绑定的餐次；两餐都吃/无计划时按当前时段，但界面显式可选，不静默落餐
-            meal: mealsOf(item.meal).length === 1 ? mealsOf(item.meal)[0] : suggestedMeal()
+            // 记录的事实是时间：默认现在，改时间=并入/另起那一笔；槽标签由时间推导展示
+            time: item.eaten_time || nowTime()
         };
         overlay = node('div', '', 'banner-dialog-overlay');
         overlay.addEventListener('click', event => {
@@ -503,18 +465,21 @@
             dialog.append(modeGroup);
         }
 
-        // 记入哪餐：显式可选，保存前看得见、改得了
-        dialog.append(node('h3', '记入哪餐？', 'banner-dialog-section'));
-        const mealGroup = node('div', '', 'banner-chip-group');
-        Object.keys(MEALS).forEach(value => {
-            mealGroup.append(chip(MEALS[value], () => {
-                state.meal = value;
-                [...mealGroup.children].forEach(child => child.classList.remove('active'));
-                mealGroup.children[Object.keys(MEALS).indexOf(value)].classList.add('active');
-                eatButton.textContent = '保存今日进食';
-            }, value === state.meal));
+        // 几点吃的：时间为主输入，槽标签只读推导
+        const timeRow = node('label', '', 'banner-time-row');
+        timeRow.append(node('span', '这餐几点'));
+        const timeInput = document.createElement('input');
+        timeInput.type = 'time';
+        timeInput.className = 'form-input';
+        timeInput.value = state.time;
+        timeInput.addEventListener('change', () => {
+            state.time = timeInput.value || nowTime();
+            slotTag.textContent = window.MealConfig?.labels?.[window.MealConfig.slotForTime(state.time)] || '';
         });
-        dialog.append(mealGroup);
+        const slotTag = node('span',
+            window.MealConfig?.labels?.[window.MealConfig.slotForTime(state.time)] || '', 'banner-slot-tag');
+        timeRow.append(timeInput, slotTag);
+        dialog.append(timeRow);
 
         // 记录进食
         dialog.append(node('h3', '今天吃了吗？', 'banner-dialog-section'));
@@ -576,20 +541,23 @@
         overlay.append(dialog);
         document.body.append(overlay);
         document.body.style.overflow = 'hidden';
-        if (item.eaten_today) prefillIntake(item, state, mealGroup, amountGroup, ratingGroup, eatButton);
+        if (item.eaten_today) prefillIntake(item, state, amountGroup, ratingGroup, eatButton);
     }
 
-    async function prefillIntake(item, state, mealGroup, amountGroup, ratingGroup, eatButton) {
+    async function prefillIntake(item, state, amountGroup, ratingGroup, eatButton) {
         try {
             const result = await api(`entries?date=${today()}`);
-            const entry = result.entries.find(row => row.food_id === item.food_id);
+            // 同一天多笔都可能含这种食物：取最后一笔（最新记录）
+            const entry = [...result.entries].reverse().find(row => row.food_id === item.food_id);
             if (!entry || !overlay) return;
             state.amount = entry.amount;
             state.rating = entry.rating || null;
-            state.meal = entry.meal;
-            Object.keys(MEALS).forEach((value, position) => {
-                mealGroup.children[position].classList.toggle('active', value === entry.meal);
-            });
+            state.time = entry.eaten_time || state.time;
+            const timeInput = overlay.querySelector('.banner-time-row input');
+            if (timeInput) timeInput.value = state.time;
+            const slotTag = overlay.querySelector('.banner-slot-tag');
+            if (slotTag) slotTag.textContent =
+                window.MealConfig?.labels?.[window.MealConfig.slotForTime(state.time)] || '';
             [...amountGroup.children].forEach(child => {
                 child.classList.toggle('active', child.textContent === entry.amount);
                 child.classList.remove('suggested');
@@ -598,7 +566,7 @@
                 const index = RATINGS.findIndex(row => row[0] === state.rating);
                 [...ratingGroup.children].forEach((child, position) => child.classList.toggle('active', position === index));
             }
-            eatButton.textContent = `更新今日进食（${MEALS[state.meal]}已记录）`;
+            eatButton.textContent = `更新今日进食（${state.time} 已记录）`;
         } catch (error) {
             // 预填失败不影响手动记录
         }
@@ -614,23 +582,28 @@
                 return;
             }
             const result = await api(`entries?date=${dateValue}`);
-            const others = result.entries.filter(row => row.meal === state.meal && row.food_id !== item.food_id);
-            const entries = others.map(row => ({
-                id: row.id, food_id: row.food_id, amount: row.amount,
-                rating: row.rating, note: row.note, mode: 'keep'
-            }));
+            // 并入这一时间点上的那一笔（同日同时间=同一笔）；不含这食物的其他笔不动
+            const target = (result.occasions || []).find(occasion => occasion.time === state.time);
+            const existing = target?.entries.find(row => row.food_id === item.food_id);
+            const entries = (target?.entries || [])
+                .filter(row => row.food_id !== item.food_id)
+                .map(row => ({
+                    id: row.id, food_id: row.food_id, amount: row.amount,
+                    rating: row.rating, note: row.note, mode: 'keep'
+                }));
             entries.push({
-                food_id: item.food_id, amount: state.amount, rating: state.rating,
+                id: existing?.id, food_id: item.food_id, amount: state.amount, rating: state.rating,
                 note: '', mode
             });
             await api('meals', 'POST', {
-                date: dateValue, meal: state.meal,
-                revision: result.revisions[state.meal],
+                date: dateValue, time: state.time,
+                revision: result.day_revision,
+                ids: target ? target.entries.map(row => row.id) : [],
                 entries
             });
             todayContext = null;
             closeDialog();
-            toast(`已记录${MEALS[state.meal]}：${item.food} ${state.amount}`);
+            toast(`已记录 ${state.time}：${item.food} ${state.amount}`);
             window.fetchRecords?.();
             load();
         } catch (error) {

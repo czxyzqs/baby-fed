@@ -6,7 +6,7 @@ import sqlite3
 
 from flask import Blueprint, current_app, jsonify, request
 
-from food_library import FAMILY_PRESETS, FoodLibraryError, FoodLibraryStore
+from food_library import FAMILY_PRESETS, FoodLibraryError, FoodLibraryStore, normalize_meal_slots, slot_for_time
 
 
 SYMPTOMS = ('口周红疹', '荨麻疹', '呕吐', '腹泻', '便秘', '湿疹加重', '其他')
@@ -118,7 +118,7 @@ class FoodScreeningStore(FoodLibraryStore):
         with self.connect() as connection:
             return {
                 'observe_days_default': self.get_int_setting(connection, 'observe_days_default', 3, 1, 7),
-                'active_meals': self.get_active_meals(connection),
+                'meal_slots': self.get_meal_slots(connection),
             }
 
     def save_settings(self, data):
@@ -128,12 +128,8 @@ class FoodScreeningStore(FoodLibraryStore):
             if type(value) is not int or not 1 <= value <= 7:
                 raise FoodLibraryError('默认观察天数只能是 1 到 7 天')
             updates['observe_days_default'] = value
-        if 'active_meals' in data:
-            meals = data['active_meals']
-            if (not isinstance(meals, list) or not meals
-                    or not all(meal in self.ACTIVE_MEALS for meal in meals)):
-                raise FoodLibraryError('餐次配置无效：至少选一餐，且只能是早/午/下午茶/晚')
-            updates['active_meals'] = [meal for meal in self.ACTIVE_MEALS if meal in meals]
+        if 'meal_slots' in data:
+            updates['meal_slots'] = normalize_meal_slots(data['meal_slots'])
         if not updates:
             raise FoodLibraryError('没有可保存的设置')
         result = dict(updates)
@@ -142,7 +138,7 @@ class FoodScreeningStore(FoodLibraryStore):
                 connection.execute(
                     'INSERT INTO food_settings (key, value) VALUES (?, ?) '
                     'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-                    (key, json.dumps(value)),
+                    (key, json.dumps(value, ensure_ascii=False)),
                 )
         return result
 
@@ -1205,13 +1201,11 @@ class FoodScreeningStore(FoodLibraryStore):
             overrides = self.menu_overrides_in(connection, today)
 
             def menu_meal(food_id, default_meal):
-                meal = canonical_meal(default_meal)
                 override = overrides.get(food_id)
-                if override is None:
-                    return meal
-                if override['meal'] == 'none':
+                value = default_meal if override is None else override['meal']
+                if override is not None and override['meal'] == 'none':
                     return None
-                return canonical_meal(override['meal'])
+                return map_to_active(value)
 
             def planned_portions(food_id, default_portions):
                 override = overrides.get(food_id)
@@ -1224,16 +1218,35 @@ class FoodScreeningStore(FoodLibraryStore):
             gram_foods = {row['id'] for row in connection.execute(
                 '''SELECT f.id FROM foods f JOIN categories c ON c.id = f.category_id
                    WHERE c.name = '谷薯类' ''')}
+            # 记录侧不再存餐次：按各笔进食时间落槽推导"这食物今天在哪些槽吃过"
+            meal_slots = self.get_meal_slots(connection)
+            active_keys = [slot['key'] for slot in meal_slots]
+            order_index = {key: index for index, key in enumerate(self.ACTIVE_MEALS)}
+
+            def nearest_active(key):
+                return min(active_keys, key=lambda active: (abs(order_index[active] - order_index[key]),
+                                                            order_index[active]))
+
+            def map_to_active(value):
+                """计划槽归并到活跃槽：挂在不启用槽上的计划展示时并入最近的活跃槽。"""
+                mapped, seen = [], set()
+                for part in expand_normal_meal(value):
+                    target = part if part in active_keys else nearest_active(part)
+                    if target not in seen:
+                        seen.add(target)
+                        mapped.append(target)
+                return ','.join(key for key in active_keys if key in seen)
+
             eaten_today_meals = {}
-            for eaten_food_id, eaten_meal in connection.execute(
-                    'SELECT DISTINCT food_id, meal FROM food_entries WHERE date = ?', (today,)):
-                eaten_today_meals.setdefault(eaten_food_id, []).append(eaten_meal)
+            for eaten_food_id, eaten_time in connection.execute(
+                    'SELECT DISTINCT food_id, eaten_time FROM food_entries WHERE date = ?', (today,)):
+                slot = slot_for_time(meal_slots, eaten_time)
+                meals = eaten_today_meals.setdefault(eaten_food_id, [])
+                if slot not in meals:
+                    meals.append(slot)
 
             def eaten_fields(eaten_food_id):
-                meals = sorted(
-                    set(eaten_today_meals.get(eaten_food_id, ())),
-                    key=('breakfast', 'lunch', 'snack', 'dinner').index,
-                )
+                meals = [key for key in active_keys if key in eaten_today_meals.get(eaten_food_id, ())]
                 return {'eaten_today': bool(meals), 'eaten_meals': meals}
             for food_id, latest in rounds.items():
                 if latest['status'] != 'active':
@@ -1300,7 +1313,7 @@ class FoodScreeningStore(FoodLibraryStore):
                     continue
                 items.append({
                     'kind': 'extra', 'food_id': food_id, 'food': food_row['name'],
-                    **eaten_fields(food_id), 'meal': canonical_meal(override['meal']),
+                    **eaten_fields(food_id), 'meal': map_to_active(override['meal']),
                     'portions': stored_portions(override['portions']),
                     'gram_default': 6 if food_id in gram_foods else None, 'text': '',
                 })
@@ -1506,6 +1519,21 @@ class FoodScreeningStore(FoodLibraryStore):
             rounds = self.latest_round_map(connection)
             overrides = self.menu_overrides_in(connection, end)
             names = {row['id']: row['name'] for row in connection.execute('SELECT id, name FROM foods')}
+            # 与 banner 一致：计划槽归并到活跃槽，挂在不启用槽上的计划并入最近的活跃槽
+            active_keys = [slot['key'] for slot in self.get_meal_slots(connection)]
+            order_index = {key: index for index, key in enumerate(self.ACTIVE_MEALS)}
+
+            def map_to_active(value):
+                mapped, seen = [], set()
+                for part in expand_normal_meal(value):
+                    if part not in active_keys:
+                        part = min(active_keys, key=lambda active: (
+                            abs(order_index[active] - order_index[part]), order_index[active]))
+                    if part not in seen:
+                        seen.add(part)
+                        mapped.append(part)
+                return ','.join(key for key in active_keys if key in seen)
+
             # 干粉主食（谷薯类）按克直记：默认 6g，有备餐批次时前端仍优先按份
             gram_foods = {row['id'] for row in connection.execute(
                 '''SELECT f.id FROM foods f JOIN categories c ON c.id = f.category_id
@@ -1513,14 +1541,14 @@ class FoodScreeningStore(FoodLibraryStore):
             items = []
 
             def push(item):
-                item['meal'] = canonical_meal(item.get('meal', 'lunch'))
+                item['meal'] = map_to_active(item.get('meal', 'lunch'))
                 override = overrides.get(item['food_id'])
                 if override is None:
                     items.append(item)
                     return
                 if override['meal'] == 'none':
                     return
-                item['meal'] = canonical_meal(override['meal'])
+                item['meal'] = map_to_active(override['meal'])
                 if override['portions'] is not None:
                     item['portions'] = stored_portions(override['portions'])
                 items.append(item)
@@ -1571,7 +1599,7 @@ class FoodScreeningStore(FoodLibraryStore):
                     continue
                 items.append({'food_id': food_id, 'food_name': food_row['name'],
                               'is_new': False, 'extra': True,
-                              'meal': canonical_meal(override['meal']),
+                              'meal': map_to_active(override['meal']),
                               'portions': stored_portions(override['portions'])})
             return {'date': end, 'items': items}
 

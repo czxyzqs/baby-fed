@@ -16,12 +16,13 @@
     </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-intake.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-menu-actions.css') }}">
     <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/date-picker.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/meal-config.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-history.js') }}"></script>
-    <script>window.APP_ACTIVE_MEALS = {{ active_meals_json|safe }};</script>
+    <script>window.APP_MEAL_SLOTS = {{ meal_slots_json|safe }};</script>
 </head>
 <body>
     <main class="food-history-page" id="food-history-page" aria-labelledby="food-history-title">

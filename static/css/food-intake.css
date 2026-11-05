@@ -624,3 +624,12 @@ body.elder .food-plan-entry-record-ring { width: 42px; height: 42px; font-size: 
 .food-intake-stepper-value { min-width: 64px; text-align: center; font-size: 17px; font-weight: 600; }
 body.elder .food-intake-stepper button { min-width: 52px; min-height: 48px; font-size: 20px; }
 body.elder .food-intake-stepper-value { font-size: 20px; }
+
+/* 单食物记录弹窗：时间为主输入 + 只读槽标签（food-banner.js） */
+.banner-time-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 16px 0 8px; font-size: 16px; }
+.banner-time-row input { width: 150px; padding-inline: 10px; margin: 0; }
+.banner-slot-tag {
+    font-size: 13px; color: var(--accent-tertiary, #4cc9f0);
+    border: 1px solid var(--accent-tertiary, #4cc9f0); border-radius: 999px;
+    padding: 3px 10px; user-select: none;
+}

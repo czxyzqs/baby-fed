@@ -873,7 +873,8 @@
     }
 
     // ---------- 排期一览（日历的完整文字版） ----------
-    const mealTag = meal => (meal === 'dinner' ? '(晚)' : meal === 'lunch' ? '(午)' : '');
+    const mealTag = meal => (meal === 'dinner' ? '(下午)' : meal === 'lunch' ? '(上午)'
+        : meal === 'breakfast' ? '(早)' : meal === 'snack' ? '(茶)' : '');
 
     function dateRange(start, days) {
         const end = addDays(start, days - 1);
@@ -1121,7 +1122,7 @@
         body.append(daysLabel);
         const mealLabel = node('label', '哪一顿吃');
         const mealGroup = node('div', '', 'planning-chip-group');
-        [['lunch', '午餐'], ['dinner', '晚餐']].forEach(([value, label]) => {
+        Object.entries(window.MealConfig?.labels || { lunch: '上午餐', dinner: '下午餐' }).forEach(([value, label]) => {
             const chip = button(label, () => {
                 state.meal = value;
                 [...mealGroup.children].forEach(child => child.classList.remove('active'));
@@ -1201,13 +1202,13 @@
 
         const mealLabel = node('label', '哪一顿吃');
         const mealGroup = node('div', '', 'planning-chip-group');
-        const chosenMeal = { meal: 'lunch' };
-        [['lunch', '午餐'], ['dinner', '晚餐']].forEach(([value, label]) => {
+        const chosenMeal = { meal: window.MealConfig?.keys?.[0] || 'lunch' };
+        Object.entries(window.MealConfig?.labels || { lunch: '上午餐', dinner: '下午餐' }).forEach(([value, label]) => {
             const chip = button(label, () => {
                 chosenMeal.meal = value;
                 [...mealGroup.children].forEach(child => child.classList.remove('active'));
                 chip.classList.add('active');
-            }, 'planning-chip' + (value === 'lunch' ? ' active' : ''));
+            }, 'planning-chip' + (value === chosenMeal.meal ? ' active' : ''));
             mealGroup.append(chip);
         });
         mealLabel.append(mealGroup);

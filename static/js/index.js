@@ -1597,10 +1597,10 @@
         if (medicineGroup) medicineGroup.style.display = healthType === 'medicine' ? '' : 'none';
     }
 
-    // 点最近记录里的辅食条目：打开辅食编辑器改这一餐（编辑器未就绪时退回辅食中心）
-    function openFoodRecordEdit(dateStr, meal) {
+    // 点最近记录里的辅食条目：打开辅食编辑器改这一笔（编辑器未就绪时退回辅食中心）
+    function openFoodRecordEdit(dateStr, time) {
         if (window.foodIntake) {
-            foodIntake.open(dateStr, meal || null);
+            foodIntake.open(dateStr, time || null);
         } else {
             location.href = '/food-hub';
         }
@@ -2044,10 +2044,14 @@
             } else if (record.type === 'food') {
                 icon = '🍚';
                 typeLabel = '辅食';
-                const mealLabels = { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐' };
+                // 序号徽章按当天时间序展示；槽标签由时间落槽推导（MealConfig），不再读记录里的餐次
+                const ordinalBadges = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+                const badge = ordinalBadges[(record.ordinal || 1) - 1] || `第${record.ordinal}笔`;
+                const hhmm = (record.time || '').slice(11, 16);
+                const slotLabel = window.MealConfig?.labels?.[record.slot] || '';
                 const foods = (record.foods || '').split('、').filter(Boolean);
                 const shown = foods.slice(0, 2).join('、') + (foods.length > 2 ? ` 等${foods.length}样` : '');
-                detail = `🍚 ${mealLabels[record.meal] || '辅食'} · ${shown}`;
+                detail = `🍚 ${badge} ${hhmm}${slotLabel ? ` · ${slotLabel}` : ''} · ${shown}`;
             } else if (record.type === 'sleep') {
                 icon = '🛏️';
                 typeLabel = record.sleepType === 'sleep' ? '宝宝睡了' : '宝宝醒了';
@@ -2057,11 +2061,11 @@
             }
 
             const canEdit = record.type === 'feed' || record.type === 'diaper' || record.type === 'sleep' || record.type === 'supplement' || record.type === 'tummy' || record.type === 'health';
-            // 辅食条目：打开辅食编辑器（按日期+餐次载入整餐），编辑器不可用时退回辅食中心
+            // 辅食条目：打开辅食编辑器（按日期+时间载入这一笔），编辑器不可用时退回辅食中心
             const clickable = canEdit || record.type === 'food';
             const isoDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
             const clickAttr = record.type === 'food'
-                ? `onclick="openFoodRecordEdit('${isoDate}', '${record.meal || ''}')"`
+                ? `onclick="openFoodRecordEdit('${isoDate}', '${(record.time || '').slice(11, 16)}')"`
                 : canEdit ? `onclick="openEditModal('${record.type}', '${record.id}')"` : `onclick="showToast('暂不支持修改', 'ℹ️')"`;
             return `
                 <div class="record-item-wrapper">

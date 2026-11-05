@@ -84,3 +84,17 @@ body.elder .fma-title { font-size: 20px; }
 body.elder .fma-btn { font-size: 17px; padding: 14px 16px; }
 body.elder .fma-chip { font-size: 16px; padding: 10px 16px; }
 body.elder .fma-hint { font-size: 14px; }
+
+/* 餐次配置弹窗的槽行（meal-config.js）：启停 + 各槽开始时间 */
+.fp-slot-rows { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.fp-slot-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--bg-card, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 12px; padding: 10px 12px; cursor: pointer;
+}
+.fp-slot-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-tertiary, #4cc9f0); }
+.fp-slot-name { font-size: 15px; min-width: 88px; }
+.fp-slot-time-label { font-size: 13px; color: var(--text-secondary, rgba(255, 255, 255, 0.7)); }
+.fp-slot-row input[type="time"] { width: 130px; padding-inline: 10px; margin: 0; }
+.fp-slot-row input[type="time"]:disabled { opacity: 0.45; }

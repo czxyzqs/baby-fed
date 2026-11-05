@@ -67,6 +67,66 @@ FAMILY_PRESETS = {
 
 FOOD_FAMILY = {food: family for family, foods in FAMILY_PRESETS.items() for food in foods}
 
+# 餐次槽：内部 key 沿用四餐代号（用户不可见），显示名与开始时间由 food_settings.meal_slots 配置。
+# 记录侧不存餐次，槽只活在计划侧；"时间落槽"是记录与计划的唯一匹配方式。
+SLOT_LABELS = {'breakfast': '早餐', 'lunch': '上午餐', 'snack': '下午茶', 'dinner': '下午餐'}
+DEFAULT_SLOT_STARTS = {'breakfast': '06:30', 'lunch': '11:00', 'snack': '14:30', 'dinner': '17:30'}
+
+
+def hhmm_to_minutes(value):
+    """'HH:MM' → 当天分钟数；非法返回 None。"""
+    if not isinstance(value, str) or len(value) != 5 or value[2] != ':':
+        return None
+    try:
+        hour, minute = int(value[:2]), int(value[3:])
+    except ValueError:
+        return None
+    if 0 <= hour <= 23 and 0 <= minute <= 59:
+        return hour * 60 + minute
+    return None
+
+
+def slot_for_time(slots, hhmm):
+    """按槽起始时间把时刻归槽；槽全天无缝覆盖，任何时刻必有归属。"""
+    minutes = hhmm_to_minutes(hhmm)
+    if minutes is None:
+        return slots[-1]['key']
+    result = slots[0]['key']
+    for slot in slots[1:]:
+        if minutes >= slot['start']:
+            result = slot['key']
+        else:
+            break
+    return result
+
+
+def normalize_meal_slots(data):
+    """校验前端提交的餐次槽配置，返回可存入 food_settings 的 dict。"""
+    if not isinstance(data, dict):
+        raise FoodLibraryError('餐次配置格式错误')
+    active = data.get('active')
+    if not isinstance(active, list) or not active:
+        raise FoodLibraryError('至少启用一个餐次')
+    ordered = [key for key in FoodLibraryStore.ACTIVE_MEALS if key in active]
+    if len(ordered) != len(set(active)):
+        raise FoodLibraryError('包含未知或重复的餐次')
+    starts = data.get('starts')
+    if not isinstance(starts, dict):
+        starts = {}
+    result_starts, previous = {}, -1
+    for index, key in enumerate(ordered):
+        if index == 0:
+            continue   # 首槽从 0 点起，无需起点
+        value = starts.get(key, DEFAULT_SLOT_STARTS[key])
+        minutes = hhmm_to_minutes(value)
+        if minutes is None:
+            raise FoodLibraryError(f'{SLOT_LABELS[key]}的开始时间应为 HH:MM')
+        if minutes <= previous:
+            raise FoodLibraryError('后一个餐次的开始时间需要晚于前一个')
+        result_starts[key] = value
+        previous = minutes
+    return {'active': ordered, 'starts': result_starts}
+
 
 class FoodLibraryError(ValueError):
     def __init__(self, message, status=400):
@@ -91,14 +151,14 @@ def required_text(data, key, label, maximum):
 
 
 class FoodLibraryStore:
-    # 四餐全集；「每天吃几餐」配置存 food_settings.active_meals，两处 store 共用
+    # 槽位全集（内部代号）；启用集与各槽开始时间存 food_settings.meal_slots
     ACTIVE_MEALS = ('breakfast', 'lunch', 'snack', 'dinner')
 
     def __init__(self, data_dir):
         self.path = Path(data_dir) / 'baby-food.db'
 
     def get_active_meals(self, connection):
-        """每天展示哪几餐（默认全部四餐）；配置无效时回退默认。"""
+        """旧版「每天展示哪几餐」配置；仅作 meal_slots 缺失时的回退。"""
         row = connection.execute("SELECT value FROM food_settings WHERE key = 'active_meals'").fetchone()
         if row is not None:
             try:
@@ -111,9 +171,46 @@ class FoodLibraryStore:
                     return ordered
         return list(self.ACTIVE_MEALS)
 
+    def get_meal_slots(self, connection):
+        """当前启用的餐次槽（按天序）：[{key, label, start(分钟)}]，首槽固定 0 点。
+        配置无效时逐级回退 active_meals → 全集+默认起点，读侧永远兜底出可用槽。"""
+        active, starts = None, None
+        row = connection.execute("SELECT value FROM food_settings WHERE key = 'meal_slots'").fetchone()
+        if row is not None:
+            try:
+                value = json.loads(row['value'])
+            except (TypeError, ValueError):
+                value = None
+            if isinstance(value, dict):
+                active, starts = value.get('active'), value.get('starts')
+        if not isinstance(active, list) or not active:
+            active = self.get_active_meals(connection)
+            starts = None
+        ordered = [key for key in self.ACTIVE_MEALS if key in active]
+        if len(ordered) != len(set(active)):
+            ordered, starts = list(self.ACTIVE_MEALS), None
+        slots, previous = [], 0
+        for index, key in enumerate(ordered):
+            start = 0
+            if index > 0:
+                candidate = DEFAULT_SLOT_STARTS[key]
+                if isinstance(starts, dict) and isinstance(starts.get(key), str):
+                    candidate = starts[key]
+                minutes = hhmm_to_minutes(candidate)
+                if minutes is None or minutes <= previous:
+                    minutes = previous + 1   # 保底顺延，保证槽全天无缝且严格递增
+                start = minutes
+            slots.append({'key': key, 'label': SLOT_LABELS[key], 'start': start})
+            previous = start
+        return slots
+
     def active_meals(self):
         with self.connect() as connection:
             return self.get_active_meals(connection)
+
+    def meal_slots(self):
+        with self.connect() as connection:
+            return self.get_meal_slots(connection)
 
     @contextmanager
     def connect(self):
@@ -231,7 +328,7 @@ class FoodLibraryStore:
                 )''')
                 connection.execute('PRAGMA user_version = 3')
                 version = 3
-            elif version not in (3, 4, 5, 6, 7, 8):
+            elif version not in (3, 4, 5, 6, 7, 8, 9):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 3:
                 connection.execute('ALTER TABLE foods ADD COLUMN family TEXT')
@@ -240,7 +337,7 @@ class FoodLibraryStore:
                         'UPDATE foods SET family = ? WHERE name = ? AND family IS NULL', (family, food))
                 connection.execute('PRAGMA user_version = 4')
                 version = 4
-            elif version not in (3, 4, 5, 6, 7, 8):
+            elif version not in (3, 4, 5, 6, 7, 8, 9):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 4:
                 # 餐次规划：排敏块默认午餐，常规计划默认两餐都吃；当日覆盖支持临时调整
@@ -254,7 +351,7 @@ class FoodLibraryStore:
                 )''')
                 connection.execute('PRAGMA user_version = 5')
                 version = 5
-            elif version not in (4, 5, 6, 7, 8):
+            elif version not in (4, 5, 6, 7, 8, 9):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 5:
                 # 备餐批次：按份记录摄入（份×每份含量折算克数）与库存扣减
@@ -272,7 +369,7 @@ class FoodLibraryStore:
                 connection.execute('ALTER TABLE food_entries ADD COLUMN deduction TEXT')
                 connection.execute('PRAGMA user_version = 6')
                 version = 6
-            elif version not in (5, 6, 7, 8):
+            elif version not in (5, 6, 7, 8, 9):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 6:
                 # 规划份数：计划/当日覆盖带"每餐份数"，用于记录预填与库存预测
@@ -280,14 +377,65 @@ class FoodLibraryStore:
                 connection.execute('ALTER TABLE food_menu_overrides ADD COLUMN portions REAL')
                 connection.execute('PRAGMA user_version = 7')
                 version = 7
-            elif version not in (6, 7, 8):
+            elif version not in (6, 7, 8, 9):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 7:
                 # 精确进食时间：晚记的可改回实际吃的时间（HH:MM）
                 connection.execute('ALTER TABLE food_entries ADD COLUMN eaten_time TEXT')
                 connection.execute('PRAGMA user_version = 8')
                 version = 8
-            elif version != 8:
+            elif version not in (8, 9):
+                raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
+            if version == 8:
+                # 记录去餐次化：事实=日期+时间，"一笔"=同日同进食时间的条目组；
+                # meal 列删除（读取方全部改为按时间落槽推导），判重约束换成 (date, eaten_time, food_id)
+                connection.execute(
+                    "UPDATE food_entries SET eaten_time = substr(created_at, 12, 5) "
+                    "WHERE eaten_time IS NULL OR eaten_time = ''")
+                connection.execute('''CREATE TABLE food_entries_v9 (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    food_id INTEGER NOT NULL,
+                    food_name TEXT NOT NULL,
+                    round_id INTEGER REFERENCES food_rounds(id),
+                    amount TEXT NOT NULL,
+                    rating TEXT,
+                    note TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    grams REAL,
+                    deduction TEXT,
+                    eaten_time TEXT NOT NULL,
+                    UNIQUE(date, eaten_time, food_id)
+                )''')
+                connection.execute('''INSERT OR IGNORE INTO food_entries_v9
+                    (id, date, food_id, food_name, round_id, amount, rating, note,
+                     created_at, grams, deduction, eaten_time)
+                    SELECT id, date, food_id, food_name, round_id, amount, rating, note,
+                           created_at, grams, deduction, eaten_time
+                    FROM food_entries ORDER BY id''')
+                connection.execute('DROP TABLE food_entries')
+                connection.execute('ALTER TABLE food_entries_v9 RENAME TO food_entries')
+                connection.execute('CREATE INDEX food_entries_round_date ON food_entries(round_id, date)')
+                # 乐观锁从 (date, meal) 收敛到按日
+                connection.execute('''CREATE TABLE food_day_versions (
+                    date TEXT PRIMARY KEY,
+                    revision INTEGER NOT NULL DEFAULT 0
+                )''')
+                connection.execute('''INSERT INTO food_day_versions (date, revision)
+                    SELECT date, MAX(revision) FROM food_meal_versions GROUP BY date''')
+                connection.execute('DROP TABLE food_meal_versions')
+                # 餐次槽配置：活跃集沿用 active_meals；恰好上午/下午双槽时直达 12 点分界
+                active = self.get_active_meals(connection)
+                if active == ['lunch', 'dinner']:
+                    starts = {'dinner': '12:00'}
+                else:
+                    starts = {key: DEFAULT_SLOT_STARTS[key] for key in active[1:]}
+                connection.execute(
+                    'INSERT OR REPLACE INTO food_settings (key, value) VALUES (?, ?)',
+                    ('meal_slots', json.dumps({'active': active, 'starts': starts}, ensure_ascii=False)))
+                connection.execute('PRAGMA user_version = 9')
+                version = 9
+            elif version != 9:
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             yield connection
             connection.commit()

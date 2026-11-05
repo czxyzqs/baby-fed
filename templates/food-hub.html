@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-hub.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-menu-actions.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-prep.css') }}">
-    <script>window.APP_ACTIVE_MEALS = {{ active_meals_json|safe }};</script>
+    <script>window.APP_MEAL_SLOTS = {{ meal_slots_json|safe }};</script>
 </head>
 <body>
     <main class="food-hub food-hub-page" aria-labelledby="food-hub-title">
@@ -52,7 +52,7 @@
             <button type="button" class="food-hub-card" data-meal-settings>
                 <span class="food-hub-icon" aria-hidden="true">🕐</span>
                 <span class="food-hub-name">餐次配置</span>
-                <span class="food-hub-desc">每天吃几餐、哪几餐，加餐时改这里</span>
+                <span class="food-hub-desc">启停餐次、定每餐几点开始，加餐时改这里</span>
             </button>
             <a class="food-hub-card food-hub-card-new" href="/recipes">
                 <span class="food-hub-icon" aria-hidden="true">📖</span>

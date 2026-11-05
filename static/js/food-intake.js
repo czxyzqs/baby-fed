@@ -1,6 +1,8 @@
 (() => {
     const element = name => document.getElementById(`food-intake-${name}`);
-    const meals = window.MealConfig?.labels || { breakfast: '早餐', lunch: '午餐', snack: '下午茶', dinner: '晚餐' };
+    const ORDINALS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+    const ordinalBadge = index => ORDINALS[index - 1] || `第${index}笔`;
+    const slotLabelOf = time => window.MealConfig?.labels?.[window.MealConfig.slotForTime(time)] || '';
     const amounts = ['一勺尖', '一勺', '两勺', '三勺', '半碗', '一碗'];
     // 备餐按份记录的量值（与后端 PORTION_AMOUNTS 对齐）；编辑器里作为额外选项呈现
     const portionAmounts = ['0.5份', '1份', '1.5份', '2份', '2.5份', '3份', '3.5份', '4份'];
@@ -25,7 +27,7 @@
     let context = null;
     let blocks = [];
     let selectedDate = '';
-    let selectedMeal = '';
+    let selectedTime = '';
     let dirty = false;
     let busy = false;
     let pickerIndex = null;
@@ -41,12 +43,10 @@
         return `${values.year}-${values.month}-${values.day}`;
     }
 
-    function suggestedMeal() {
-        const hour = Number(new Intl.DateTimeFormat('en-GB', {
-            timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23'
-        }).format(new Date()));
-        const guess = hour < 11 ? 'breakfast' : hour < 14 ? 'lunch' : hour < 17 ? 'snack' : 'dinner';
-        return window.MealConfig?.adjustSuggestion(guess) ?? guess;
+    function nowTime() {
+        return new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+        }).format(new Date());
     }
 
     async function api(path, data) {
@@ -119,56 +119,22 @@
         return unitAwareAmount(food);
     }
 
-    function selectMeal() {
-        blocks = context.entries.filter(entry => entry.meal === selectedMeal).map(entry => ({
+    function selectOccasion() {
+        const occasion = (context.occasions || []).find(item => item.time === selectedTime);
+        blocks = (occasion ? occasion.entries : []).map(entry => ({
             ...entry, original_food_id: entry.food_id, mode: 'keep'
         }));
         dirty = false;
         closePicker(false);
-        element('title').textContent = blocks.length ? '编辑辅食记录' : '添加辅食记录';
+        element('title').textContent = blocks.length
+            ? `编辑 ${selectedTime} 这笔${slotLabelOf(selectedTime) ? `（${slotLabelOf(selectedTime)}）` : ''}`
+            : '添加辅食记录';
         renderBlocks();
     }
 
-    async function prefillPlans() {
-        // 本餐还没有记录时，把当天计划中尚未记录的食物自动成块（BR-08）
-        if (blocks.length || !selectedMeal) return;
-        let plans;
-        try {
-            const result = await api(`screening/plans?date=${encodeURIComponent(selectedDate)}`);
-            plans = result.items || [];
-        } catch (error) {
-            return; // 计划加载失败不影响手动记录
-        }
-        const recorded = new Set(context.entries
-            .filter(entry => entry.meal === selectedMeal)
-            .map(entry => entry.food_id));
-        // 计划餐次可能是多选（逗号分隔）或旧值 both/all（午晚两餐）
-        const planMeals = plan => (plan.meal === 'both' || plan.meal === 'all')
-            ? ['lunch', 'dinner']
-            : String(plan.meal || '').split(',').filter(Boolean);
-        plans = plans.filter(plan => !recorded.has(plan.food_id) &&
-            !blocks.some(block => block.food_id === plan.food_id) &&
-            planMeals(plan).includes(selectedMeal));
-        if (!plans.length) return;
-        plans.forEach(plan => {
-            const starting = plan.is_new && !plan.started;
-            blocks.push({
-                id: null, original_food_id: null,
-                food_id: plan.food_id, food_name: plan.food_name,
-                amount: starting ? amounts[0] : '',
-                rating: null, note: '',
-                mode: starting ? 'start' : 'keep',
-                auto_amount: starting
-            });
-        });
-        dirty = true;
-        element('title').textContent = '添加辅食记录';
-        renderBlocks();
-    }
-
-    async function loadEditor(dateValue, mealValue) {
+    async function loadEditor(dateValue, timeValue) {
         setBusy(true);
-        message('正在加载食物和本餐记录…');
+        message('正在加载食物和这笔记录…');
         try {
             const [result, prepData] = await Promise.all([
                 api(`entries?date=${encodeURIComponent(dateValue)}`),
@@ -178,58 +144,41 @@
             context = result;
             batchByFood = {};
             (prepData?.batches || []).forEach(batch => { batchByFood[batch.food_id] = batch; });
-            const mealEntries = context.entries.filter(entry => entry.meal === mealValue);
-            const mealTimes = mealEntries.map(entry => entry.eaten_time).filter(Boolean).sort();
-            // 没设过进食时间时默认带出记录时刻，改起来直观
-            const fallback = (mealEntries.map(entry => entry.created_at || '').sort()[0] || '').slice(11, 16);
-            element('time').value = mealTimes[0] || fallback || '';
             selectedDate = dateValue;
-            selectedMeal = mealValue;
+            selectedTime = timeValue || '';
             element('date').value = selectedDate;
-            element('meal').value = selectedMeal;
-            selectMeal();
-            await prefillPlans();
+            element('time').value = selectedTime;
+            selectOccasion();
             message();
         } catch (error) {
             element('date').value = selectedDate || dateValue;
-            element('meal').value = selectedMeal;
-            message(`加载失败：${error.message}。可点击“重新载入本餐”重试。`, true);
+            message(`加载失败：${error.message}。可点击“重新载入这笔”重试。`, true);
         } finally {
             setBusy(false);
         }
     }
 
-    async function open(dateValue = today(), mealValue = null) {
+    async function open(dateValue = today(), timeValue = null) {
         if (busy || (element('modal').classList.contains('active') && !discard())) return;
         opener = document.activeElement;
         context = null;
         blocks = [];
         dirty = false;
         selectedDate = dateValue;
-        selectedMeal = mealValue || (dateValue === today() ? suggestedMeal() : '');
+        selectedTime = timeValue || (dateValue === today() ? nowTime() : '');
         element('date').max = today();
         element('date').value = selectedDate;
-        element('meal').value = selectedMeal;
+        element('time').value = selectedTime;
         closePicker(false);
         element('blocks').replaceChildren();
         element('add').disabled = true;
         element('save').disabled = true;
         element('empty').textContent = '';
-        // 从记录页的餐次卡片进入时日期餐次已知：标题直接说明，日期/餐次不重复展示；时间框必须保留可改
-        const contextKnown = Boolean(mealValue);
-        const dateMeal = element('date-meal');
-        dateMeal.hidden = false;
-        element('date').closest('label').hidden = contextKnown;
-        element('meal').closest('label').hidden = contextKnown;
-        dateMeal.classList.toggle('time-only', contextKnown);
+        element('date').closest('label').hidden = false;
         element('modal').classList.add('active');
         document.body.style.overflow = 'hidden';
-        await loadEditor(selectedDate, selectedMeal);
-        if (contextKnown) {
-            const [month, day] = selectedDate.slice(5).split('-');
-            element('title').textContent = `${meals[mealValue]} · ${Number(month)}月${Number(day)}日`;
-        }
-        element(contextKnown ? 'time' : 'date').focus();
+        await loadEditor(selectedDate, selectedTime);
+        element(timeValue ? 'time' : 'date').focus();
     }
 
     function stepperControl(get, set, min, max, step, format) {
@@ -261,10 +210,9 @@
         const focusedIndex = focusedBlock ? [...container.children].indexOf(focusedBlock) : -1;
         const focusedChoice = document.activeElement.dataset.choice;
         container.replaceChildren();
-        element('empty').textContent = !selectedMeal ? '补记过去日期时，请手动选择餐次。' :
-            blocks.length ? '' : '本餐还没有食物，点击“＋ 新增食物”从辅食库选择。';
-        element('add').disabled = !context || !selectedMeal;
-        element('save').disabled = !context || !selectedMeal;
+        element('empty').textContent = blocks.length ? '' : '这笔还没有食物，点击“＋ 新增食物”从辅食库选择。';
+        element('add').disabled = !context;
+        element('save').disabled = !context;
         blocks.forEach((block, index) => {
             const food = foodFor(block);
             const card = node('section', '', 'food-intake-block');
@@ -438,61 +386,56 @@
 
     async function save(event) {
         event.preventDefault();
-        if (busy || !context || !selectedMeal) return;
+        if (busy || !context) return;
         if (blocks.some(block => !allAmounts.includes(block.amount) && !gramAmount(block.amount))) {
             message('请为每种食物选择进食量。', true);
             return;
         }
-        const oldEntries = context.entries.filter(entry => entry.meal === selectedMeal);
+        const oldEntries = (context.occasions || []).find(item => item.time === selectedTime)?.entries || [];
         if (!blocks.length && !oldEntries.length) {
             message('请先添加至少一种食物。', true);
             return;
         }
         const removed = oldEntries.some(entry => !blocks.some(block => block.id === entry.id));
-        if (removed && !window.confirm('保存后会删除从本餐移除的记录，确定保存吗？')) return;
-        // 日期/餐次改了 = 整餐移动：以表单当前值为目标，原位置保存时清空
+        if (removed && !window.confirm('保存后会删除从这笔移除的记录，确定保存吗？')) return;
         const targetDate = element('date').value;
-        const targetMeal = element('meal').value;
-        const moving = targetDate !== selectedDate || targetMeal !== selectedMeal;
+        const targetTime = element('time').value;
+        if (!targetDate || targetDate > today()) {
+            message('请选择有效日期（不能晚于今天）。', true);
+            return;
+        }
+        if (!targetTime) {
+            message('请填写这笔的进食时间。', true);
+            return;
+        }
+        // 改日期/时间 = 挪这笔：目标位置已有别的笔记时先提示，避免静默合并
+        const moving = targetDate !== selectedDate || targetTime !== selectedTime;
         setBusy(true);
-        message('正在保存本餐…');
+        message('正在保存这笔…');
         try {
-            let targetRevisions = context.revisions;
-            let targetEntries = context.entries;
-            if (targetDate !== selectedDate) {
+            if (moving && targetDate !== selectedDate) {
                 const targetContext = await api(`entries?date=${encodeURIComponent(targetDate)}`);
-                targetRevisions = targetContext.revisions;
-                targetEntries = targetContext.entries;
-            }
-            if (moving) {
-                const existing = targetEntries
-                    .filter(entry => entry.meal === targetMeal
-                        && !blocks.some(block => block.id === entry.id));
-                if (existing.length) {
-                    message(`目标餐次（${meals[targetMeal]}）已有 ${existing.length} 条记录，请先在该餐编辑合并，不能直接覆盖。`, true);
-                    setBusy(false);
-                    return;
-                }
-                if (!window.confirm(`把本餐移到 ${targetDate.slice(5).replace('-', '/')} 的${meals[targetMeal]}？原位置将清空。`)) {
+                const clash = (targetContext.occasions || [])
+                    .find(item => item.time === targetTime
+                        && item.entries.some(entry => !blocks.some(block => block.id === entry.id)));
+                if (clash) {
+                    message(`目标日期 ${targetTime} 已有另一笔（${clash.entries.map(row => row.food_name).join('、')}），请先到那边编辑合并。`, true);
                     setBusy(false);
                     return;
                 }
             }
             const payload = {
-                date: targetDate, meal: targetMeal,
-                revision: targetRevisions[targetMeal],
+                date: targetDate, time: targetTime,
+                revision: context.day_revision,
+                ids: oldEntries.map(entry => entry.id),
                 entries: blocks.map(block => ({
                     id: block.id, food_id: block.food_id, amount: block.amount,
-                    rating: block.rating, note: block.note, mode: block.mode,
-                    time: element('time').value || null
+                    rating: block.rating, note: block.note, mode: block.mode
                 }))
             };
-            if (moving) {
-                payload.from = { date: selectedDate, meal: selectedMeal, revision: context.revisions[selectedMeal] };
-            }
             context = await api('meals', payload);
             selectedDate = targetDate;
-            selectedMeal = targetMeal;
+            selectedTime = targetTime;
             dirty = false;
             if (element('history-date')) {
                 element('history-date').value = selectedDate;
@@ -500,9 +443,7 @@
             }
             setBusy(false);
             close();
-            showToast(moving
-                ? `已移到${targetDate.slice(5).replace('-', '/')}的${meals[targetMeal]}`
-                : `已保存${meals[selectedMeal]}辅食记录`);
+            showToast(`已保存 ${targetTime} 这笔辅食记录`);
         } catch (error) {
             message(`保存失败：${error.message}。输入已保留。`, true);
         } finally {
@@ -519,18 +460,22 @@
         try {
             const result = await api(`entries?date=${encodeURIComponent(dateValue)}`);
             if (version !== historyVersion) return;
-            element('history-message').textContent = result.entries.length ? '' : '这一天还没有辅食记录。';
-            Object.entries(meals).forEach(([meal, label]) => {
-                const entries = result.entries.filter(entry => entry.meal === meal);
+            const occasions = result.occasions || [];
+            element('history-message').textContent = occasions.length ? '' : '这一天还没有辅食记录。';
+            occasions.forEach((occasion, index) => {
                 const card = node('article', '', 'food-intake-meal-card');
-                const mealTimes = entries.map(entry => entry.eaten_time).filter(Boolean).sort();
-                card.append(node('h3', mealTimes.length ? `${label} · ${mealTimes[0]}` : label));
-                entries.forEach(entry => {
+                const label = slotLabelOf(occasion.time);
+                card.append(node('h3',
+                    `${ordinalBadge(index + 1)} ${occasion.time}${label ? ` · ${label}` : ''}`));
+                occasion.entries.forEach(entry => {
                     card.append(node('p', `${entry.food_name} · ${entry.amount}${entry.rating ? ` · ${ratings[entry.rating]}` : ''}${entry.note ? ` · ${entry.note}` : ''}`));
                 });
-                card.append(button(entries.length ? `编辑${label}` : `＋ 记录${label}`, () => open(dateValue, meal)));
+                card.append(button('编辑这笔', () => open(dateValue, occasion.time)));
                 element('history-list').append(card);
             });
+            const addCard = node('article', '', 'food-intake-meal-card');
+            addCard.append(button('＋ 记一笔', () => open(dateValue, null)));
+            element('history-list').append(addCard);
         } catch (error) {
             if (version !== historyVersion) return;
             element('history-message').textContent = `辅食记录加载失败：${error.message}`;
@@ -544,17 +489,11 @@
             element('date').value = selectedDate;
             return;
         }
-        loadEditor(dateValue, dateValue === today() ? suggestedMeal() : '');
-    });
-    element('meal').addEventListener('change', () => {
-        if (!discard()) {
-            element('meal').value = selectedMeal;
-            return;
-        }
-        loadEditor(selectedDate, element('meal').value);
+        // 改日期 = 保存时把这笔挪过去；这里只校验，不重载
+        dirty = true;
     });
     element('reload').addEventListener('click', () => {
-        if (discard()) loadEditor(selectedDate, selectedMeal);
+        if (discard()) loadEditor(selectedDate, selectedTime);
     });
     element('add').addEventListener('click', () => showPicker());
     element('close').addEventListener('click', close);
@@ -618,12 +557,6 @@
         event.returnValue = '';
     });
     window.addEventListener('pageshow', event => { if (event.persisted) loadHistory(); });
-    // 餐次下拉只留活跃餐次（每天吃几餐的配置）
-    if (window.MealConfig) {
-        [...element('meal').options]
-            .filter(option => option.value && !window.MealConfig.keys.includes(option.value))
-            .forEach(option => option.remove());
-    }
     if (element('history-date')) {
         element('history-date').value = today();
         element('history-date').max = today();

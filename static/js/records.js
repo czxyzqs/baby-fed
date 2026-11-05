@@ -341,8 +341,8 @@ function openEditModal(type, id) {
     if (!record) return;
 
     if (type === 'food') {
-        // 辅食按「日期+餐次」整餐编辑，复用辅食编辑器
-        if (window.foodIntake) foodIntake.open(record.time ? record.time.substring(0, 10) : '', record.meal || null);
+        // 辅食按「日期+时间」编辑这一笔，复用辅食编辑器
+        if (window.foodIntake) foodIntake.open(record.time ? record.time.substring(0, 10) : '', (record.time || '').slice(11, 16) || null);
         return;
     }
 

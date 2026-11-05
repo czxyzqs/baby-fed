@@ -1,12 +1,15 @@
-/* 备餐批次 + 按餐记录面板：首页专用。
+/* 备餐批次 + 记录面板（按笔）：首页专用。
    弹层复用 food-menu-actions.css 的 .fma-* 样式，步进器复用 index.css 的 .amount-control。
-   数据流：/api/prep/overview（横幅+面板共用）、/api/meals（整餐替换）、/api/prep/batches。 */
+   一笔 = 同日同进食时间的一组条目：时间为主输入，餐次标签由时间落槽推导（MealConfig.slotForTime）；
+   计划菜经「带入」托盘进列表，不自动带量，避免提前记水果时被计划污染。
+   数据流：/api/prep/overview（横幅+面板共用）、/api/meals（按笔替换）、/api/prep/batches。 */
 (() => {
     'use strict';
 
-    const MEALS = window.MealConfig?.emojiLabels || { breakfast: '🥣 早餐', lunch: '☀️ 午餐', snack: '🍎 下午茶', dinner: '🌙 晚餐' };
     const PRESETS = ['一勺尖', '一勺', '两勺', '三勺', '半碗', '一碗'];
     const PORTIONS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
+    const ORDINALS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+    const ordinalBadge = index => ORDINALS[index - 1] || `第${index}笔`;
 
     function node(tag, text, className = '') {
         const result = document.createElement(tag);
@@ -34,14 +37,6 @@
         return new Intl.DateTimeFormat('en-CA', {
             timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
         }).format(new Date());
-    }
-
-    function suggestedMeal() {
-        const hour = Number(new Intl.DateTimeFormat('en-GB', {
-            timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23'
-        }).format(new Date()));
-        const guess = hour < 11 ? 'breakfast' : hour < 14 ? 'lunch' : hour < 17 ? 'snack' : 'dinner';
-        return window.MealConfig?.adjustSuggestion(guess) ?? guess;
     }
 
     function nowTime() {
@@ -289,7 +284,7 @@
                 });
                 toast(`已登记：${state.food.name} ${state.portions}份`);
                 closePanel(); // onClose 会重新打开批次列表
-                refreshBanner();
+                window.FoodBanner?.refresh?.();
             } catch (error) {
                 toast(`登记失败：${error.message}`);
             }
@@ -328,7 +323,7 @@
                 try {
                     await api(`prep/batches/${batch.id}`, 'PUT', { portions_left: Number(input.value) });
                     await renderPrepBody(body);
-                    refreshBanner();
+                    window.FoodBanner?.refresh?.();
                 } catch (error) {
                     toast(`修正失败：${error.message}`);
                 }
@@ -343,7 +338,7 @@
                 await api(`prep/batches/${batch.id}`, 'DELETE');
                 toast('批次已删除');
                 await renderPrepBody(body);
-                refreshBanner();
+                window.FoodBanner?.refresh?.();
             } catch (error) {
                 toast(`删除失败：${error.message}`);
             }
@@ -352,25 +347,27 @@
         return row;
     }
 
-    // ---------- 按餐记录面板 ----------
+    // ---------- 记录面板（按笔） ----------
 
-    async function recordSheet(dateValue = today(), mealValue) {
-        const dialog = openOverlay('这餐吃了多少？');
+    async function recordSheet(dateValue = today()) {
+        const dialog = openOverlay('记一笔辅食');
         const body = node('div', '', 'fp-body');
         dialog.append(body);
         try {
-            await renderSheetBody(body, dateValue, mealValue);
+            await renderSheetBody(body, dateValue);
         } catch (error) {
             body.append(node('p', `加载失败：${error.message}`, 'fma-hint'));
         }
     }
 
-    async function renderSheetBody(body, dateValue, mealValue) {
+    async function renderSheetBody(body, dateValue) {
         const [context, overview, bannerData] = await Promise.all([
             api(`entries?date=${dateValue}`), api('prep/overview'),
             fetch('/api/screening/banner', { cache: 'no-store' }).then(response => response.json())
         ]);
-        const state = { meal: mealValue || suggestedMeal() };
+        // 状态：time=这笔的进食时间（主输入）；editing=正在编辑的已有笔（null=新记一笔）
+        const state = { time: nowTime(), editing: null };
+        let addedRows = new Map();   // ＋加一个/计划带入的行：切换笔时清空
         // 批次按食物聚合：只要有批次（含已用完）就按份记；余量提示汇总全部批次，
         // 每份克数取还有余量的批次（多批不同含量给区间），不再误取最老的用完批次
         const batchByFood = {};
@@ -384,66 +381,34 @@
             }
         });
 
-        // 这餐几点吃的：默认带出已有记录的进食时间/记录时刻，可手动改
-        function mealTimeDefault(meal) {
-            const rows = context.entries.filter(row => row.meal === meal);
-            const eaten = rows.map(row => row.eaten_time).filter(Boolean).sort();
-            if (eaten.length) return eaten[0];
-            const created = rows.map(row => row.created_at || '').sort()[0] || '';
-            return created ? created.slice(11, 16) : nowTime();
-        }
+        const occasions = context.occasions || [];
+        const slotOf = () => window.MealConfig?.slotForTime(state.time) || 'lunch';
+        const slotLabel = () => window.MealConfig?.labels?.[slotOf()] || '';
 
-        function renderMealChips() {
-            const chips = node('div', '', 'fma-chips');
-            Object.entries(MEALS).forEach(([value, label]) => {
-                const chip = node('button', label, 'fma-chip' + (value === state.meal ? ' active' : ''));
-                chip.type = 'button';
-                chip.addEventListener('click', () => {
-                    state.meal = value;
-                    renderMealChips();
-                    renderRows();
-                });
-                chips.append(chip);
+        // 计划托盘候选：时间所属槽内、计划里还没吃的菜（已带入/已在笔里的不算）
+        function trayItems() {
+            const slot = slotOf();
+            const inRows = new Set(currentDishes().map(dish => dish.foodId));
+            return (bannerData.items || []).filter(item => {
+                if (['due', 'upcoming'].includes(item.kind)) return false;
+                if ((item.eaten_meals || []).includes(slot)) return false;
+                if (!(window.FoodMenu?.mealsOf(item.meal) || []).includes(slot)) return false;
+                return !inRows.has(item.food_id);
             });
-            const timeLabel = node('label', '', 'fp-time');
-            timeLabel.append(node('span', '时间'));
-            const timeInput = document.createElement('input');
-            timeInput.type = 'time';
-            timeInput.className = 'form-input';
-            timeInput.value = mealTimeDefault(state.meal);
-            timeLabel.append(timeInput);
-            mealHost.replaceChildren(chips, timeLabel);
         }
 
-        // 该餐的行 = 计划菜品 ∪ 已有记录，再加一个「＋加一个」入口
-        const addedRows = new Map();   // ＋加一个的行：跨餐次切换与重渲染保持
-        function dishRows() {
+        // 这笔的行 = 已有笔的条目 ∪ 带入/加进来的行
+        function currentDishes() {
             const rows = [];
             const seen = new Set();
-            (bannerData.items || []).forEach(item => {
-                if (['due', 'upcoming'].includes(item.kind)) return;
-                if (!(item.eaten_meals || []).includes(state.meal)
-                    && !(window.FoodMenu?.mealsOf(item.meal) || []).includes(state.meal)) return;
-                if (seen.has(item.food_id)) return;
-                seen.add(item.food_id);
-                const entry = context.entries.find(row => row.food_id === item.food_id && row.meal === state.meal);
-                rows.push({
-                    foodId: item.food_id, name: item.food,
-                    tag: (item.kind === 'screening' || item.kind === 'planned') ? `🧪 ${item.text}` : '',
-                    position: item.position, entryId: entry?.id,
-                    amount: entry ? entry.amount : null,
-                    plannedPortions: item.portions ?? null,
-                    gramDefault: item.gram_default ?? null,
-                    mode: item.kind === 'planned' ? 'start' : 'keep',
-                    newItem: item.kind === 'planned'
-                });
-            });
-            context.entries.filter(row => row.meal === state.meal).forEach(entry => {
+            (state.editing ? state.editing.entries : []).forEach(entry => {
                 if (seen.has(entry.food_id)) return;
                 seen.add(entry.food_id);
                 rows.push({
                     foodId: entry.food_id, name: entry.food_name, tag: '', position: 0,
-                    entryId: entry.id, amount: entry.amount, mode: 'keep', newItem: false
+                    entryId: entry.id, amount: entry.amount,
+                    rating: entry.rating || null, note: entry.note || '',
+                    mode: 'keep', newItem: false
                 });
             });
             addedRows.forEach(dish => {
@@ -454,29 +419,118 @@
             return rows;
         }
 
+        function occasionChipLabel(occasion, index) {
+            const names = occasion.entries.map(row => row.food_name);
+            const summary = names.length <= 2 ? names.join('、') : `${names[0]}、${names[1]}等${names.length}样`;
+            return `${ordinalBadge(index + 1)} ${occasion.time} · ${summary}`;
+        }
+
         const mealHost = node('div', '', 'fp-meal-host');
-        body.replaceChildren(mealHost, node('div', '', 'fp-rows'));
-        renderMealChips();
-        renderRows();
+        const trayHost = node('div', '', 'fp-plan-tray');
+        const rowsHost = node('div', '', 'fp-rows');
+        body.replaceChildren(mealHost, trayHost, rowsHost);
+
+        let timeInput = null;
+
+        function renderHead() {
+            const timeLabel = node('label', '', 'fp-time');
+            timeLabel.append(node('span', '这餐几点'));
+            timeInput = document.createElement('input');
+            timeInput.type = 'time';
+            timeInput.className = 'form-input';
+            timeInput.value = state.time;
+            timeInput.addEventListener('change', () => {
+                state.time = timeInput.value || nowTime();
+                renderHead();
+                renderTray();
+            });
+            timeLabel.append(timeInput);
+            const slotTag = node('span', slotLabel(), 'fp-slot-tag');
+            mealHost.replaceChildren(timeLabel, slotTag);
+
+            const chips = node('div', '', 'fma-chips fp-occasion-chips');
+            occasions.forEach((occasion, index) => {
+                const chip = node('button', occasionChipLabel(occasion, index),
+                    'fma-chip' + (state.editing === occasion ? ' active' : ''));
+                chip.type = 'button';
+                chip.addEventListener('click', () => {
+                    if (state.editing === occasion) return;
+                    state.editing = occasion;
+                    state.time = occasion.time;
+                    addedRows = new Map();
+                    renderHead();
+                    renderTray();
+                    renderRows();
+                });
+                chips.append(chip);
+            });
+            const fresh = node('button', '＋ 新记一笔',
+                'fma-chip' + (state.editing === null ? ' active' : ''));
+            fresh.type = 'button';
+            fresh.addEventListener('click', () => {
+                if (state.editing === null) return;
+                state.editing = null;
+                state.time = nowTime();
+                addedRows = new Map();
+                renderHead();
+                renderTray();
+                renderRows();
+            });
+            chips.append(fresh);
+            mealHost.append(chips);
+        }
+
+        function renderTray() {
+            const items = trayItems();
+            trayHost.replaceChildren();
+            if (!items.length) {
+                trayHost.hidden = true;
+                return;
+            }
+            const names = items.map(item => item.food).join('、');
+            const label = node('span',
+                `今天的计划${slotLabel() ? `（${slotLabel()}）` : ''}：${names}`, 'fp-plan-tray-text');
+            const bring = node('button', '带入', 'fma-btn');
+            bring.type = 'button';
+            bring.addEventListener('click', () => {
+                items.forEach(item => {
+                    addedRows.set(item.food_id, {
+                        foodId: item.food_id, name: item.food,
+                        tag: (item.kind === 'screening' || item.kind === 'planned') ? `🧪 ${item.text}` : '',
+                        position: item.position, entryId: null, amount: null,
+                        rating: null, note: '',
+                        plannedPortions: item.portions ?? null,
+                        gramDefault: item.gram_default ?? null,
+                        mode: item.kind === 'planned' ? 'start' : 'keep',
+                        newItem: item.kind === 'planned'
+                    });
+                });
+                renderTray();
+                renderRows();
+            });
+            trayHost.append(label, bring);
+            trayHost.hidden = false;
+        }
 
         function renderRows() {
-            const host = body.querySelector('.fp-rows');
-            host.replaceChildren();
-            const rows = dishRows();
-            rows.forEach(dish => host.append(dishRowEl(dish)));
+            rowsHost.replaceChildren();
+            const rows = currentDishes();
+            rows.forEach(dish => rowsHost.append(dishRowEl(dish)));
 
             const add = node('button', '＋ 加一个', 'fp-add');
             add.type = 'button';
             add.addEventListener('click', () => {
                 const picker = node('div', '', 'fp-picker');
                 const candidates = context.foods.filter(food =>
-                    food.status !== 'allergic' && !dishRows().some(dish => dish.foodId === food.id));
+                    food.status !== 'allergic' && !currentDishes().some(dish => dish.foodId === food.id));
                 foodChips(picker, candidates, food => {
                     addedRows.set(food.id, {
                         foodId: food.id, name: food.name, tag: '', position: food.position || 0,
-                        entryId: null, amount: null, mode: 'keep', newItem: false
+                        entryId: null, amount: null, rating: null, note: '',
+                        mode: 'keep', newItem: false
                     });
                     closePicker();
+                    renderTray();
                     renderRows();
                 });
                 function closePicker() {
@@ -484,9 +538,9 @@
                     add.hidden = false;
                 }
                 add.hidden = true;
-                host.append(picker);
+                rowsHost.append(picker);
             });
-            host.append(add);
+            rowsHost.append(add);
 
             function dishRowEl(dish) {
                 const row = node('div', '', 'fp-row');
@@ -509,7 +563,7 @@
                 if (batch) {
                     let portion = portionOf(dish.amount);
                     if (portion === null) {
-                        portion = window.FoodMenu?.portionsFor(dish.plannedPortions, state.meal) ?? 1;
+                        portion = window.FoodMenu?.portionsFor(dish.plannedPortions, slotOf()) ?? 1;
                     }
                     stateRow.value = `${portion}份`;
                     controls.append(stepper(
@@ -520,7 +574,7 @@
                 } else if (dish.gramDefault != null) {
                     // 干粉主食按克直记：默认 6g，克数直接入克数账本
                     let gram = gramOf(dish.amount)
-                        ?? window.FoodMenu?.portionsFor(dish.plannedPortions, state.meal)
+                        ?? window.FoodMenu?.portionsFor(dish.plannedPortions, slotOf())
                         ?? dish.gramDefault;
                     stateRow.value = `${gram}g`;
                     controls.append(stepper(
@@ -556,7 +610,7 @@
                         food_id: dish.foodId, food: dish.name,
                         kind: dish.newItem ? 'planned' : 'normal',
                         position: dish.position || 1,
-                        meal: state.meal, amount: row._amount()
+                        meal: slotOf(), amount: row._amount()
                     });
                 });
                 controls.append(react);
@@ -566,9 +620,18 @@
             }
         }
 
-        const save = node('button', '保存这餐', 'fma-btn primary');
+        renderHead();
+        renderTray();
+        renderRows();
+
+        const save = node('button', '保存这笔', 'fma-btn primary');
         save.type = 'button';
         save.addEventListener('click', async () => {
+            const timeValue = state.time;
+            if (!timeValue) {
+                toast('请先填这餐几点吃的');
+                return;
+            }
             const rowEls = [...body.querySelectorAll('.fp-row')];
             // 0/不吃/空 = 没吃；份数与克数分别判（'7g' 不是份数，不能因 Number(null)===0 误判为零）
             function amountKept(amount) {
@@ -580,27 +643,16 @@
                 return true;
             }
             const selected = rowEls.filter(row => amountKept(row._amount()));
-            // 拨到0/不吃 = 这餐真的没吃：其旧记录也不进入“未勾选保留”，保存即删除
-            const zeroedIds = rowEls
-                .filter(row => !amountKept(row._amount()))
-                .map(row => row._dish.foodId);
-            if (!selected.length && !zeroedIds.length) {
-                toast('每样都拨到 0 就等于没吃，先加点份数或加个菜');
-                return;
-            }
+            // 已有笔的行全部在列：拨到 0/不吃 = 这笔里真的删掉它；整笔全 0 = 删除这笔
             if (!selected.length) {
-                toast('这餐全拨 0 了，旧记录将一并清除');
+                if (state.editing) {
+                    if (!window.confirm('这笔全部拨 0，保存后整笔删除。确定吗？')) return;
+                } else {
+                    toast('先加个菜或从计划里带入，再保存');
+                    return;
+                }
             }
-            const selectedIds = selected.map(row => row._dish.foodId);
-            const timeValue = body.querySelector('.fp-time input')?.value || null;
-            const others = context.entries
-                .filter(row => row.meal === state.meal
-                    && !selectedIds.includes(row.food_id) && !zeroedIds.includes(row.food_id))
-                .map(row => ({
-                    id: row.id, food_id: row.food_id, amount: row.amount, rating: row.rating,
-                    note: row.note, mode: 'keep', time: timeValue
-                }));
-            const entries = [...others];
+            const entries = [];
             for (const row of selected) {
                 const dish = row._dish;
                 if (dish.newItem && !(await window.FoodBanner?.confirmNoOtherScreening([dish.foodId], dish.name))) {
@@ -608,17 +660,20 @@
                 }
                 entries.push({
                     id: dish.entryId || undefined,
-                    food_id: dish.foodId, amount: row._amount(), rating: null, note: '',
-                    mode: dish.mode || 'keep', time: timeValue
+                    food_id: dish.foodId, amount: row._amount(),
+                    rating: dish.rating || null, note: dish.note || '',
+                    mode: dish.mode || 'keep'
                 });
             }
             try {
                 await api('meals', 'POST', {
-                    date: dateValue, meal: state.meal,
-                    revision: context.revisions[state.meal], entries
+                    date: dateValue, time: timeValue,
+                    revision: context.day_revision,
+                    ids: state.editing ? state.editing.entries.map(row => row.id) : [],
+                    entries
                 });
                 closePanel();
-                toast(`已记录${MEALS[state.meal].slice(2)}：${selected.length}样`);
+                toast(entries.length ? `已记录 ${timeValue} 这笔：${entries.length}样` : `已删除 ${timeValue} 这笔`);
                 window.fetchRecords?.();
                 window.FoodBanner?.refresh?.();
             } catch (error) {

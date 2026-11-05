@@ -764,7 +764,7 @@ def latest_food_time():
 
 
 def food_meal_records(now):
-    """近一周辅食按餐聚合的记录条目，并入首页最近记录列表。"""
+    """近一周辅食按笔聚合的记录条目（一笔=同日同进食时间），并入首页最近记录列表。"""
     store = app.extensions.get('food_entry_store')
     if store is None:
         return []
@@ -776,14 +776,20 @@ def food_meal_records(now):
 
 
 @app.context_processor
-def inject_active_meals():
-    """把「每天吃几餐」配置注入所有模板，前端据此收敛餐次入口。"""
+def inject_meal_slots():
+    """把餐次槽配置（启用集+各槽开始时间）注入所有模板，前端据此渲染槽与时间推导。"""
     store = app.extensions.get('food_entry_store')
+    fallback = [
+        {'key': 'breakfast', 'label': '早餐', 'start': 390},
+        {'key': 'lunch', 'label': '上午餐', 'start': 660},
+        {'key': 'snack', 'label': '下午茶', 'start': 870},
+        {'key': 'dinner', 'label': '下午餐', 'start': 1050},
+    ]
     try:
-        value = json.dumps(store.active_meals()) if store else json.dumps(['breakfast', 'lunch', 'snack', 'dinner'])
+        value = json.dumps(store.meal_slots()) if store else json.dumps(fallback)
     except Exception:
-        value = json.dumps(['breakfast', 'lunch', 'snack', 'dinner'])
-    return {'active_meals_json': value}
+        value = json.dumps(fallback)
+    return {'meal_slots_json': value}
 
 
 def records_with_food(date_filter):

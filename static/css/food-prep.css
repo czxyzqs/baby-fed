@@ -28,10 +28,27 @@
 .fp-food-search .fma-search { width: 100%; }
 .fp-suggest { max-height: 176px; overflow-y: auto; }
 
-.fp-meal-host { margin-bottom: 4px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.fp-time { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 13px; color: var(--text-secondary, rgba(255, 255, 255, 0.7)); }
+.fp-meal-host { margin-bottom: 4px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.fp-time { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary, rgba(255, 255, 255, 0.7)); }
 /* 110px 时扣掉 form-input 的左右 padding+边框只剩 ~74px，iPadOS 原生时间控件画不完「下午H:MM」+时钟图标，分钟被裁掉 */
 .fp-time input { width: 150px; padding-inline: 10px; margin: 0; }
+/* 餐次标签：由时间落槽推导的只读徽章 */
+.fp-slot-tag {
+    font-size: 12px; color: var(--accent-tertiary, #4cc9f0);
+    border: 1px solid var(--accent-tertiary, #4cc9f0); border-radius: 999px;
+    padding: 3px 10px; user-select: none;
+}
+/* 今天已有几笔 + 新记一笔 */
+.fp-occasion-chips { flex-wrap: wrap; row-gap: 6px; }
+.fp-plan-tray {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--bg-card, rgba(255, 255, 255, 0.03));
+    border: 1px dashed var(--border, rgba(255, 255, 255, 0.16));
+    border-radius: 12px; padding: 8px 12px; margin-bottom: 2px;
+}
+.fp-plan-tray[hidden] { display: none; }
+.fp-plan-tray-text { flex: 1; min-width: 160px; font-size: 13px; color: var(--text-secondary, rgba(255, 255, 255, 0.7)); }
+.fp-plan-tray .fma-btn { padding: 6px 14px; font-size: 13px; border-radius: 9px; }
 .fp-rows { display: flex; flex-direction: column; gap: 8px; }
 .fp-row {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
