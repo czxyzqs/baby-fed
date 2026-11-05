@@ -91,35 +91,80 @@
         return dialog;
     }
 
-    function foodChips(container, foods, onPick, excludeIds = []) {
+    // ＋加一从二层选择抽屉：叠在记录弹窗上（独立 overlay，关掉只回记录弹窗）。
+    // 固定高度骨架：标题/搜索固定、列表内部滚动；按品类分组便于扫视
+    function openFoodPicker(candidates, categories, onPick) {
+        const pickerOverlay = node('div', '', 'fma-overlay fp-picker-overlay');
+        pickerOverlay.addEventListener('click', event => {
+            if (event.target === pickerOverlay) dismiss();
+        });
+        const sheet = node('div', '', 'fma-dialog fp-picker-sheet');
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('aria-modal', 'true');
+        const head = node('div', '', 'fma-head');
+        head.append(node('h2', '加一个食物', 'fma-title'));
+        const close = node('button', '✕', 'fma-close');
+        close.type = 'button';
+        close.setAttribute('aria-label', '关闭选择器');
+        close.addEventListener('click', dismiss);
+        head.append(close);
+        sheet.append(head);
+
         const search = node('input', '', 'fma-search');
         search.type = 'search';
         search.placeholder = '搜索食物';
-        container.append(search);
-        const list = node('div', '', 'fma-list');
-        container.append(list);
+        search.setAttribute('aria-label', '搜索食物');
+        sheet.append(search);
+
+        const list = node('div', '', 'fp-picker-sheet-list');
+        sheet.append(list);
+        pickerOverlay.append(sheet);
+        document.body.append(pickerOverlay);
+        // 记录弹窗还开着（body 已锁滚动），这里不动 overflow，只叠一层
 
         function render() {
             const query = (search.value || '').trim().toLocaleLowerCase();
             list.replaceChildren();
-            const matched = foods.filter(food =>
-                !excludeIds.includes(food.id) && (!query || food.name.toLocaleLowerCase().includes(query)));
+            const matched = candidates.filter(food =>
+                !query || food.name.toLocaleLowerCase().includes(query));
             if (!matched.length) {
-                list.append(node('p', '没有匹配的食物。', 'fma-hint'));
+                list.append(node('p', '没有匹配的食物，可到辅食库添加。', 'fma-hint'));
                 return;
             }
-            const group = node('div', '', 'fma-chips');
-            matched.forEach(food => {
-                const chip = node('button', food.name, 'fma-chip');
-                chip.type = 'button';
-                chip.addEventListener('click', () => onPick(food));
-                group.append(chip);
+            categories.forEach(category => {
+                const foods = matched.filter(food => food.category_id === category.id);
+                if (!foods.length) return;
+                list.append(node('h3', `${category.emoji || ''} ${category.name}`.trim(), 'fp-picker-group'));
+                const group = node('div', '', 'fma-chips fp-picker-chips');
+                foods.forEach(food => {
+                    const chip = node('button', food.name, 'fma-chip');
+                    chip.type = 'button';
+                    chip.addEventListener('click', () => {
+                        dismiss();
+                        onPick(food);
+                    });
+                    group.append(chip);
+                });
+                list.append(group);
             });
-            list.append(group);
+        }
+
+        function dismiss() {
+            pickerOverlay.remove();
         }
 
         search.addEventListener('input', render);
+        search.addEventListener('keydown', event => {
+            if (event.key === 'Enter') event.preventDefault();
+        });
+        pickerOverlay.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                dismiss();
+            }
+        });
         render();
+        search.focus();
     }
 
     // ---------- 备餐弹窗 ----------
@@ -524,25 +569,17 @@
             const add = node('button', '＋ 加一个', 'fp-add');
             add.type = 'button';
             add.addEventListener('click', () => {
-                const picker = node('div', '', 'fp-picker');
                 const candidates = context.foods.filter(food =>
                     food.status !== 'allergic' && !currentDishes().some(dish => dish.foodId === food.id));
-                foodChips(picker, candidates, food => {
+                openFoodPicker(candidates, context.categories || [], food => {
                     addedRows.set(food.id, {
                         foodId: food.id, name: food.name, tag: '', position: food.position || 0,
                         entryId: null, amount: null, rating: null, note: '',
                         mode: 'keep', newItem: false
                     });
-                    closePicker();
                     renderTray();
                     renderRows();
                 });
-                function closePicker() {
-                    picker.remove();
-                    add.hidden = false;
-                }
-                add.hidden = true;
-                rowsHost.append(picker);
             });
             rowsHost.append(add);
 
