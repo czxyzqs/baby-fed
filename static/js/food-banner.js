@@ -244,34 +244,42 @@
         document.body.style.overflow = 'hidden';
     }
 
+    function openRecordSheet() {
+        if (window.FoodPrep) FoodPrep.recordSheet(today());
+    }
+
+    // 单行入口双热区：主体按 onMain 分发，右侧「记」直达按笔记录面板
+    function entryRow(title, onMain) {
+        const entry = node('div', '', 'food-plan-entry');
+        const main = node('button', '', 'food-plan-entry-main');
+        main.type = 'button';
+        main.append(node('span', '🥣', 'food-plan-entry-icon'));
+        main.append(node('div', title, 'food-plan-entry-title'));
+        main.append(node('span', '›', 'food-plan-entry-arrow'));
+        main.addEventListener('click', onMain);
+        entry.append(main);
+        const record = node('button', '', 'food-plan-entry-record');
+        record.type = 'button';
+        record.append(node('span', '记', 'food-plan-entry-record-ring'));
+        record.setAttribute('aria-label', '记一餐辅食');
+        record.addEventListener('click', openRecordSheet);
+        entry.append(record);
+        return entry;
+    }
+
     function render(items, overrides = {}) {
         lastItems = items;
         lastOverrides = overrides;
         body.replaceChildren();
         if (!items.length) {
-            banner.hidden = true;
+            // 无计划日不再整条隐藏：降级入口保留「记」，托盘空着也能「＋加一个」记一笔
             if (overlay?.classList.contains('food-plan-overlay')) closeDialog();
+            banner.hidden = false;
+            body.append(entryRow('今日无辅食计划 · 记一笔', openRecordSheet));
             return;
         }
         banner.hidden = false;
-        // 单行入口双热区：主体打开计划预览，右侧「记」直达记录面板
-        const entry = node('div', '', 'food-plan-entry');
-        const preview = node('button', '', 'food-plan-entry-main');
-        preview.type = 'button';
-        preview.append(node('span', '🥣', 'food-plan-entry-icon'));
-        preview.append(node('div', '今日辅食计划', 'food-plan-entry-title'));
-        preview.append(node('span', '›', 'food-plan-entry-arrow'));
-        preview.addEventListener('click', openPlanDialog);
-        entry.append(preview);
-        const record = node('button', '', 'food-plan-entry-record');
-        record.type = 'button';
-        record.append(node('span', '记', 'food-plan-entry-record-ring'));
-        record.setAttribute('aria-label', '记一餐辅食');
-        record.addEventListener('click', () => {
-            if (window.FoodPrep) FoodPrep.recordSheet(today());
-        });
-        entry.append(record);
-        body.append(entry);
+        body.append(entryRow('今日辅食计划', openPlanDialog));
         // ✓ 勾选等操作会触发重渲染；餐单弹层开着时就地刷新内容
         if (overlay?.classList.contains('food-plan-overlay')) {
             overlay.querySelector('.food-plan-content')?.replaceWith(buildPlanContent());
