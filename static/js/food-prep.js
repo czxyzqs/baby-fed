@@ -91,8 +91,8 @@
         return dialog;
     }
 
-    // ＋加一从二层选择抽屉：叠在记录弹窗上（独立 overlay，关掉只回记录弹窗）。
-    // 固定高度骨架：标题/搜索固定、列表内部滚动；按品类分组便于扫视
+    // ＋加一个二层抽屉：叠在记录弹窗上（独立 overlay，关掉只回记录弹窗）。
+    // 固定高度骨架：标题/搜索固定、列表内部滚动；默认只列"最近吃过"，输入即联想（平铺），回车选第一个
     function openFoodPicker(candidates, categories, onPick) {
         const pickerOverlay = node('div', '', 'fma-overlay fp-picker-overlay');
         pickerOverlay.addEventListener('click', event => {
@@ -122,31 +122,52 @@
         document.body.append(pickerOverlay);
         // 记录弹窗还开着（body 已锁滚动），这里不动 overflow，只叠一层
 
-        function render() {
+        const categoryById = new Map((categories || []).map(category => [category.id, category]));
+        // 最近吃过的排前面（last_eaten 为后端给的日期+进食时刻），只取十来个避免摊开
+        const recent = candidates
+            .filter(food => food.last_eaten)
+            .sort((a, b) => b.last_eaten.localeCompare(a.last_eaten))
+            .slice(0, 12);
+
+        function chipEl(food) {
+            const emoji = categoryById.get(food.category_id)?.emoji;
+            const chip = node('button', emoji ? `${emoji} ${food.name}` : food.name, 'fma-chip');
+            chip.type = 'button';
+            chip.addEventListener('click', () => {
+                dismiss();
+                onPick(food);
+            });
+            return chip;
+        }
+
+        function matchedFoods() {
             const query = (search.value || '').trim().toLocaleLowerCase();
+            if (!query) return [];
+            return candidates.filter(food => food.name.toLocaleLowerCase().includes(query));
+        }
+
+        function render() {
             list.replaceChildren();
-            const matched = candidates.filter(food =>
-                !query || food.name.toLocaleLowerCase().includes(query));
+            const query = (search.value || '').trim().toLocaleLowerCase();
+            if (!query) {
+                if (recent.length) {
+                    list.append(node('h3', '最近吃过', 'fp-picker-group'));
+                    const group = node('div', '', 'fma-chips fp-picker-chips');
+                    recent.forEach(food => group.append(chipEl(food)));
+                    list.append(group);
+                } else {
+                    list.append(node('p', '搜索食物开始记录，或到辅食库添加。', 'fma-hint'));
+                }
+                return;
+            }
+            const matched = matchedFoods();
             if (!matched.length) {
                 list.append(node('p', '没有匹配的食物，可到辅食库添加。', 'fma-hint'));
                 return;
             }
-            categories.forEach(category => {
-                const foods = matched.filter(food => food.category_id === category.id);
-                if (!foods.length) return;
-                list.append(node('h3', `${category.emoji || ''} ${category.name}`.trim(), 'fp-picker-group'));
-                const group = node('div', '', 'fma-chips fp-picker-chips');
-                foods.forEach(food => {
-                    const chip = node('button', food.name, 'fma-chip');
-                    chip.type = 'button';
-                    chip.addEventListener('click', () => {
-                        dismiss();
-                        onPick(food);
-                    });
-                    group.append(chip);
-                });
-                list.append(group);
-            });
+            const group = node('div', '', 'fma-chips fp-picker-chips');
+            matched.forEach(food => group.append(chipEl(food)));
+            list.append(group);
         }
 
         function dismiss() {
@@ -155,7 +176,13 @@
 
         search.addEventListener('input', render);
         search.addEventListener('keydown', event => {
-            if (event.key === 'Enter') event.preventDefault();
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            const first = matchedFoods()[0];
+            if (first) {
+                dismiss();
+                onPick(first);
+            }
         });
         pickerOverlay.addEventListener('keydown', event => {
             if (event.key === 'Escape') {

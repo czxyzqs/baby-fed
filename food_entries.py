@@ -80,7 +80,12 @@ class FoodEntryStore(FoodLibraryStore):
     def context_in(self, connection, selected_date):
         categories = [dict(row) for row in connection.execute('SELECT * FROM categories ORDER BY sort_order, id')]
         foods = [dict(row) for row in connection.execute('SELECT * FROM foods ORDER BY id')]
+        # 每样食物最近一次进食时刻（按事实：日期+进食时间），供「＋加一个」抽屉排"最近吃过"
+        last_eaten = {row['food_id']: row['last_time'] for row in connection.execute(
+            'SELECT food_id, MAX(date || \'T\' || eaten_time) AS last_time FROM food_entries GROUP BY food_id'
+        )}
         for food in foods:
+            food['last_eaten'] = last_eaten.get(food['id'])
             latest = connection.execute(
                 'SELECT * FROM food_rounds WHERE food_id = ? ORDER BY id DESC LIMIT 1', (food['id'],)
             ).fetchone()
