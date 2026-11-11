@@ -2,12 +2,10 @@
     let records = Array.isArray(window.INIT_RECORDS) ? window.INIT_RECORDS : [];
     let latestFoodTime = window.INIT_LATEST_FOOD_TIME || null;
     let dueSupplements = Array.isArray(window.INIT_DUE_SUPPLEMENTS) ? window.INIT_DUE_SUPPLEMENTS : [];
-    let lastFetchTime = records.length > 0 ? records[0].time : null;
     let recordsVersion = null;
     let recordsLoaded = Array.isArray(window.INIT_RECORDS);
     let dashboardRecommendedSleepPosition = window.INIT_RECOMMENDED_SLEEP_POSITION;
     let dashboardRequestId = 0;
-    let latestDashboardStatus = null;
     let feverModeEnabled = window.INIT_FEVER_MODE?.enabled === true;
     let feverModeSaving = false;
     let feverModeRevision = 0;
@@ -74,7 +72,6 @@
         if (index === -1) records.push(record);
         else records[index] = record;
         records.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
-        lastFetchTime = records[0]?.time || null;
         renderRecords();
         updateStats();
         updateVitaminReminder();
@@ -83,7 +80,6 @@
     function removeLocalRecord(id) {
         dashboardRequestId += 1;
         records = records.filter(record => record.id !== id);
-        lastFetchTime = records[0]?.time || null;
         renderRecords();
         updateStats();
         updateVitaminReminder();
@@ -106,7 +102,6 @@
             }
             updateRecordsVersion(response);
             recordsLoaded = true;
-            lastFetchTime = records.length > 0 ? records[0].time : lastFetchTime;
             try { renderRecords(); } catch(e) { console.error('renderRecords error:', e); }
             try { updateStats(); } catch(e) { console.error('updateStats error:', e); }
             updateVitaminReminder();
@@ -132,6 +127,10 @@
             autoPollRecords();
             pollInterval = setInterval(autoPollRecords, 60000);
         }, millisecondsUntilNextMinute);
+        // 切回页面立即刷新，不等下一次整分轮询（辅食可能刚在别的页面记完）
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) autoPollRecords();
+        });
     }
 
     function formatElapsedTime(record, prefix = '', suffix = '') {
@@ -143,33 +142,6 @@
         return mins > 0
             ? `${prefix}<span class="time-num">${hours}</span>小时<span class="time-num">${mins}</span>分钟${suffix}`
             : `${prefix}<span class="time-num">${hours}</span>小时${suffix}`;
-    }
-
-    function updateLatestDashboardStatus(status) {
-        latestDashboardStatus = status;
-        document.getElementById('time-since-feed').innerHTML = status.newMilk
-            ? formatElapsedTime(status.newMilk, '', '前')
-            : '<span class="time-num">--</span>';
-        document.getElementById('time-since-diaper').innerHTML = status.diaper
-            ? formatElapsedTime(status.diaper, '', '前')
-            : '<span class="time-num">--</span>';
-
-        const sleepStatus = status.sleep;
-        const icon = document.getElementById('awake-icon');
-        const badge = document.getElementById('sleep-position-badge');
-        if (!sleepStatus) {
-            icon.textContent = '👀';
-            if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
-            document.getElementById('time-since-awake').innerHTML = '<span class="time-num">--</span>';
-            return;
-        }
-        const isSleeping = sleepStatus.sleepType === 'sleep';
-        icon.textContent = isSleeping ? '🛏️' : '👀';
-        if (badge && isSleeping) { badge.style.display = 'none'; badge.textContent = ''; }
-        document.getElementById('time-since-awake').innerHTML = formatElapsedTime(
-            sleepStatus,
-            isSleeping ? '睡了' : '醒了',
-        );
     }
 
     function highlightNewRecord(latestTime) {
@@ -249,9 +221,6 @@
     }
 
     function isBabyCurrentlySleeping() {
-        if (latestDashboardStatus?.sleep) {
-            return latestDashboardStatus.sleep.sleepType === 'sleep';
-        }
         return Boolean(getCurrentOpenSleepStart());
     }
 

@@ -1404,35 +1404,6 @@ def get_date_analysis(analysis_type):
     return response
 
 
-@app.route('/api/dashboard/latest-status', methods=['GET'])
-def get_latest_dashboard_status():
-    """Return only the three records needed by the homepage status cards."""
-    latest = {'sleep': None, 'newMilk': None, 'diaper': None}
-    for record in load_records():
-        record_time = record.get('time') or ''
-        if not record_time:
-            continue
-        if record.get('type') == 'sleep':
-            current = latest['sleep']
-            if current is None or record_time > current['time']:
-                latest['sleep'] = {
-                    'time': record_time,
-                    'sleepType': record.get('sleepType'),
-                }
-        elif record.get('type') == 'feed' and record.get('isNewMilk'):
-            current = latest['newMilk']
-            if current is None or record_time > current['time']:
-                latest['newMilk'] = {'time': record_time}
-        elif record.get('type') == 'diaper':
-            current = latest['diaper']
-            if current is None or record_time > current['time']:
-                latest['diaper'] = {'time': record_time}
-
-    response = make_response(jsonify(latest))
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    return response
-
-
 @app.route('/records')
 def all_records_page():
     """All records page with pagination and filtering."""
