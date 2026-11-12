@@ -25,6 +25,7 @@
 
 - 触控目标 ≥44px（fp-picker-chips .fma-chip 已放大）
 - 输入框 font-size ≥16px，防 iOS 聚焦自动放大整页（fma-search）
+- viewport 带 `maximum-scale=1.0`（2026-11-12）：iOS 15PM 上聚焦输入框仍偶发整页放大、fixed 抽屉右缘出屏；maximum-scale 只拦截聚焦放大，不拦截用户捏合缩放（iOS 10+ 行为）。新增页面模板须带齐 `width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover`
 - 底部抽屉留 `env(safe-area-inset-bottom)`，含手势条设备不贴边
 - 弹窗骨架固定高度（dvh 封顶），键盘弹起尺寸不跳
 - `body.elder` 老年模式单独过一遍横向溢出
