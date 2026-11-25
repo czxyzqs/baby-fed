@@ -45,6 +45,10 @@
     font-size: 13px; font-weight: 600; margin: 12px 0 2px;
     color: var(--text-secondary, rgba(255, 255, 255, 0.7));
 }
+/* 多选的「选完了」：固定在底部，不跟着列表滚 */
+.fp-picker-foot { display: flex; flex-direction: column; flex: 0 0 auto; padding-top: 10px; }
+.fp-picker-foot .fma-btn { padding: 12px; font-size: 15px; }
+.fp-picker-sheet:focus { outline: none; }
 .fp-picker-group:first-child { margin-top: 2px; }
 .fp-picker-chips { gap: 10px; margin: 4px 0; }
 /* 触控目标 ≥44px：手机上密排 chips 误触率高，整体放大一档 */
