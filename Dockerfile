@@ -7,7 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Install dependencies
 # opencv (rapidocr) 运行需要这些图像/X11 库
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# apt 走清华镜像（与下方 pip 同一家）：142 直连 deb.debian.org 曾卡住约 20 分钟
+RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 libgl1 libxcb1 libsm6 libice6 libxext6 \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
