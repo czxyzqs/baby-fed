@@ -13,8 +13,10 @@
     </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-library.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-badge.css') }}">
     <script defer src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-families.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/food-badge.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-library.js') }}"></script>
     <script>window.APP_MEAL_SLOTS = {{ meal_slots_json|safe }};</script>
 </head>
@@ -53,6 +55,7 @@
                 <label for="food-library-family" class="food-library-family-label">科属（选填，用于按科展示）</label>
                 <input id="food-library-family" class="form-input" maxlength="20" list="food-library-family-options" autocomplete="off" placeholder="例如：十字花科">
                 <datalist id="food-library-family-options"></datalist>
+                <label class="food-library-checkbox"><input type="checkbox" id="food-library-constipation"> 易便秘（选食物时名字后面带 💩）</label>
             </div>
             <div id="food-library-category-fields" hidden>
                 <div class="form-group">

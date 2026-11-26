@@ -194,6 +194,7 @@ class FoodScreeningStore(FoodLibraryStore):
                 latest = rounds.get(food['id'])
                 food['status'] = self.food_status(food, latest)
                 food['is_high_allergen'] = bool(food['is_high_allergen'])
+                food['is_constipating'] = bool(food['is_constipating'])
                 food['in_queue'] = connection.execute(
                     'SELECT 1 FROM food_queue WHERE food_id = ? LIMIT 1', (food['id'],)
                 ).fetchone() is not None

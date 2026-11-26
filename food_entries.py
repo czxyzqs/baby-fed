@@ -86,6 +86,7 @@ class FoodEntryStore(FoodLibraryStore):
         )}
         for food in foods:
             food['last_eaten'] = last_eaten.get(food['id'])
+            food['is_constipating'] = bool(food['is_constipating'])
             latest = connection.execute(
                 'SELECT * FROM food_rounds WHERE food_id = ? ORDER BY id DESC LIMIT 1', (food['id'],)
             ).fetchone()

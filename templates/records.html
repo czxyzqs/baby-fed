@@ -6,6 +6,7 @@
     <title>全部记录 - 宝宝喂养记录</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/records.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/food-intake.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/food-badge.css') }}">
     <script>window.APP_MEAL_SLOTS = {{ meal_slots_json|safe }};</script>
 </head>
 <body>
@@ -190,6 +191,7 @@
     </script>
     <!-- meal-config 先于辅食编辑器：编辑器标题的餐次名、列表辅食行的餐次名都取自 MealConfig（与首页一致） -->
     <script defer src="{{ url_for('static', filename='js/meal-config.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/food-badge.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/records.js') }}"></script>
 </body>

@@ -177,7 +177,7 @@
                     if (status !== 'untouched') return;
                     confirmAction(`把「${food.name}」加入排敏队列？`, () => api('queue', 'POST', { food_id: food.id }));
                 }, 'screening-chip' + (food.is_high_allergen ? ' allergen' : ''));
-                group.append(chip);
+                group.append(window.FoodBadge?.attach(chip, food) || chip);
             });
             panel.append(group);
         });

@@ -20,14 +20,25 @@
 
 Docker 构建包含 `food_library.py` 和 `food_entries.py`，原有 `data` 目录挂载无需改变。无新增第三方依赖。摄入记录随辅食库一起保存在 SQLite 中，同样不进入 JSON 喂养记录的备份接口。
 
+## 易便秘标记
+
+食物级的「易便秘」标记（`foods.is_constipating`），引入新食物时提示便秘风险。与高致敏不同，按食物而不是品类记：同一品类里差异大（菠菜通便、胡萝卜易便秘）。
+
+- 预置名单 `CONSTIPATING_PRESETS`（`food_library.py`）按食物名精确匹配：迁移时给库里已有的同名食物打标；新增食物请求里不带该字段时按名字取默认值。名单只是通用参考：米粉/苹果/香蕉见 UCSF Benioff Children's Hospital《Starting Solid Foods》，大米/胡萝卜/土豆/奶酪是育儿科普常见说法（证据强度更弱）。宝宝个体差异大，以家长在辅食库里维护的为准。
+- 辅食库新增/编辑食物的表单有「易便秘」勾选框：名字命中预置名单时自动预选，家长手动动过勾选框后改名不再覆盖。拍照导入不带该字段，走服务端默认值。
+- 各页「选食物」的 chip / 食物名后紧跟一个 💩（`static/js/food-badge.js` + `food-badge.css`，`window.FoodBadge.attach(宿主, food)`，以后加标记只改这里）。做成 chip 内部紧跟食物名的上标，而不是探出 chip 的角标：选食物的 chip 挨着排，探出去的角标分不清是哪个 chip 的。
+- 覆盖范围：排敏规划（插入排敏、从食物池添加、替换排敏食物）、排敏看板（未排敏/正常）、首页（记一笔「＋加一个」、无计划日的选择食物）、辅食记录页与全部记录页的编辑弹窗、辅食库列表。
+
+SQLite 版本 10：`baby-food.db` 从 9 升级时给 `foods` 加 `is_constipating` 列并按名单打标，不改动其他表和列。旧版服务不认识版本 10，回滚不能只切旧镜像，与此前各次升级相同。
+
 ## 接口
 
 | 方法 | 地址 | 内容 |
 |---|---|---|
-| GET | `/api/food-library` | 返回 `categories` 和 `foods`；搜索在浏览器本地进行 |
+| GET | `/api/food-library` | 返回 `categories`、`foods` 和预置名单 `constipating_presets`；搜索在浏览器本地进行 |
 | POST | `/api/food-library/categories` | 新增品类：`name`、`emoji`、`is_high_allergen` |
 | PUT / DELETE | `/api/food-library/categories/:id` | 编辑或删除品类 |
-| POST | `/api/food-library/foods` | 新增食物：`name`、`category_id` |
+| POST | `/api/food-library/foods` | 新增食物：`name`、`category_id`、`family`（选填）、`is_constipating`（选填，布尔，缺省按预置名单） |
 | PUT / DELETE | `/api/food-library/foods/:id` | 编辑或删除食物 |
 
 非法输入返回 400，不存在返回 404，重名或非空品类删除返回 409，存储故障返回 503；错误响应含 `error`。沿用现有项目的访问模型，不新增权限体系。
@@ -39,6 +50,8 @@ Docker 构建包含 `food_library.py` 和 `food_entries.py`，原有 `data` 目�
 2026-09-20 验证：隔离容器内 API/存储检查通过，覆盖 4 进程并发初始化及 24 次写入、数据库完整性和既有首页/设置接口；Playwright 在 320、390、1024px 宽度完成增删改查、刷新持久化、转移品类、特殊字符安全显示、确认取消、加载/保存失败重试、清空后新增及原设置入口回归，15 组浏览器检查通过。另检查浅色主题，浏览器无脚本异常。未修改正式数据或重启正式服务。
 
 2026-09-20 独立页面上线验证：发现工作区已包含独立页面，但运行容器仍为旧弹窗版本，`/food-library` 返回 404。核对部署差异仅涉及页面拆分后，使用临时数据目录通过 28 项 API/存储检查及 15 组浏览器回归（320、390、1024px），额外验证独立页面不加载首页脚本、点击空白处和 Escape 不离开页面、浅色主题及刷新留在辅食库。随后重新构建并更新 `baby-app`，线上 `/food-library` 返回 200；只读浏览器检查通过首页入口、加载、返回首页和浏览器前进后退导航，未写入正式业务数据。旧镜像保留为 `baby-app:before-food-page-20260920`，临时验证容器已清理。
+
+2026-11-26 验证（易便秘标记）：隔离数据目录，v9 库副本升级 v10 只给同名食物打标、既有列与行数不变、完整性检查通过；全新库直达 v10；缺省/显式/非布尔三种保存路径；`/api/food-library`、`/api/entries`、`/api/screening/board` 均返回布尔标记。浏览器在 320/390/430/768/1024 及老年模式下核对「易便秘标记」一节列出的各选食物界面：带标与不带标的 chip 高度一致、徽标落在 chip 内、无横向溢出。浅色主题下排敏规划/排敏看板/首页选择弹窗的弹层底色仍是深色而文字变深（`--panel-bg` 未定义，走深色兜底值），为既有问题，本次未处理。正式数据目录未使用。
 
 ## Step Checks
 

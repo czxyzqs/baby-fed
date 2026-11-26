@@ -1,5 +1,5 @@
 (() => {
-    let library = { categories: [], foods: [] };
+    let library = { categories: [], foods: [], constipating_presets: [] };
     let loaded = false;
     let busy = false;
     let editor = null;
@@ -7,6 +7,8 @@
     let requestVersion = 0;
     let activeCategory = '';
     let groupByFamily = localStorage.getItem('food-library-group') !== 'category';
+    // 本次编辑里手动动过「易便秘」勾选框：之后改名不再按预置名单自动预选
+    let constipationTouched = false;
     const element = id => document.getElementById(`food-library-${id}`);
     const FAMILY_ORDER = window.FOOD_FAMILIES.order;
     const FAMILY_EMOJI = window.FOOD_FAMILIES.emoji;
@@ -124,8 +126,15 @@
             action('编辑', () => openEditor('food', food)),
             action('删除', () => removeItem('food', food), 'food-library-danger')
         );
-        row.append(name, buttons);
+        row.append(window.FoodBadge?.attach(name, food) || name, buttons);
         return row;
+    }
+
+    // 食物名命中常见易便秘食材（后端预置名单，与保存时的默认值同一份）时自动预选勾选框；
+    // 家长手动动过勾选框就以家长为准，改名不再覆盖
+    function syncConstipation() {
+        if (constipationTouched || editor?.kind !== 'food') return;
+        element('constipation').checked = library.constipating_presets.includes(element('name').value.trim());
     }
 
     function renderFamilyGroups(list, query) {
@@ -294,6 +303,8 @@
         element('family').value = item?.family || '';
         element('emoji').value = item?.emoji || '🥣';
         element('allergen').checked = item?.is_high_allergen === true;
+        element('constipation').checked = item?.is_constipating === true;
+        constipationTouched = false;
         window.scrollTo(0, 0);
         element('name').focus();
     }
@@ -331,6 +342,7 @@
         if (kind === 'food') {
             data.category_id = Number(element('category').value);
             data.family = element('family').value.trim();
+            data.is_constipating = element('constipation').checked;
         } else {
             data.emoji = element('emoji').value.trim();
             data.is_high_allergen = element('allergen').checked;
@@ -573,6 +585,8 @@
         message();
     });
     element('editor').addEventListener('submit', save);
+    element('name').addEventListener('input', syncConstipation);
+    element('constipation').addEventListener('change', () => { constipationTouched = true; });
     window.addEventListener('pageshow', event => {
         if (event.persisted && !busy && !editor) load();
     });

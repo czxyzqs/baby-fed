@@ -203,7 +203,7 @@
                 const chip = node('button', food.name, 'fma-chip');
                 chip.type = 'button';
                 chip.addEventListener('click', () => config.onPick(food));
-                chips.append(chip);
+                chips.append(window.FoodBadge?.attach(chip, food) || chip);
             });
             list.append(chips);
         }

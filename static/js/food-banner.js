@@ -386,10 +386,11 @@
             const group = node('div', '', 'banner-chip-group');
             foods.forEach(food => {
                 const eaten = context.entries.some(entry => entry.food_id === food.id);
-                group.append(chip(
-                    `${food.name} · ${STATUS_LABELS[food.status]}${eaten ? ' · 今天已吃' : ''}`,
-                    () => openFoodDialogForFood(food)
-                ));
+                // 💩 紧跟食物名，状态后缀排在它后面
+                const option = chip(food.name, () => openFoodDialogForFood(food));
+                window.FoodBadge?.attach(option, food);
+                option.append(` · ${STATUS_LABELS[food.status]}${eaten ? ' · 今天已吃' : ''}`);
+                group.append(option);
             });
             list.append(group);
         });

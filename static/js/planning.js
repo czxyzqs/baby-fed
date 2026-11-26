@@ -324,7 +324,7 @@
             list.append(node('h3', label, 'planning-group-title'));
             const group = node('div', '', 'planning-chip-group');
             filtered.forEach(food => {
-                group.append(button(food.name, async () => {
+                const chip = button(food.name, async () => {
                     try {
                         await api('queue', 'POST', { food_id: food.id });
                         await reload();
@@ -333,7 +333,8 @@
                     } catch (error) {
                         message(`添加失败：${error.message}`, true);
                     }
-                }, 'planning-chip'));
+                }, 'planning-chip');
+                group.append(window.FoodBadge?.attach(chip, food) || chip);
             });
             list.append(group);
         });
@@ -1305,10 +1306,10 @@
         }
 
         function foodChip(food) {
-            const option = button(
-                `${food.category_emoji || '🍚'} ${food.name}`
-                    + (food.is_high_allergen ? ' ⚠️' : '') + (food.in_queue ? ' · 队列中' : ''),
-                () => pick(food), 'planning-chip');
+            const option = button(`${food.category_emoji || '🍚'} ${food.name}`, () => pick(food), 'planning-chip');
+            // 💩 紧跟食物名；⚠️/队列中是状态后缀，排在它后面
+            window.FoodBadge?.attach(option, food);
+            option.append((food.is_high_allergen ? ' ⚠️' : '') + (food.in_queue ? ' · 队列中' : ''));
             if (state.food && state.food.id === food.id) option.classList.add('active');
             return option;
         }

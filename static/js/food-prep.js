@@ -184,7 +184,7 @@
                 releaseSearch();
             });
             sync();
-            return chip;
+            return window.FoodBadge?.attach(chip, food) || chip;
         }
 
         function chipsEl(foods, pinned = false) {

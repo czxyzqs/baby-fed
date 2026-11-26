@@ -1,0 +1,9 @@
+/* 食物标记徽标（food-badge.js）：紧跟食物名、略抬高的 💩，各页选食物的界面共用。
+   与文字同大才看得清；整个落在 chip 内部，相邻 chip 挨得再近也认得出归属，滚动列表不用为它留边 */
+.food-badge {
+    display: inline-block;
+    line-height: 1;
+    vertical-align: 0.25em;
+    margin-left: 0.1em;
+    pointer-events: none; user-select: none;
+}

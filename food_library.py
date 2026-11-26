@@ -67,6 +67,15 @@ FAMILY_PRESETS = {
 
 FOOD_FAMILY = {food: family for family, foods in FAMILY_PRESETS.items() for food in foods}
 
+# 常见易便秘食材（按食物名精确匹配）：迁移时给库里已有的同名食物打标、新增食物没指定标记时的默认值。
+# 只是通用参考，宝宝个体差异大——家长在辅食库里勾选/取消的结果才是准的。
+CONSTIPATING_PRESETS = (
+    # UCSF Benioff Children's Hospital《Starting Solid Foods》明确点名：cereal、applesauce、bananas
+    '婴儿米粉', '米粉', '苹果', '苹果泥', '香蕉', '生香蕉',
+    # 其余是育儿科普常见说法（精制主食、煮熟的根茎类、奶酪），证据强度弱于上面几样
+    '大米', '稻米', '胡萝卜', '土豆', '马铃薯', '奶酪', '芝士',
+)
+
 # 餐次槽：内部 key 沿用四餐代号（用户不可见），显示名与开始时间由 food_settings.meal_slots 配置。
 # 记录侧不存餐次，槽只活在计划侧；"时间落槽"是记录与计划的唯一匹配方式。
 SLOT_LABELS = {'breakfast': '早餐', 'lunch': '上午餐', 'snack': '下午茶', 'dinner': '下午餐'}
@@ -328,7 +337,7 @@ class FoodLibraryStore:
                 )''')
                 connection.execute('PRAGMA user_version = 3')
                 version = 3
-            elif version not in (3, 4, 5, 6, 7, 8, 9):
+            elif version not in (3, 4, 5, 6, 7, 8, 9, 10):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 3:
                 connection.execute('ALTER TABLE foods ADD COLUMN family TEXT')
@@ -337,7 +346,7 @@ class FoodLibraryStore:
                         'UPDATE foods SET family = ? WHERE name = ? AND family IS NULL', (family, food))
                 connection.execute('PRAGMA user_version = 4')
                 version = 4
-            elif version not in (3, 4, 5, 6, 7, 8, 9):
+            elif version not in (3, 4, 5, 6, 7, 8, 9, 10):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 4:
                 # 餐次规划：排敏块默认午餐，常规计划默认两餐都吃；当日覆盖支持临时调整
@@ -351,7 +360,7 @@ class FoodLibraryStore:
                 )''')
                 connection.execute('PRAGMA user_version = 5')
                 version = 5
-            elif version not in (4, 5, 6, 7, 8, 9):
+            elif version not in (4, 5, 6, 7, 8, 9, 10):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 5:
                 # 备餐批次：按份记录摄入（份×每份含量折算克数）与库存扣减
@@ -369,7 +378,7 @@ class FoodLibraryStore:
                 connection.execute('ALTER TABLE food_entries ADD COLUMN deduction TEXT')
                 connection.execute('PRAGMA user_version = 6')
                 version = 6
-            elif version not in (5, 6, 7, 8, 9):
+            elif version not in (5, 6, 7, 8, 9, 10):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 6:
                 # 规划份数：计划/当日覆盖带"每餐份数"，用于记录预填与库存预测
@@ -377,14 +386,14 @@ class FoodLibraryStore:
                 connection.execute('ALTER TABLE food_menu_overrides ADD COLUMN portions REAL')
                 connection.execute('PRAGMA user_version = 7')
                 version = 7
-            elif version not in (6, 7, 8, 9):
+            elif version not in (6, 7, 8, 9, 10):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 7:
                 # 精确进食时间：晚记的可改回实际吃的时间（HH:MM）
                 connection.execute('ALTER TABLE food_entries ADD COLUMN eaten_time TEXT')
                 connection.execute('PRAGMA user_version = 8')
                 version = 8
-            elif version not in (8, 9):
+            elif version not in (8, 9, 10):
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             if version == 8:
                 # 记录去餐次化：事实=日期+时间，"一笔"=同日同进食时间的条目组；
@@ -435,7 +444,15 @@ class FoodLibraryStore:
                     ('meal_slots', json.dumps({'active': active, 'starts': starts}, ensure_ascii=False)))
                 connection.execute('PRAGMA user_version = 9')
                 version = 9
-            elif version != 9:
+            if version == 9:
+                # 易便秘标记：食物级（同一品类里差异大，如菠菜通便、胡萝卜易便秘），
+                # 库里已有的同名食物按预置打标，其余由家长在辅食库自己维护
+                connection.execute('ALTER TABLE foods ADD COLUMN is_constipating INTEGER NOT NULL DEFAULT 0')
+                connection.executemany(
+                    'UPDATE foods SET is_constipating = 1 WHERE name = ?', [(name,) for name in CONSTIPATING_PRESETS])
+                connection.execute('PRAGMA user_version = 10')
+                version = 10
+            elif version != 10:
                 raise FoodLibraryError('辅食库版本不兼容，请检查服务版本', 503)
             yield connection
             connection.commit()
@@ -453,7 +470,10 @@ class FoodLibraryStore:
             for category in categories:
                 category['is_high_allergen'] = bool(category['is_high_allergen'])
             foods = [dict(row) for row in connection.execute('SELECT * FROM foods ORDER BY id')]
-            return {'categories': categories, 'foods': foods}
+            for food in foods:
+                food['is_constipating'] = bool(food['is_constipating'])
+            # 常见易便秘食材名：辅食库新增食物时据此预选勾选框（与 save_food 的默认值同一份）
+            return {'categories': categories, 'foods': foods, 'constipating_presets': list(CONSTIPATING_PRESETS)}
 
     def require_item(self, connection, kind, identifier):
         if type(identifier) is not int or not 0 < identifier <= 9223372036854775807:
@@ -509,6 +529,11 @@ class FoodLibraryStore:
             family = family.strip() or None
         if family is None:
             family = FOOD_FAMILY.get(name)
+        constipating = data.get('is_constipating')
+        if constipating is None:
+            constipating = name in CONSTIPATING_PRESETS
+        if not isinstance(constipating, bool):
+            raise FoodLibraryError('易便秘标记必须为布尔值')
         with self.connect() as connection:
             self.require_item(connection, 'category', category_id)
             if identifier is not None:
@@ -518,11 +543,12 @@ class FoodLibraryStore:
                 raise FoodLibraryError('已存在同名食物，请搜索后编辑', 409)
             if identifier is None:
                 cursor = connection.execute(
-                    'INSERT INTO foods (name, category_id, family) VALUES (?, ?, ?)', (name, category_id, family))
+                    'INSERT INTO foods (name, category_id, family, is_constipating) VALUES (?, ?, ?, ?)',
+                    (name, category_id, family, constipating))
                 return cursor.lastrowid
             connection.execute(
-                'UPDATE foods SET name = ?, category_id = ?, family = ? WHERE id = ?',
-                (name, category_id, family, identifier))
+                'UPDATE foods SET name = ?, category_id = ?, family = ?, is_constipating = ? WHERE id = ?',
+                (name, category_id, family, constipating, identifier))
             return identifier
 
     def delete_food(self, identifier):

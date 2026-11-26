@@ -372,8 +372,10 @@
                     target?.querySelector('button')?.focus({ preventScroll: true });
                 });
                 select.classList.add('food-intake-picker-food');
+                // 💩 跟在食物名后面（不是整行末尾）：行右侧是状态文字
+                const name = node('span', food.name, 'food-intake-picker-food-name');
                 select.append(
-                    node('span', food.name, 'food-intake-picker-food-name'),
+                    window.FoodBadge?.attach(name, food) || name,
                     node('span', duplicate ? '已添加' : statuses[food.status], 'food-intake-picker-food-status')
                 );
                 select.disabled = duplicate;
