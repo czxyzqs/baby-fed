@@ -468,9 +468,8 @@
             element('history-message').textContent = occasions.length ? '' : '这一天还没有辅食记录。';
             occasions.forEach((occasion, index) => {
                 const card = node('article', '', 'food-intake-meal-card');
-                const label = slotLabelOf(occasion.time);
-                card.append(node('h3',
-                    `${ordinalBadge(index + 1)} ${occasion.time}${label ? ` · ${label}` : ''}`));
+                // 标题不带餐次名：时间已在标题里，餐次是读取时按当前餐次配置从时间推导的（编辑器标题仍保留）
+                card.append(node('h3', `${ordinalBadge(index + 1)} ${occasion.time}`));
                 occasion.entries.forEach(entry => {
                     card.append(node('p', `${entry.food_name} · ${entry.amount}${entry.rating ? ` · ${ratings[entry.rating]}` : ''}${entry.note ? ` · ${entry.note}` : ''}`));
                 });

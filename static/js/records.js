@@ -236,16 +236,15 @@ function getRecordPresentation(record) {
         return { icon: '🧸', detail: `🧸 练趴 ${record.duration || 1}分钟` };
     }
     if (record.type === 'food') {
-        // 与首页最近记录同一组信息（序号 + 餐次 + 前两样食物），按记录页的行布局分主副两行；
-        // 进食时间已在右栏，不再重复
+        // 与首页最近记录同一组信息（序号 + 前两样食物），按记录页的行布局分主副两行；
+        // 进食时间已在右栏，不再重复；不显示餐次名，理由同首页
         const foods = (record.foods || '').split('、').filter(Boolean);
-        const slotLabel = window.MealConfig?.labels?.[record.slot];
         const badge = FOOD_ORDINALS[(record.ordinal || 1) - 1] || `第${record.ordinal}笔`;
         const foodsText = foods.slice(0, 2).join('、') + (foods.length > 2 ? ` 等${foods.length}样` : '');
         return {
             icon: '🍚',
             detail: foodsText || badge,
-            sub: [badge, slotLabel].filter(Boolean).join(' ')
+            sub: badge
         };
     }
     return { icon: '📋', detail: record.detail || record.label || '记录' };

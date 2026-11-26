@@ -6,7 +6,7 @@ import sqlite3
 
 from flask import Blueprint, current_app, jsonify, request
 
-from food_library import FoodLibraryError, FoodLibraryStore, slot_for_time
+from food_library import FoodLibraryError, FoodLibraryStore
 
 
 # 槽位代号全集（计划侧词汇；记录侧不存餐次，展示时按时间落槽推导）
@@ -134,7 +134,6 @@ class FoodEntryStore(FoodLibraryStore):
                    FROM food_entries WHERE {where}
                    GROUP BY date, eaten_time ORDER BY date DESC, eaten_time ASC''', params
             ).fetchall()
-        slots = self.meal_slots()
         records = []
         ordinal_by_date = {}
         for row in rows:
@@ -146,7 +145,6 @@ class FoodEntryStore(FoodLibraryStore):
                 'date': row['date'],
                 'foods': row['foods'] or '',
                 'itemCount': row['item_count'],
-                'slot': slot_for_time(slots, row['eaten_time']),
                 'ordinal': ordinal_by_date[row['date']],
             })
         return records

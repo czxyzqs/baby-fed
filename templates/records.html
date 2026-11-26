@@ -189,7 +189,7 @@
             records: {{ records | tojson }}
         };
     </script>
-    <!-- meal-config 先于辅食编辑器：编辑器标题的餐次名、列表辅食行的餐次名都取自 MealConfig（与首页一致） -->
+    <!-- meal-config 先于辅食编辑器：编辑器标题的餐次名取自 MealConfig（与首页一致）；列表的辅食行只显示时间，不带餐次名 -->
     <script defer src="{{ url_for('static', filename='js/meal-config.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-badge.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
