@@ -2,6 +2,9 @@
     const element = name => document.getElementById(`planning-${name}`);
     const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
     let schedule = null;
+    // 首次排期是否已加载完 / 是否加载失败：页面上的按钮一打开就能点，数据却要等两个接口回来才有
+    let scheduleLoaded = false;
+    let scheduleLoadError = false;
     let monthCursor = null;
     let selectedDay = null;
     let movingBlock = null;
@@ -291,6 +294,7 @@
     }
 
     function openQueuePicker() {
+        if (!scheduleReady()) return;
         const body = node('div', '', 'planning-dialog-body');
         const label = node('label', '搜索食物或品类');
         const search = node('input', '', 'form-input');
@@ -1615,6 +1619,13 @@
 
     // ---------- 通用 ----------
 
+    // 首次排期还没加载完就被点到：没有数据可操作。提示并拦住，而不是抛错（空弹窗、点了没反应）
+    function scheduleReady() {
+        if (scheduleLoaded) return true;
+        message(scheduleLoadError ? '排期加载失败，请刷新页面重试' : '排期还在加载，稍等一下再点', scheduleLoadError);
+        return false;
+    }
+
     function applySchedule(result) {
         schedule = { ...schedule, ...result };
         paletteMap = buildColorMap();
@@ -1640,11 +1651,13 @@
 
     async function reload() {
         message('正在加载排期…');
+        scheduleLoadError = false;
         try {
             const result = await api('schedule');
             const board = await api('board');
             result.board_foods = board.foods;
             schedule = result;
+            scheduleLoaded = true;
             paletteMap = buildColorMap();
             // 首次进入默认选中今天：当天安排与常规计划入口直达，无需先手动点日期
             if (!selectedDay) selectedDay = schedule.today;
@@ -1656,6 +1669,7 @@
             renderDayDetail();
             renderAgenda();
         } catch (error) {
+            scheduleLoadError = true;
             message(`加载失败：${error.message}`, true);
         }
     }
@@ -1674,6 +1688,7 @@
 
     element('auto').addEventListener('click', () => run('按队列顺序自动生成排期？将接在现有排期之后，绕开暂停段。', () => api('schedule/auto', 'POST')));
     element('repack').addEventListener('click', async () => {
+        if (!scheduleReady()) return;
         if (!window.confirm('把未来的排期恢复为首尾相接？进行中的观察和暂停段不会被移动。')) return;
         const before = schedule.blocks.map(block => `${block.id}:${block.start_date}`).join('|');
         try {
@@ -1686,15 +1701,17 @@
         }
     });
     element('queue-add').addEventListener('click', openQueuePicker);
-    element('prev').addEventListener('click', () => { monthCursor = shiftMonth(-1); renderCalendar(); renderAgenda(); });
-    element('next').addEventListener('click', () => { monthCursor = shiftMonth(1); renderCalendar(); renderAgenda(); });
+    // 翻月要基于排期里的"今天"，首次排期加载完之前没有基准
+    element('prev').addEventListener('click', () => { if (!scheduleReady()) return; monthCursor = shiftMonth(-1); renderCalendar(); renderAgenda(); });
+    element('next').addEventListener('click', () => { if (!scheduleReady()) return; monthCursor = shiftMonth(1); renderCalendar(); renderAgenda(); });
 
     // 排期视图切换：完整辅食（排敏+常规） / 仅排敏；偏好记入本地
     const viewButtons = { full: element('view-full'), screening: element('view-screening') };
     function applyViewMode() {
-        if (!schedule) return;
+        // 高亮和偏好先落：首次排期还没加载完时点切换，加载完会按当前 viewMode 渲染，高亮要跟得上
         Object.entries(viewButtons).forEach(([mode, btn]) => btn.classList.toggle('active', mode === viewMode));
         localStorage.setItem('planning-view', viewMode);
+        if (!schedule) return;
         renderCalendar();
         renderAgenda();
         renderDayDetail();
