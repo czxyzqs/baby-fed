@@ -1186,6 +1186,13 @@
         search.type = 'search';
         search.placeholder = '搜索食物或品类';
         search.addEventListener('input', () => renderFoods());
+        search.addEventListener('keydown', event => {
+            if (event.key !== 'Enter') return;
+            const first = matchedFoods()[0];
+            if (!first) return;
+            event.preventDefault();
+            pick(first);
+        });
         body.append(search);
         const foodList = node('div', '', 'planning-queue-picker-list');
         body.append(foodList);
@@ -1276,30 +1283,57 @@
             refreshPreview();
         }
 
-        function renderFoods() {
+        // 插入排敏是找一种没吃过的新食物，只能靠搜索——候选里「吃过的」几乎是空的，
+        // 所以不像记录弹窗「＋加一个」那样默认列「最近吃过」
+        function matchedFoods() {
             const query = (search.value || '').trim().toLocaleLowerCase();
+            if (!query) return [];
+            return candidates.filter(food =>
+                `${food.name} ${food.family || food.category_name || ''}`.toLocaleLowerCase().includes(query));
+        }
+
+        function pick(food) {
+            state.food = food;
+            renderFoods();
+            refreshPreview();
+            releaseSearch();
+        }
+
+        // 搜索框还聚焦着（手机键盘还弹着）就把焦点挪到选中的食物上：键盘不收走会挡住下面的选项和底部按钮
+        function releaseSearch() {
+            if (document.activeElement === search) foodList.querySelector('.planning-chip.active')?.focus({ preventScroll: true });
+        }
+
+        function foodChip(food) {
+            const option = button(
+                `${food.category_emoji || '🍚'} ${food.name}`
+                    + (food.is_high_allergen ? ' ⚠️' : '') + (food.in_queue ? ' · 队列中' : ''),
+                () => pick(food), 'planning-chip');
+            if (state.food && state.food.id === food.id) option.classList.add('active');
+            return option;
+        }
+
+        function renderFoods() {
             foodList.replaceChildren();
-            let matched = 0;
-            poolGroups(candidates).forEach(({ label, foods }) => {
-                const filtered = foods.filter(food =>
-                    `${food.name} ${label}`.toLocaleLowerCase().includes(query));
-                if (!filtered.length) return;
-                matched += filtered.length;
-                foodList.append(node('h3', label, 'planning-group-title'));
+            const query = (search.value || '').trim().toLocaleLowerCase();
+            const matched = matchedFoods();
+            // 已选的食物不在当前结果里（比如换了搜索词）就钉在顶部，保证看得到选了什么
+            const pinned = state.food && !matched.includes(state.food) ? state.food : null;
+            if (pinned) {
+                foodList.append(node('h3', '已选', 'planning-group-title'));
                 const group = node('div', '', 'planning-chip-group');
-                filtered.forEach(food => {
-                    const option = button(food.name + (food.in_queue ? ' · 队列中' : ''), () => {
-                        state.food = food;
-                        [...group.children].forEach(child => child.classList.remove('active'));
-                        option.classList.add('active');
-                        refreshPreview();
-                    }, 'planning-chip');
-                    if (state.food && state.food.id === food.id) option.classList.add('active');
-                    group.append(option);
-                });
+                group.append(foodChip(pinned));
                 foodList.append(group);
-            });
-            if (!matched) foodList.append(node('p', '没有匹配的未排敏食物，可到辅食库添加。', 'planning-hint'));
+            }
+            if (!matched.length) {
+                foodList.append(node('p', query ? '没有匹配的未排敏食物，可到辅食库添加。'
+                    : (pinned ? '输入名称搜索可以更换。' : '输入名称搜索要插入排敏的食物。'), 'planning-hint'));
+                return;
+            }
+            if (pinned) foodList.append(node('h3', '搜索结果', 'planning-group-title'));
+            const group = node('div', '', 'planning-chip-group');
+            matched.forEach(food => group.append(foodChip(food)));
+            foodList.append(group);
         }
 
         const footer = node('div', '', 'planning-actions');
