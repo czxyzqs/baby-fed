@@ -444,6 +444,8 @@
             setBusy(false);
             close();
             showToast(`已保存 ${targetTime} 这笔辅食记录`);
+            // 通知宿主页面这笔有变动：全部记录页据此重取辅食行（首页靠轮询刷新，不监听）
+            window.dispatchEvent(new CustomEvent('food-intake:saved', { detail: { date: targetDate, time: targetTime } }));
         } catch (error) {
             message(`保存失败：${error.message}。输入已保留。`, true);
         } finally {

@@ -198,6 +198,9 @@ function escapeAttr(value) {
     return escapeHtml(value).replace(/`/g, '&#96;');
 }
 
+// 辅食一笔的序号徽章（与首页最近记录、辅食编辑器同一套写法）
+const FOOD_ORDINALS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+
 function getRecordPresentation(record) {
     if (record.type === 'feed') {
         return {
@@ -232,6 +235,19 @@ function getRecordPresentation(record) {
     if (record.type === 'tummy') {
         return { icon: '🧸', detail: `🧸 练趴 ${record.duration || 1}分钟` };
     }
+    if (record.type === 'food') {
+        // 与首页最近记录同一组信息（序号 + 餐次 + 前两样食物），按记录页的行布局分主副两行；
+        // 进食时间已在右栏，不再重复
+        const foods = (record.foods || '').split('、').filter(Boolean);
+        const slotLabel = window.MealConfig?.labels?.[record.slot];
+        const badge = FOOD_ORDINALS[(record.ordinal || 1) - 1] || `第${record.ordinal}笔`;
+        const foodsText = foods.slice(0, 2).join('、') + (foods.length > 2 ? ` 等${foods.length}样` : '');
+        return {
+            icon: '🍚',
+            detail: foodsText || badge,
+            sub: [badge, slotLabel].filter(Boolean).join(' ')
+        };
+    }
     return { icon: '📋', detail: record.detail || record.label || '记录' };
 }
 
@@ -240,10 +256,11 @@ function renderRecordItem(record) {
     const presentation = getRecordPresentation(record);
     const time = record.time ? record.time.substring(11, 16) : '';
     const date = record.time ? record.time.substring(0, 10) : '';
-    return `<div class="record-item" data-record-id="${escapeAttr(record.id)}" onclick="openEditModal('${escapeAttr(record.type)}', '${escapeAttr(record.id)}')">
+    return `<div class="record-item ${escapeAttr(record.type)}" data-record-id="${escapeAttr(record.id)}" onclick="openEditModal('${escapeAttr(record.type)}', '${escapeAttr(record.id)}')">
         <div class="record-icon">${presentation.icon}</div>
         <div class="record-content">
             <div class="record-detail">${escapeHtml(presentation.detail)}</div>
+            ${presentation.sub ? `<div class="record-sub">${escapeHtml(presentation.sub)}</div>` : ''}
             ${record.note ? `<div style="font-size: 13px; color: var(--text-muted); font-style: italic; margin-top: 4px;">${escapeHtml(record.note)}</div>` : ''}
         </div>
         <div class="record-time">
@@ -253,6 +270,9 @@ function renderRecordItem(record) {
         </div>
     </div>`;
 }
+
+// 首屏与「加载更多」共用上面这一条渲染路径
+document.getElementById('recordsList').innerHTML = (window.INIT_RECORDS_PAGE.records || []).map(renderRecordItem).join('');
 
 function showToast(message, icon = '✅') {
     const toast = document.getElementById('toast');
@@ -280,15 +300,7 @@ function recordMatchesCurrentFilters(record) {
         (!typeFilter || typeFilter === 'all' || record.type === typeFilter);
 }
 
-function updateRenderedRecord(record) {
-    recordsById.set(record.id, record);
-    const element = getRenderedRecordElement(record.id);
-    if (!element) return;
-    if (!recordMatchesCurrentFilters(record)) {
-        element.remove();
-        return;
-    }
-    element.outerHTML = renderRecordItem(record);
+function sortRenderedRecords() {
     const list = document.getElementById('recordsList');
     Array.from(list.querySelectorAll(':scope > .record-item'))
         .sort((a, b) => (recordsById.get(b.dataset.recordId)?.time || '')
@@ -296,10 +308,52 @@ function updateRenderedRecord(record) {
         .forEach(item => list.appendChild(item));
 }
 
+function syncEmptyState() {
+    const empty = document.getElementById('recordsEmpty');
+    if (empty) empty.style.display = document.querySelector('#recordsList .record-item') ? 'none' : '';
+}
+
+function updateRenderedRecord(record) {
+    recordsById.set(record.id, record);
+    const element = getRenderedRecordElement(record.id);
+    if (!element) return;
+    if (!recordMatchesCurrentFilters(record)) {
+        element.remove();
+        syncEmptyState();
+        return;
+    }
+    element.outerHTML = renderRecordItem(record);
+    sortRenderedRecords();
+}
+
 function removeRenderedRecord(id) {
     recordsById.delete(id);
     getRenderedRecordElement(id)?.remove();
+    syncEmptyState();
 }
+
+// 辅食编辑器保存后重取当日的辅食行：这笔可能改了时间/日期/食物，也可能被删空，按日期整类换掉最稳
+async function refreshFoodRecords() {
+    if (typeFilter !== 'all' && typeFilter !== 'food') return;
+    try {
+        const fresh = [];
+        for (let nextPage = 1, more = true; more; nextPage++) {
+            const data = await (await fetch(`/records/load?page=${nextPage}&date=${dateFilter}&type=food`, { cache: 'no-store' })).json();
+            fresh.push(...data.records);
+            more = data.has_more;
+        }
+        Array.from(recordsById.values())
+            .filter(record => record.type === 'food')
+            .forEach(record => removeRenderedRecord(record.id));
+        document.getElementById('recordsList').insertAdjacentHTML('beforeend', fresh.map(renderRecordItem).join(''));
+        sortRenderedRecords();
+    } catch (e) {
+        console.error('Failed to refresh food records:', e);
+        showToast('辅食已保存，但列表刷新失败，请重新进入本页', '❌');
+    }
+}
+
+window.addEventListener('food-intake:saved', refreshFoodRecords);
 
 function parseLocalTime(isoStr) {
     if (!isoStr || isoStr.includes('+') || isoStr.endsWith('Z')) return new Date(isoStr);
@@ -341,8 +395,9 @@ function openEditModal(type, id) {
     if (!record) return;
 
     if (type === 'food') {
-        // 辅食按「日期+时间」编辑这一笔，复用辅食编辑器
+        // 辅食按「日期+时间」编辑这一笔，复用辅食编辑器（编辑器不可用时退回辅食中心，与首页一致）
         if (window.foodIntake) foodIntake.open(record.time ? record.time.substring(0, 10) : '', (record.time || '').slice(11, 16) || null);
+        else location.href = '/food-hub';
         return;
     }
 
@@ -499,6 +554,9 @@ async function deleteRecord(type) {
 
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) closeModal(overlay.id.replace('-modal', ''));
+        // 辅食编辑器声明了 data-close-on-backdrop="false"（关闭前要过未保存确认），与首页一样不在这里关它
+        if (e.target === overlay && overlay.dataset.closeOnBackdrop !== 'false') {
+            closeModal(overlay.id.replace('-modal', ''));
+        }
     });
 });

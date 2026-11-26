@@ -45,6 +45,7 @@
                         <option value="feed" {% if type_filter == 'feed' %}selected{% endif %}>🍼 喂奶</option>
                         <option value="diaper" {% if type_filter == 'diaper' %}selected{% endif %}>🚽 尿布</option>
                         <option value="supplement" {% if type_filter == 'supplement' %}selected{% endif %}>💊 补剂</option>
+                        <option value="food" {% if type_filter == 'food' %}selected{% endif %}>🍚 辅食</option>
                         <option value="bath" {% if type_filter == 'bath' %}selected{% endif %}>🛁 洗澡</option>
                         <option value="health" {% if type_filter == 'health' %}selected{% endif %}>🌡️ 健康</option>
                         <option value="sleep" {% if type_filter == 'sleep' %}selected{% endif %}>🛏️ 睡眠</option>
@@ -54,51 +55,18 @@
             </div>
         </div>
 
-        <div class="records-list" id="recordsList">
-            {% for record in records %}
-            <div class="record-item" data-record-id="{{ record.id }}" onclick="openEditModal('{{ record.type }}', '{{ record.id }}')">
-                <div class="record-icon">
-                    {% if record.type == 'feed' %}🍼{% elif record.type == 'diaper' %}🚽{% elif record.type == 'supplement' %}💊{% elif record.type == 'bath' %}🛁{% elif record.type == 'health' %}🌡️{% elif record.type == 'sleep' %}🛏️{% elif record.type == 'tummy' %}🧸{% endif %}
-                </div>
-                <div class="record-content">
-                    <div class="record-detail">
-                        {% if record.type == 'feed' %}
-                            {% if record.isNewMilk %}🆕{% endif %}{{ record.amount or '' }}ml
-                        {% elif record.type == 'diaper' %}
-                            {% if record.diaperType == 'wet' %}💧 尿{% elif record.diaperType == 'dirty' %}💩 粑粑{% else %}💫 两者{% endif %}
-                        {% elif record.type == 'supplement' %}
-                            {{ record.detail or record.label or '💊 补剂' }}
-                        {% elif record.type == 'bath' %}🛁 洗澡
-                        {% elif record.type == 'health' %}{% if record.healthType == 'temperature' %}🌡️ 体温 {{ record.temperature }}°C{% else %}💊 服药 {{ record.medicineName }}{% if record.medicineDose %} · {{ record.medicineDose }}{% endif %}{% endif %}
-                        {% elif record.type == 'sleep' %}
-                            {% if record.sleepType == 'sleep' %}😴 宝宝睡了{% else %}😃 宝宝醒了{% endif %}
-                        {% elif record.type == 'tummy' %}🧸 练趴 {{ record.duration or 1 }}分钟
-                        {% endif %}
-                    </div>
-                    {% if record.note %}
-                    <div style="font-size: 13px; color: var(--text-muted); font-style: italic; margin-top: 4px;">{{ record.note }}</div>
-                    {% endif %}
-                </div>
-                <div class="record-time">
-                    <div class="time">{{ record.time[11:16] if record.time else '' }}</div>
-                    <div class="date">{{ record.time[:10] if record.time else '' }}</div>
-                    <div class="record-edit">编辑</div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
+        <!-- 列表由 records.js 用 window.INIT_RECORDS_PAGE.records 渲染：首屏与「加载更多」同一条渲染路径，新类型只改 getRecordPresentation -->
+        <div class="records-list" id="recordsList"></div>
 
         {% if has_more %}
         <div class="scroll-trigger" id="scrollTrigger"></div>
         <div class="loading" id="loadingIndicator">加载更多...</div>
         {% endif %}
 
-        {% if not records %}
-        <div class="empty">
+        <div class="empty" id="recordsEmpty"{% if records %} style="display:none;"{% endif %}>
             <div class="empty-icon">📋</div>
             <div>暂无记录</div>
         </div>
-        {% endif %}
     </div>
 
     <div class="modal-overlay" id="edit-feed-modal">
@@ -220,6 +188,8 @@
             records: {{ records | tojson }}
         };
     </script>
+    <!-- meal-config 先于辅食编辑器：编辑器标题的餐次名、列表辅食行的餐次名都取自 MealConfig（与首页一致） -->
+    <script defer src="{{ url_for('static', filename='js/meal-config.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/food-intake.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/records.js') }}"></script>
 </body>

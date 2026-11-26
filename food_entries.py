@@ -120,15 +120,18 @@ class FoodEntryStore(FoodLibraryStore):
                 "SELECT MAX(date || 'T' || eaten_time || ':00') AS latest FROM food_entries").fetchone()
         return row['latest'] if row else None
 
-    def recent_meal_records(self, since_date):
+    def recent_meal_records(self, since_date, until_date=None):
         """近段日期的辅食按（日期, 进食时间）聚合成首页最近记录条目，一笔一卡。
-        序号 ordinal 是同日内按时间排序算出的展示值，永不入库。"""
+        序号 ordinal 是同日内按时间排序算出的展示值，永不入库；
+        until_date 给出时只取到该日（含），全部记录页据此按单日取数。"""
         with self.connect() as connection:
+            where = 'date >= ?' + (' AND date <= ?' if until_date else '')
+            params = (since_date, until_date) if until_date else (since_date,)
             rows = connection.execute(
-                '''SELECT date, eaten_time, COUNT(*) AS item_count,
+                f'''SELECT date, eaten_time, COUNT(*) AS item_count,
                           GROUP_CONCAT(food_name, '、') AS foods
-                   FROM food_entries WHERE date >= ?
-                   GROUP BY date, eaten_time ORDER BY date DESC, eaten_time ASC''', (since_date,)
+                   FROM food_entries WHERE {where}
+                   GROUP BY date, eaten_time ORDER BY date DESC, eaten_time ASC''', params
             ).fetchall()
         slots = self.meal_slots()
         records = []

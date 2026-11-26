@@ -763,13 +763,15 @@ def latest_food_time():
         return None
 
 
-def food_meal_records(now):
-    """近一周辅食按笔聚合的记录条目（一笔=同日同进食时间），并入首页最近记录列表。"""
+def food_meal_records(now, only_date=None):
+    """近一周辅食按笔聚合的记录条目（一笔=同日同进食时间），并入首页最近记录列表；
+    only_date 给出时改为只取该日（全部记录页按所选日期取，不受近一周限制）。"""
     store = app.extensions.get('food_entry_store')
     if store is None:
         return []
     try:
-        return store.recent_meal_records((now - timedelta(days=6)).date().isoformat())
+        since_date = only_date or (now - timedelta(days=6)).date().isoformat()
+        return store.recent_meal_records(since_date, only_date)
     except Exception as exc:
         app.logger.warning('Food meal records unavailable: %s', exc)
         return []
@@ -793,15 +795,13 @@ def inject_meal_slots():
 
 
 def records_with_food(date_filter):
-    """记录列表并入辅食条目；有日期过滤时只保留该日的辅食。"""
+    """记录列表并入辅食条目：按所选日期取当日的辅食（不限远近）；未指定日期时沿用近一周。"""
     records = load_records(date_prefix=date_filter)
     try:
-        food = food_meal_records(now_cn_naive())
+        food = food_meal_records(now_cn_naive(), date_filter or None)
     except Exception as exc:
         app.logger.warning('Food meal records unavailable: %s', exc)
         return records
-    if date_filter:
-        food = [item for item in food if item.get('date') == date_filter]
     return records + food
 
 
