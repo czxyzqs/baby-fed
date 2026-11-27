@@ -655,14 +655,17 @@
                 const candidates = context.foods.filter(food =>
                     food.status !== 'allergic' && !currentDishes().some(dish => dish.foodId === food.id));
                 openFoodPicker(candidates, context.categories || [], foods => {
-                    foods.forEach(food => addedRows.set(food.id, {
-                        foodId: food.id, name: food.name,
-                        // 同科已有通过排敏的食物不必再排敏：记一笔直接记（服务端按「已耐受，直接记正常」处理）
-                        tag: food.status === 'untouched' && food.family_passed ? '同科已通过，直接记' : '',
-                        position: food.position || 0,
-                        entryId: null, amount: null, rating: null, note: '',
-                        mode: 'keep', newItem: false
-                    }));
+                    foods.forEach(food => {
+                        // 同科已有通过排敏的食物不用单独排敏，但照常进入观察：直接加即开始排敏（第 1 天）
+                        const halfNew = food.status === 'untouched' && !!food.family_passed;
+                        addedRows.set(food.id, {
+                            foodId: food.id, name: food.name,
+                            tag: halfNew ? `🧪 第1天/${food.observe_days}天` : '',
+                            position: food.position || 0,
+                            entryId: null, amount: null, rating: null, note: '',
+                            mode: halfNew ? 'start' : 'keep', newItem: halfNew
+                        });
+                    });
                     renderTray();
                     renderRows();
                 });

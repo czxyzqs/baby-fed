@@ -299,7 +299,7 @@
     }
 
     // 引入新食物时的归因提醒：还有别的食物在排敏观察中需确认。
-    // 同科已有通过排敏的食物（family_passed）不算新食物：它和谁同期都不会让过敏反应难以归因，
+    // 同科已有通过排敏的食物（family_passed）不用单独排敏，允许和别的排敏同期：
     // 所以被引入的它是、或者观察中的那个它是，都不提醒
     async function confirmNoOtherScreening(foodIds, name) {
         const board = await api('screening/board');
@@ -394,8 +394,8 @@
                 // 💩 紧跟食物名，状态后缀排在它后面
                 const option = chip(food.name, () => openFoodDialogForFood(food));
                 window.FoodBadge?.attach(option, food);
-                // 同科已通过的未排敏食物不必再排敏：标「可直接记」，免得看着像还得走排敏
-                const label = food.status === 'untouched' && food.family_passed ? '可直接记' : STATUS_LABELS[food.status];
+                // 同科已通过的未排敏食物不用单独排敏（记完照常进入观察），状态后缀点明这一点
+                const label = food.status === 'untouched' && food.family_passed ? '同科已通过' : STATUS_LABELS[food.status];
                 option.append(` · ${label}${eaten ? ' · 今天已吃' : ''}`);
                 group.append(option);
             });
@@ -406,18 +406,16 @@
 
     function openFoodDialogForFood(food) {
         const kindMap = { untouched: 'planned', screening: 'screening', normal: 'normal', allergic: 'allergic' };
-        // 同科已有通过排敏的新食物不必再排敏：默认直接记（服务端按「已耐受，直接记正常」处理）
-        const direct = food.status === 'untouched' && !!food.family_passed;
+        // 同科已通过的新食物不用单独排敏，但照常进入观察：和别的未排敏食物一样按「开始排敏」记
         const item = {
             food_id: food.id,
             food: food.name,
             kind: kindMap[food.status] || 'normal',
-            position: food.position || 1,
-            direct
+            position: food.position || 1
         };
         item.text = food.status === 'screening'
             ? `第${food.position}/${food.observe_days}天`
-            : STATUS_LABELS[food.status] + (direct ? '（同科已通过，直接记）' : '');
+            : STATUS_LABELS[food.status] + (food.status === 'untouched' && food.family_passed ? '（同科已通过）' : '');
         openFoodDialog(item);
     }
 
@@ -594,8 +592,7 @@
     async function saveIntake(item, state) {
         try {
             const dateValue = today();
-            const mode = state.modeOverride
-                || (item.direct ? 'normal' : item.kind === 'planned' ? 'start' : 'keep');
+            const mode = state.modeOverride || (item.kind === 'planned' ? 'start' : 'keep');
             // 引入新食物（start/retry）时提醒：同时排敏多种食物会让反应难以归因
             if ((mode === 'start' || mode === 'retry')
                 && !await confirmNoOtherScreening([item.food_id], item.food)) {

@@ -93,8 +93,11 @@ class FoodEntryStore(FoodLibraryStore):
             latest = connection.execute(
                 'SELECT * FROM food_rounds WHERE food_id = ? ORDER BY id DESC LIMIT 1', (food['id'],)
             ).fetchone()
-            food.update(status='untouched', round_id=None, eaten_days=0, observe_days=3, position=1)
-            if latest is not None:
+            food.update(status='untouched', round_id=None, eaten_days=0, position=1)
+            if latest is None:
+                # 未排敏的带上「开始排敏会用到的观察天数」（排期块 → 队列 → 全局默认），前端提示第 X/N 天用
+                food['observe_days'] = self.first_observe_days(connection, food['id'], selected_date)
+            else:
                 dates = {row['date'] for row in connection.execute(
                     'SELECT DISTINCT date FROM food_entries WHERE round_id = ?', (latest['id'],)
                 )}
@@ -266,9 +269,10 @@ class FoodEntryStore(FoodLibraryStore):
                     mode = entry.get('mode', 'keep')
                     if latest is None or latest['status'] == 'allergic':
                         allowed = ('start', 'normal') if latest is None else ('retry', 'only')
-                        # 同科已有通过排敏的食物不必再排敏：未排敏也能直接记，默认方式按「已耐受，直接记正常」处理
+                        # 同科已有通过排敏的食物不用单独排敏：未排敏也能直接记，默认方式按「开始排敏」处理——
+                        # 照常进入观察（排敏中、第 X/N 天，吃满由家长判定），只是不要求独占观察期
                         if latest is None and mode == 'keep' and entry['food_id'] in family_passed:
-                            mode = 'normal'
+                            mode = 'start'
                         if mode not in allowed:
                             if latest is None and mode == 'keep':
                                 raise FoodLibraryError(
