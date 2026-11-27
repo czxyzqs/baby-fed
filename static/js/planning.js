@@ -1185,6 +1185,8 @@
         }
         const body = node('div', '', 'planning-dialog-body');
         const state = { food: null, days: board.settings?.observe_days_default || 3, strategy: 'defer' };
+        // 同科已有通过排敏的食物（后端 family_passed）：可以和其他新食物一起排敏，观察窗重叠不算冲突
+        const passedIds = new Set(board.foods.filter(food => food.family_passed).map(food => food.id));
 
         body.append(node('h3', '选择食物（未排敏）', 'planning-group-title'));
         const search = node('input', '', 'form-input');
@@ -1245,32 +1247,46 @@
             return start;
         }
 
-        function conflictsFor(start) {
+        // 与新排期观察窗重叠的现有排敏：要严苛排敏的算冲突（得选顺延还是保持重叠）；
+        // 同科已通过的可与其他新食物同期排敏，只作提示
+        function overlapsFor(start) {
             const end = addDays(start, state.days - 1);
-            const names = [];
+            const strict = [];
+            const together = [];
+            const add = (foodId, label) => (passedIds.has(foodId) ? together : strict).push(label);
             schedule.blocks.forEach(block => {
                 if (block.live || block.stale) return;
                 if (block.start_date <= end && addDays(block.start_date, block.days - 1) >= start) {
-                    names.push(foodName(block.food_id));
+                    add(block.food_id, foodName(block.food_id));
                 }
             });
             (schedule.rounds || []).forEach(round => {
                 const roundEnd = addDays(round.start_date, round.observe_days - 1);
-                if (round.start_date <= end && roundEnd >= start) names.push(`${round.food_name}（观察中）`);
+                if (round.start_date <= end && roundEnd >= start) add(round.food_id, `${round.food_name}（观察中）`);
             });
-            return [...new Set(names)];
+            return { strict: [...new Set(strict)], together: [...new Set(together)] };
         }
 
         function refreshPreview() {
             const start = adjustedStart();
-            const conflicts = conflictsFor(start);
+            const { strict, together } = overlapsFor(start);
             const dayLabel = `${Number(start.slice(5, 7))}月${Number(start.slice(8))}日`;
-            preview.textContent = `从${dayLabel}开始` +
-                (start !== dateStr ? '（已避开暂停段）' : '') +
-                (conflicts.length ? `，与 ${conflicts.join('、')} 的观察期重叠` : '');
+            // 要插入的同科已通过的食物：与谁重叠都能同期排敏，不用选处理方式
+            const passed = !!state.food && passedIds.has(state.food.id);
+            let text = `从${dayLabel}开始` + (start !== dateStr ? '（已避开暂停段）' : '');
+            if (passed) {
+                const others = [...strict, ...together];
+                text += others.length ? `，与 ${others.join('、')} 同期排敏（同科已通过，不算冲突）`
+                    : '（同科已通过，可与其他新食物同期排敏）';
+            } else if (strict.length) {
+                text += `，与 ${strict.join('、')} 的观察期重叠`;
+            } else if (together.length) {
+                text += `，与 ${together.join('、')} 同期（同科已通过，不算冲突）`;
+            }
+            preview.textContent = text;
             strategyGroup.replaceChildren();
-            strategyGroup.hidden = !conflicts.length;
-            if (conflicts.length) {
+            strategyGroup.hidden = passed || !strict.length;
+            if (!passed && strict.length) {
                 [['defer', '现有排敏顺延'], ['overlap', '保持重叠，稍后自行调整']].forEach(([value, label]) => {
                     const option = button(label, () => {
                         state.strategy = value;
@@ -1313,7 +1329,8 @@
             const option = button(`${food.category_emoji || '🍚'} ${food.name}`, () => pick(food), 'planning-chip');
             // 💩 紧跟食物名；⚠️/队列中是状态后缀，排在它后面
             window.FoodBadge?.attach(option, food);
-            option.append((food.is_high_allergen ? ' ⚠️' : '') + (food.in_queue ? ' · 队列中' : ''));
+            option.append((food.is_high_allergen ? ' ⚠️' : '') + (food.in_queue ? ' · 队列中' : '')
+                + (food.family_passed ? ' · 可同期' : ''));
             if (state.food && state.food.id === food.id) option.classList.add('active');
             return option;
         }
@@ -1353,7 +1370,8 @@
                     food_id: state.food.id,
                     start_date: adjustedStart(),
                     days: state.days,
-                    strategy: state.strategy,
+                    // 同科已通过的食物与其他排敏同期不算冲突：直接放上去，不让现有排敏顺延
+                    strategy: passedIds.has(state.food.id) ? 'overlap' : state.strategy,
                     meal: chosenMeal.meal
                 });
                 applySchedule(result);

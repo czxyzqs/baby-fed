@@ -298,13 +298,18 @@
         return lastItems.filter(item => item.kind !== 'due' && item.kind !== 'upcoming');
     }
 
-    // 引入新食物时的归因提醒：还有别的食物在排敏观察中需确认
+    // 引入新食物时的归因提醒：还有别的食物在排敏观察中需确认。
+    // 同科已有通过排敏的食物（family_passed）不算新食物：它和谁同期都不会让过敏反应难以归因，
+    // 所以被引入的它是、或者观察中的那个它是，都不提醒
     async function confirmNoOtherScreening(foodIds, name) {
         const board = await api('screening/board');
-        const other = board.foods.find(food => food.status === 'screening' && !foodIds.includes(food.id));
+        const passed = new Set(board.foods.filter(food => food.family_passed).map(food => food.id));
+        if (foodIds.some(id => passed.has(id))) return true;
+        const other = board.foods.find(food => food.status === 'screening'
+            && !foodIds.includes(food.id) && !passed.has(food.id));
         if (!other) return true;
         return window.confirm(
-            `「${other.food}」正在排敏观察中。同时引入「${name}」会让过敏反应难以归因，建议等观察期结束。确定仍要记录吗？`);
+            `「${other.name}」正在排敏观察中。同时引入「${name}」会让过敏反应难以归因，建议等观察期结束。确定仍要记录吗？`);
     }
 
     // （横幅 ✓ 快捷勾选已随整餐替换接口移除：记录统一走「记」按钮的按笔面板）
@@ -389,7 +394,9 @@
                 // 💩 紧跟食物名，状态后缀排在它后面
                 const option = chip(food.name, () => openFoodDialogForFood(food));
                 window.FoodBadge?.attach(option, food);
-                option.append(` · ${STATUS_LABELS[food.status]}${eaten ? ' · 今天已吃' : ''}`);
+                // 同科已通过的未排敏食物不必再排敏：标「可直接记」，免得看着像还得走排敏
+                const label = food.status === 'untouched' && food.family_passed ? '可直接记' : STATUS_LABELS[food.status];
+                option.append(` · ${label}${eaten ? ' · 今天已吃' : ''}`);
                 group.append(option);
             });
             list.append(group);
@@ -399,15 +406,18 @@
 
     function openFoodDialogForFood(food) {
         const kindMap = { untouched: 'planned', screening: 'screening', normal: 'normal', allergic: 'allergic' };
+        // 同科已有通过排敏的新食物不必再排敏：默认直接记（服务端按「已耐受，直接记正常」处理）
+        const direct = food.status === 'untouched' && !!food.family_passed;
         const item = {
             food_id: food.id,
             food: food.name,
             kind: kindMap[food.status] || 'normal',
-            position: food.position || 1
+            position: food.position || 1,
+            direct
         };
         item.text = food.status === 'screening'
             ? `第${food.position}/${food.observe_days}天`
-            : STATUS_LABELS[food.status];
+            : STATUS_LABELS[food.status] + (direct ? '（同科已通过，直接记）' : '');
         openFoodDialog(item);
     }
 
@@ -584,7 +594,8 @@
     async function saveIntake(item, state) {
         try {
             const dateValue = today();
-            const mode = state.modeOverride || (item.kind === 'planned' ? 'start' : 'keep');
+            const mode = state.modeOverride
+                || (item.direct ? 'normal' : item.kind === 'planned' ? 'start' : 'keep');
             // 引入新食物（start/retry）时提醒：同时排敏多种食物会让反应难以归因
             if ((mode === 'start' || mode === 'retry')
                 && !await confirmNoOtherScreening([item.food_id], item.food)) {

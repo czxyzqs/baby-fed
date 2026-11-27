@@ -99,6 +99,20 @@ def add_days(parsed, count):
     return (parsed + timedelta(days=count)).isoformat()
 
 
+def family_passed_foods(connection):
+    """同科已有排敏通过的食物编号：所在科属（foods.family）里有食物最新一轮为正常。
+
+    同科致敏原相近，这科通过一种之后，同科其他食物不必再严苛排敏：可以直接记，也可以和其他新食物同期排敏。
+    只认科属；没归科的（肉、蛋、鱼、奶等）同品类差异大（如鱼和虾），不在此列。"""
+    return {row['food_id'] for row in connection.execute('''
+        SELECT f.id AS food_id FROM foods f
+        WHERE f.family IS NOT NULL AND f.family != '' AND EXISTS (
+            SELECT 1 FROM foods g JOIN food_rounds r ON r.food_id = g.id
+            WHERE g.family = f.family AND r.status = 'normal'
+              AND r.id = (SELECT MAX(id) FROM food_rounds WHERE food_id = g.id))
+    ''')}
+
+
 class FoodScreeningStore(FoodLibraryStore):
     """Reads and writes screening rounds, reactions, plans and the queue."""
 
@@ -190,11 +204,13 @@ class FoodScreeningStore(FoodLibraryStore):
             all_rounds = {}
             for row in connection.execute('SELECT * FROM food_rounds ORDER BY id'):
                 all_rounds.setdefault(row['food_id'], []).append(dict(row))
+            family_passed = family_passed_foods(connection)
             for food in foods:
                 latest = rounds.get(food['id'])
                 food['status'] = self.food_status(food, latest)
                 food['is_high_allergen'] = bool(food['is_high_allergen'])
                 food['is_constipating'] = bool(food['is_constipating'])
+                food['family_passed'] = food['id'] in family_passed
                 food['in_queue'] = connection.execute(
                     'SELECT 1 FROM food_queue WHERE food_id = ? LIMIT 1', (food['id'],)
                 ).fetchone() is not None
@@ -430,11 +446,15 @@ class FoodScreeningStore(FoodLibraryStore):
     def conflicts_in(self, connection):
         intervals = self.block_intervals_in(connection)
         names = {row['id']: row['name'] for row in connection.execute('SELECT id, name FROM foods')}
+        # 同科已有通过排敏的食物可与其他新食物同期排敏：它的观察窗与谁重叠都不算冲突
+        family_passed = family_passed_foods(connection)
         conflicts = []
         for i in range(len(intervals)):
             for j in range(i + 1, len(intervals)):
                 first, second = intervals[i], intervals[j]
                 if first['food_id'] == second['food_id']:
+                    continue
+                if first['food_id'] in family_passed or second['food_id'] in family_passed:
                     continue
                 if first['start'] <= second['end'] and second['start'] <= first['end']:
                     conflicts.append({
@@ -618,11 +638,82 @@ class FoodScreeningStore(FoodLibraryStore):
             intervals.append((start, start + timedelta(days=row['days'] - 1)))
         return intervals
 
+    def active_round_intervals(self, connection):
+        """进行中的观察窗口期（不可移动）。"""
+        return [(date.fromisoformat(row['start_date']),
+                 date.fromisoformat(row['start_date']) + timedelta(days=row['observe_days'] - 1))
+                for row in connection.execute(
+                    "SELECT start_date, observe_days FROM food_rounds WHERE status = 'active'")]
+
+    def riding_blocks(self, connection, blocks, fixed=()):
+        """同科已有通过排敏的食物可与其他新食物同期排敏：它的排期块不占排期链（别的块不必排在它后面），
+        排期挪动时跟着与它观察窗重叠的块走，保持并排。blocks 是参与重排的块（按起始日排序），
+        fixed 是不可移动的区间（进行中的观察）。返回 {块id: (锚点, 起始日相对锚点的偏移天数)}，
+        锚点为 ('block', 块id) 或 ('fixed', 起始日)；周围没有可跟随的块时不在此列，照常当链上普通一环。"""
+        passed = family_passed_foods(connection)
+        anchors = [(start, end, ('fixed', start.isoformat())) for start, end in fixed]
+        anchors += [(date.fromisoformat(block['start_date']),
+                     date.fromisoformat(block['start_date']) + timedelta(days=block['days'] - 1),
+                     ('block', block['id']))
+                    for block in blocks if block['food_id'] not in passed]
+        riding = {}
+        for block in blocks:
+            if block['food_id'] not in passed:
+                continue
+            start = date.fromisoformat(block['start_date'])
+            end = start + timedelta(days=block['days'] - 1)
+            hits = [anchor for anchor in anchors if anchor[0] <= end and start <= anchor[1]]
+            if hits:
+                # 跟起始日不晚于自己的块里最靠后的那个；都比自己晚（它是先排进去的）就跟最早的
+                before = [anchor for anchor in hits if anchor[0] <= start]
+                picked = (max(before, key=lambda anchor: (anchor[0], anchor[2])) if before
+                          else min(hits, key=lambda anchor: (anchor[0], anchor[2])))
+                riding[block['id']] = (picked[2], (start - picked[0]).days)
+            # 跟随的块也是后面错开排的同科块的锚点；没有可跟随的块则留在链上
+            anchors.append((start, end, ('block', block['id'])))
+        return riding
+
+    def settle_riders(self, connection, blocks, riding, starts, pauses, now, companions,
+                      earliest=None, latest=None):
+        """把跟随的块落到锚点旁边：起始日 = 锚点的新起始日 + 原偏移，途中绕开暂停段。
+        earliest/latest 是每块起始日的下/上限（函数，返回 date 或 None）：只能往后挪的把「原起始日」当下限，
+        只往前补位的把「原起始日」当上限（超了就原地不动）。starts：各锚点的新起始日，键同 riding 的锚点。"""
+        for block in blocks:
+            ride = riding.get(block['id'])
+            if ride is None:
+                continue
+            anchor, offset = ride
+            original = date.fromisoformat(block['start_date'])
+            start = starts[anchor] + timedelta(days=offset)
+            low = earliest(block) if earliest else None
+            if low is not None and start < low:
+                start = low
+            while True:
+                end = start + timedelta(days=block['days'] - 1)
+                hit = [pause_end for pause_start, pause_end in pauses
+                       if start <= pause_end and end >= pause_start]
+                if not hit:
+                    break
+                start = max(hit) + timedelta(days=1)
+            high = latest(block) if latest else None
+            if high is not None and start > high:
+                start = original
+            starts[('block', block['id'])] = start
+            if start != original:
+                connection.execute(
+                    'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
+                    (start.isoformat(), now, block['id']),
+                )
+                self.move_segment_companions(connection, companions, block['id'], start.isoformat())
+
     def repack(self, connection, start_from=None):
-        """把未来的排期块从指定日期（默认今天）起依次排开；进行中的观察不可压，撞到暂停段就跳到暂停结束后继续。"""
+        """把未来的排期块从指定日期（默认今天）起依次排开；进行中的观察不可压，撞到暂停段就跳到暂停结束后继续。
+        与其他排敏并排的同科已通过食物不占排期，跟着同期的块走。"""
         cursor = today_cn()
         if start_from is not None and start_from - timedelta(days=1) > cursor:
             cursor = start_from - timedelta(days=1)
+        # 跟随的块最早可落在这一天：它可以贴着进行中的观察，不必等观察结束
+        floor_date = cursor + timedelta(days=1)
         for interval in self.block_intervals_in(connection, include_rounds=True):
             if interval['kind'] != 'round':
                 continue
@@ -630,35 +721,53 @@ class FoodScreeningStore(FoodLibraryStore):
             if end > cursor:
                 cursor = end
         # 暂停段 + 排敏进行中的排期都是障碍；进行中的排期本身不参与重排
-        obstacles = [
+        pauses = [
             (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
             for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
-        ] + self.fixed_block_intervals(connection)
+        ]
+        obstacles = pauses + self.fixed_block_intervals(connection)
         now = datetime.now(CN_TZ).isoformat()
-        order = [dict(row) for row in connection.execute(
-            "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' "
-            "AND food_id NOT IN (SELECT food_id FROM food_rounds WHERE status = 'active') "
-            "ORDER BY start_date, id"
-        )]
-        companions = self.snapshot_segment_companions(connection, order)
-        for block in order:
-            start = cursor + timedelta(days=1)
-            end = start + timedelta(days=block['days'] - 1)
-            overlap = True
-            while overlap:
-                overlap = False
-                for ob_start, ob_end in obstacles:
-                    if start <= ob_end and end >= ob_start:
-                        start = ob_end + timedelta(days=1)
-                        end = start + timedelta(days=block['days'] - 1)
-                        overlap = True
-            cursor = end
-            if start.isoformat() != block['start_date']:
-                connection.execute(
-                    'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
-                    (start.isoformat(), now, block['id']),
-                )
-                self.move_segment_companions(connection, companions, block['id'], start.isoformat())
+        fixed = self.active_round_intervals(connection)
+        # 跟随关系按日期推导，排完一轮后可能变（落单的同科块被排到另一个同科块旁边，就成了跟随者、不再占链）：
+        # 排到跟随关系不再变化为止，保证「一键重排」连按两次结果一样；没有同科块时第二轮直接结束
+        previous = None
+        for _ in range(3):
+            order = [dict(row) for row in connection.execute(
+                "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' "
+                "AND food_id NOT IN (SELECT food_id FROM food_rounds WHERE status = 'active') "
+                "ORDER BY start_date, id"
+            )]
+            riding = self.riding_blocks(connection, order, fixed)
+            if riding == previous:
+                break
+            previous = riding
+            companions = self.snapshot_segment_companions(connection, order)
+            starts = {('fixed', start.isoformat()): start for start, _ in fixed}
+            chain_cursor = cursor
+            for block in order:
+                if block['id'] in riding:
+                    continue
+                start = chain_cursor + timedelta(days=1)
+                end = start + timedelta(days=block['days'] - 1)
+                overlap = True
+                while overlap:
+                    overlap = False
+                    for ob_start, ob_end in obstacles:
+                        if start <= ob_end and end >= ob_start:
+                            start = ob_end + timedelta(days=1)
+                            end = start + timedelta(days=block['days'] - 1)
+                            overlap = True
+                chain_cursor = end
+                starts[('block', block['id'])] = start
+                if start.isoformat() != block['start_date']:
+                    connection.execute(
+                        'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
+                        (start.isoformat(), now, block['id']),
+                    )
+                    self.move_segment_companions(connection, companions, block['id'], start.isoformat())
+            # 跟随的块不早于重排起点（贴着进行中的观察时也只排到明天起，今天及以前排不进）
+            self.settle_riders(connection, order, riding, starts, pauses, now, companions,
+                               earliest=lambda block: floor_date)
 
     def repack_schedule(self, start_date=None):
         start = None
@@ -857,6 +966,11 @@ class FoodScreeningStore(FoodLibraryStore):
         )]
         companions = self.snapshot_segment_companions(connection, blocks)
         now = datetime.now(CN_TZ).isoformat()
+        # 同科已通过的食物不占链：别的排期不必排在它后面，它跟着同期的块走（只能往后挪）
+        movable = [block for block in blocks if block['food_id'] not in active_foods]
+        fixed = self.active_round_intervals(connection)
+        riding = self.riding_blocks(connection, movable, fixed)
+        starts = {('fixed', start.isoformat()): start for start, _ in fixed}
         chain_end = None
         settled = None        # 最后一个未移动的排期（含其结束日）
         settled_end = None
@@ -867,6 +981,8 @@ class FoodScreeningStore(FoodLibraryStore):
                 # 排敏进行中的排期不顺延，只把链尾推到它的结束日，让后面的排期接在它之后
                 fixed_end = date.fromisoformat(block['start_date']) + timedelta(days=block['days'] - 1)
                 chain_end = fixed_end if chain_end is None or fixed_end > chain_end else chain_end
+                continue
+            if block['id'] in riding:
                 continue
             original = date.fromisoformat(block['start_date'])
             start = original
@@ -903,6 +1019,9 @@ class FoodScreeningStore(FoodLibraryStore):
                 settled = block
                 settled_end = end
             chain_end = end
+            starts[('block', block['id'])] = start
+        self.settle_riders(connection, movable, riding, starts, pauses, now, companions,
+                           earliest=lambda block: date.fromisoformat(block['start_date']))
         for block, gap_end in extensions:
             latest = connection.execute(
                 'SELECT * FROM food_rounds WHERE food_id = ? ORDER BY id DESC LIMIT 1', (block['food_id'],)
@@ -983,10 +1102,11 @@ class FoodScreeningStore(FoodLibraryStore):
         blocks = [dict(row) for row in connection.execute(
             "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' ORDER BY start_date, id"
         )]
-        obstacles = [
+        pauses = [
             (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
             for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
-        ] + self.fixed_block_intervals(connection)
+        ]
+        obstacles = pauses + self.fixed_block_intervals(connection)
         for row in connection.execute("SELECT start_date, observe_days FROM food_rounds WHERE status = 'active'"):
             obstacles.append((
                 date.fromisoformat(row['start_date']),
@@ -995,6 +1115,25 @@ class FoodScreeningStore(FoodLibraryStore):
         now = datetime.now(CN_TZ).isoformat()
         moved_region = False
         cursor = None
+        # 同科已通过的食物不占链，也不为新插入的排敏让位（同期不算冲突）：跟着同期的块走，只能往后挪
+        movable = [block for block in blocks
+                   if block['id'] != exclude_id and block['food_id'] not in active_foods]
+        inserted = next((block for block in blocks if block['id'] == exclude_id), None)
+        passed = family_passed_foods(connection)
+        inserted_strict = inserted is not None and inserted['food_id'] not in passed
+        fixed = self.active_round_intervals(connection)
+        # 锚点只认原有的排期：并排的块跟着原来的搭档一起顺延，而不是留在新插入的块旁边
+        riding = self.riding_blocks(connection, movable, fixed)
+        starts = {('fixed', start.isoformat()): start for start, _ in fixed}
+        if inserted_strict:
+            starts[('block', exclude_id)] = obstacle_start
+            for block in movable:
+                # 原来就没有搭档、只和新插入的这块同期的：留在它旁边就行
+                start = date.fromisoformat(block['start_date'])
+                only_new = (start <= obstacle_end
+                            and start + timedelta(days=block['days'] - 1) >= obstacle_start)
+                if block['id'] not in riding and block['food_id'] in passed and only_new:
+                    riding[block['id']] = (('block', exclude_id), (start - obstacle_start).days)
         for block in blocks:
             if block['id'] == exclude_id:
                 continue
@@ -1002,6 +1141,8 @@ class FoodScreeningStore(FoodLibraryStore):
                 # 排敏进行中的排期不让位，链尾推到它的结束日，后续排期接在它之后
                 fixed_end = date.fromisoformat(block['start_date']) + timedelta(days=block['days'] - 1)
                 cursor = fixed_end if cursor is None or fixed_end > cursor else cursor
+                continue
+            if block['id'] in riding:
                 continue
             original = date.fromisoformat(block['start_date'])
             start = original
@@ -1032,6 +1173,9 @@ class FoodScreeningStore(FoodLibraryStore):
                     (start.isoformat(), now, block['id']),
                 )
             cursor = end
+            starts[('block', block['id'])] = start
+        self.settle_riders(connection, movable, riding, starts, pauses, now, {},
+                           earliest=lambda block: date.fromisoformat(block['start_date']))
 
     def update_pause(self, identifier, data):
         with self.connect() as connection:
@@ -1094,16 +1238,18 @@ class FoodScreeningStore(FoodLibraryStore):
 
     def close_gap(self, connection, gap_start, gap_end):
         """删除暂停段后把开始晚于空档的排期整体前移填补空档；更早的排期不动，途中避让剩余暂停段、进行中的观察和排敏进行中的排期。"""
-        obstacles = [
+        pauses = [
             (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
             for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
         ]
+        obstacles = list(pauses)
         for row in connection.execute("SELECT start_date, observe_days FROM food_rounds WHERE status = 'active'"):
             start = date.fromisoformat(row['start_date'])
             obstacles.append((start, start + timedelta(days=row['observe_days'] - 1)))
         obstacles += self.fixed_block_intervals(connection)
         now = datetime.now(CN_TZ).isoformat()
         cursor = max(gap_start, today_cn()) - timedelta(days=1)
+        origin = cursor + timedelta(days=1)
         movable = [dict(row) for row in connection.execute(
             "SELECT * FROM food_plan_blocks WHERE status = 'scheduled' AND start_date > ? "
             "AND food_id NOT IN (SELECT food_id FROM food_rounds WHERE status = 'active') "
@@ -1111,7 +1257,13 @@ class FoodScreeningStore(FoodLibraryStore):
             (gap_end.isoformat(),)
         )]
         companions = self.snapshot_segment_companions(connection, movable)
+        # 同科已通过的食物不占链：跟着同期的块一起前移补位，但不晚于原位
+        fixed = self.active_round_intervals(connection)
+        riding = self.riding_blocks(connection, movable, fixed)
+        starts = {('fixed', start.isoformat()): start for start, _ in fixed}
         for block in movable:
+            if block['id'] in riding:
+                continue
             original = date.fromisoformat(block['start_date'])
             start = cursor + timedelta(days=1)
             end = start + timedelta(days=block['days'] - 1)
@@ -1126,6 +1278,7 @@ class FoodScreeningStore(FoodLibraryStore):
             if start >= original:
                 # 前移不允许晚于原位；这块保持原样，链从它的原位继续
                 cursor = original + timedelta(days=block['days'] - 1)
+                starts[('block', block['id'])] = original
                 continue
             connection.execute(
                 'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
@@ -1133,6 +1286,10 @@ class FoodScreeningStore(FoodLibraryStore):
             )
             self.move_segment_companions(connection, companions, block['id'], start.isoformat())
             cursor = end
+            starts[('block', block['id'])] = start
+        self.settle_riders(connection, movable, riding, starts, pauses, now, companions,
+                           earliest=lambda block: origin,
+                           latest=lambda block: date.fromisoformat(block['start_date']))
 
     def add_normal(self, data):
         raw_ids = data.get('food_ids')

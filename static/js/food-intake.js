@@ -111,8 +111,12 @@
         return block.id != null && block.original_food_id === block.food_id;
     }
 
+    // 同科已有通过排敏的食物（后端 family_passed）：未排敏也不必再排敏，默认直接记（等同「已耐受，直接记正常」）
+    const directRecord = food => food?.status === 'untouched' && !!food.family_passed;
+
     function defaultMode(food) {
-        return food.status === 'untouched' ? 'start' : food.status === 'allergic' ? 'only' : 'keep';
+        if (food.status === 'untouched') return food.family_passed ? 'normal' : 'start';
+        return food.status === 'allergic' ? 'only' : 'keep';
     }
 
     function suggestedAmount(food) {
@@ -227,7 +231,8 @@
             remove.setAttribute('aria-label', `移除${block.food_name}`);
             header.append(remove);
             card.append(header);
-            const currentStatus = food ? `当前状态：${statuses[food.status]}` : '食物已从辅食库删除，保留历史名称';
+            const currentStatus = !food ? '食物已从辅食库删除，保留历史名称'
+                : `当前状态：${statuses[food.status]}${directRecord(food) ? `（${food.family || '同科'}已有通过排敏的食物，可直接记）` : ''}`;
             card.append(node('p', currentStatus, 'food-intake-hint'));
             if (food?.status === 'screening') {
                 const historical = selectedDate < food.start_date;
@@ -236,7 +241,9 @@
             }
             if (!isExisting(block) && food && ['untouched', 'allergic'].includes(food.status)) {
                 const options = food.status === 'untouched' ?
-                    [['start', '开始排敏（默认观察3天）'], ['normal', '已耐受，直接记正常']] :
+                    (directRecord(food) ?
+                        [['normal', '直接记，不排敏'], ['start', '仍按排敏记录']] :
+                        [['start', '开始排敏（默认观察3天）'], ['normal', '已耐受，直接记正常']]) :
                     [['retry', '按新一轮排敏记录'], ['only', '仅记录（误食等）']];
                 if (food.status === 'allergic') card.append(node('p', '⚠️ 此食物已标记过敏，请确认记录方式。', 'food-intake-hint'));
                 card.append(choices('排敏记录方式', options, block.mode, value => {
@@ -357,10 +364,12 @@
                         food_id: food.id, food_name: food.name,
                         amount: previous ? previous.amount :
                             food.status === 'screening' && selectedDate >= food.start_date ? suggestedAmount(food) :
-                                food.status === 'untouched' ? amounts[0] : '',
+                                food.status === 'untouched' && !directRecord(food) ? amounts[0] : '',
                         rating: previous?.rating ?? null, note: previous?.note ?? '', mode: defaultMode(food)
                     };
-                    block.auto_amount = !previous && ['untouched', 'screening'].includes(food.status);
+                    // 直接记的同正常食物一样不预选量；按排敏记录的才预选「一勺尖」
+                    block.auto_amount = !previous && (food.status === 'screening'
+                        || (food.status === 'untouched' && !directRecord(food)));
                     if (index === null) blocks.push(block);
                     else blocks[index] = block;
                     dirty = true;
@@ -376,7 +385,9 @@
                 const name = node('span', food.name, 'food-intake-picker-food-name');
                 select.append(
                     window.FoodBadge?.attach(name, food) || name,
-                    node('span', duplicate ? '已添加' : statuses[food.status], 'food-intake-picker-food-status')
+                    // 同科已通过的未排敏食物不必再排敏：状态列写「可直接记」，免得看着像还得走排敏
+                    node('span', duplicate ? '已添加' : directRecord(food) ? '可直接记' : statuses[food.status],
+                        'food-intake-picker-food-status')
                 );
                 select.disabled = duplicate;
                 group.append(select);

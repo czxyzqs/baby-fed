@@ -7,6 +7,7 @@ import sqlite3
 from flask import Blueprint, current_app, jsonify, request
 
 from food_library import FoodLibraryError, FoodLibraryStore
+from food_screening import family_passed_foods
 
 
 # 槽位代号全集（计划侧词汇；记录侧不存餐次，展示时按时间落槽推导）
@@ -84,9 +85,11 @@ class FoodEntryStore(FoodLibraryStore):
         last_eaten = {row['food_id']: row['last_time'] for row in connection.execute(
             'SELECT food_id, MAX(date || \'T\' || eaten_time) AS last_time FROM food_entries GROUP BY food_id'
         )}
+        family_passed = family_passed_foods(connection)
         for food in foods:
             food['last_eaten'] = last_eaten.get(food['id'])
             food['is_constipating'] = bool(food['is_constipating'])
+            food['family_passed'] = food['id'] in family_passed
             latest = connection.execute(
                 'SELECT * FROM food_rounds WHERE food_id = ? ORDER BY id DESC LIMIT 1', (food['id'],)
             ).fetchone()
@@ -247,6 +250,7 @@ class FoodEntryStore(FoodLibraryStore):
             # 按笔替换前，先按旧记录的扣减明细退还批次份数（未变的条目随后会重新扣回，净值为零）
             for old in previous.values():
                 self.refund_deduction(connection, old['deduction'])
+            family_passed = family_passed_foods(connection)
             prepared = []
             for entry in entries:
                 old = previous.get(entry.get('id'))
@@ -262,7 +266,14 @@ class FoodEntryStore(FoodLibraryStore):
                     mode = entry.get('mode', 'keep')
                     if latest is None or latest['status'] == 'allergic':
                         allowed = ('start', 'normal') if latest is None else ('retry', 'only')
+                        # 同科已有通过排敏的食物不必再排敏：未排敏也能直接记，默认方式按「已耐受，直接记正常」处理
+                        if latest is None and mode == 'keep' and entry['food_id'] in family_passed:
+                            mode = 'normal'
                         if mode not in allowed:
+                            if latest is None and mode == 'keep':
+                                raise FoodLibraryError(
+                                    f'「{food["name"]}」还没排敏，同科也没有通过排敏的食物，需要先排敏'
+                                    '（辅食记录页记一笔时可选「开始排敏」）', 409)
                             raise FoodLibraryError('食物排敏状态已变化，请重新载入并确认记录方式', 409)
                         if mode != 'only':
                             status = 'normal' if mode == 'normal' else 'active'
@@ -273,6 +284,13 @@ class FoodEntryStore(FoodLibraryStore):
                                    VALUES (?, ?, ?, ?, ?)''', (entry['food_id'], selected_date, days, status, now)
                             )
                             round_id = cursor.lastrowid if status == 'active' else None
+                            if status == 'normal':
+                                # 已判定耐受：还没执行的排敏排期和队列项没有意义了，清掉（与看板「标记正常」一致）；
+                                # 留着会以「已失效」占住排期位，把后面的新食物往后挤
+                                connection.execute(
+                                    "DELETE FROM food_plan_blocks WHERE food_id = ? AND status = 'scheduled'",
+                                    (entry['food_id'],))
+                                connection.execute('DELETE FROM food_queue WHERE food_id = ?', (entry['food_id'],))
                     elif latest['status'] == 'active':
                         if mode not in ('keep', 'start'):
                             raise FoodLibraryError('食物已在排敏中，请重新载入确认', 409)

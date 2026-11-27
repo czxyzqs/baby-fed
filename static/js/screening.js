@@ -151,23 +151,28 @@
         [...known, ...extra].forEach(family => sections.push({
             title: `${window.FOOD_FAMILIES.emoji[family] || '🌿'} ${family}`,
             foods: familyGroups.get(family),
-            passed: passedCount(family)
+            passed: passedCount(family),
+            byFamily: true
         }));
         categoryGroups.forEach((foods, name) => sections.push({
             title: `${foods[0].category_emoji || '🍚'} ${name}`,
             foods,
-            passed: passedCount(name)
+            passed: passedCount(name),
+            byFamily: false
         }));
         if (!sections.length) {
             panel.append(node('p', status === 'untouched' ? '没有未排敏的食物。' : '还没有食物。', 'screening-line'));
             return panel;
         }
-        sections.forEach(({ title, foods, passed }) => {
+        sections.forEach(({ title, foods, passed, byFamily }) => {
             const head = node('h3', title + (foods.some(food => food.is_high_allergen) ? ' ⚠️' : ''), 'screening-group-title');
             if (status === 'untouched' && passed) {
                 const badge = node('span', `✓${passed}`, 'screening-family-pass');
-                badge.title = `这组已有 ${passed} 种食物通过排敏`;
-                badge.setAttribute('aria-label', `这组已有 ${passed} 种食物通过排敏`);
+                // 「同科通过就不必再排敏」只认科属；按品类分组的（肉蛋鱼奶等没归科）只是参考
+                const tip = `这组已有 ${passed} 种食物通过排敏`
+                    + (byFamily ? '：同科食物可以直接记，也可以和其他新食物一起排敏' : '');
+                badge.title = tip;
+                badge.setAttribute('aria-label', tip);
                 head.append(badge);
             }
             panel.append(head);
@@ -175,7 +180,10 @@
             foods.forEach(food => {
                 const chip = button(food.name, () => {
                     if (status !== 'untouched') return;
-                    confirmAction(`把「${food.name}」加入排敏队列？`, () => api('queue', 'POST', { food_id: food.id }));
+                    const direct = food.family_passed
+                        ? `${food.family}已有通过排敏的食物，「${food.name}」可以直接在记一笔时添加。仍要加入排敏队列？` : '';
+                    confirmAction(direct || `把「${food.name}」加入排敏队列？`,
+                        () => api('queue', 'POST', { food_id: food.id }));
                 }, 'screening-chip' + (food.is_high_allergen ? ' allergen' : ''));
                 group.append(window.FoodBadge?.attach(chip, food) || chip);
             });
