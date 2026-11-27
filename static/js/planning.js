@@ -351,6 +351,13 @@
 
     // ---------- 冲突与移动 ----------
 
+    // 冲突提示：观察窗重叠可以一键重排收拢；同一天第一次吃的新食物超过两种的只能手动错开
+    function conflictHint(conflicts) {
+        if (!conflicts.length) return '';
+        return conflicts.some(conflict => conflict.reason !== 'same_start')
+            ? '存在观察期重叠，可一键重排' : '有几天第一次吃的新食物超过两种，建议错开';
+    }
+
     function renderConflicts() {
         const bar = element('conflicts');
         bar.replaceChildren();
@@ -360,7 +367,10 @@
         }
         bar.hidden = false;
         schedule.conflicts.slice(0, 4).forEach(conflict => {
-            bar.append(node('p', `⚠️「${conflict.foods[0]}」（${conflict.first.start} 起）与「${conflict.foods[1]}」（${conflict.second.start} 起）观察期重叠，建议间隔开`, 'planning-line'));
+            bar.append(node('p', conflict.reason === 'same_start'
+                // 这一天第一次吃的新食物超过了两种（纯新最多一种），把同天的半新两两列出来
+                ? `⚠️「${conflict.foods[0]}」与「${conflict.foods[1]}」排在同一天（${conflict.first.start.slice(5).replace('-', '/')}）第一次吃，同一天最多两种新食材，建议错开`
+                : `⚠️「${conflict.foods[0]}」（${conflict.first.start} 起）与「${conflict.foods[1]}」（${conflict.second.start} 起）观察期重叠，建议间隔开`, 'planning-line'));
         });
     }
 
@@ -874,7 +884,8 @@
             renderCalendar();
             renderDayDetail();
             renderMovebar();
-            toast(schedule.conflicts.length ? '已移动（存在观察期重叠，可一键重排）' : '已移动');
+            const hint = conflictHint(schedule.conflicts);
+            toast(hint ? `已移动（${hint}）` : '已移动');
         } catch (error) {
             message(`移动失败：${error.message}`, true);
         }
@@ -1106,8 +1117,8 @@
                 const result = await api(`rounds/${item.id}`, 'PUT', { observe_days: state.days });
                 applySchedule(result);
                 closeDialog();
-                toast(result.conflicts.length
-                    ? '搭配天数已调整（存在观察期重叠，可一键重排）'
+                const hint = conflictHint(result.conflicts);
+                toast(hint ? `搭配天数已调整（${hint}）`
                     : `「${item.food_name}」搭配已调整为 ${state.days} 天`);
             } catch (error) {
                 message(`保存失败：${error.message}`, true);
@@ -1159,8 +1170,8 @@
                 applySchedule(result);
                 closeDialog();
                 const moved = data.start_date !== block.start_date;
-                toast(result.conflicts.length
-                    ? '排期已修改（存在观察期重叠，可一键重排）'
+                const hint = conflictHint(result.conflicts);
+                toast(hint ? `排期已修改（${hint}）`
                     : (moved ? `「${foodName(block.food_id)}」已改到 ${start.value.slice(5).replace('-', '/')}` : `「${foodName(block.food_id)}」排期已修改`));
             } catch (error) {
                 message(`保存失败：${error.message}`, true);
@@ -1189,7 +1200,8 @@
             return;
         }
         const body = node('div', '', 'planning-dialog-body');
-        const state = { food: null, days: board.settings?.observe_days_default || 3, strategy: 'defer' };
+        // offset：「从次日开始」每点一次往后挪一天（避开「同一天第一次吃」的搭配问题）
+        const state = { food: null, days: board.settings?.observe_days_default || 3, strategy: 'defer', offset: 0 };
         // 同科已有通过排敏的食物（后端 family_passed）：可以和其他新食物一起排敏，观察窗重叠不算冲突
         const passedIds = new Set(board.foods.filter(food => food.family_passed).map(food => food.id));
 
@@ -1238,7 +1250,7 @@
         body.append(preview, strategyGroup);
 
         function adjustedStart() {
-            let start = dateStr;
+            let start = addDays(dateStr, state.offset);
             let hit = true;
             while (hit) {
                 hit = false;
@@ -1253,45 +1265,77 @@
         }
 
         // 与新排期观察窗重叠的现有排敏：要严苛排敏的算冲突（得选顺延还是保持重叠）；
-        // 同科已通过的可与其他新食物同期排敏，只作提示
+        // 同科已通过的可与其他新食物同期排敏，只作提示。
+        // 同起：这一天也第一次吃的新食物，分纯新 / 半新（同一天第一次吃的新食物最多两种，纯新最多一种）
         function overlapsFor(start) {
             const end = addDays(start, state.days - 1);
             const strict = [];
             const together = [];
+            const startPure = [];
+            const startHalf = [];
             const add = (foodId, label) => (passedIds.has(foodId) ? together : strict).push(label);
+            const addStart = (foodId, label) => (passedIds.has(foodId) ? startHalf : startPure).push(label);
             schedule.blocks.forEach(block => {
                 if (block.live || block.stale) return;
+                if (block.start_date === start) addStart(block.food_id, foodName(block.food_id));
                 if (block.start_date <= end && addDays(block.start_date, block.days - 1) >= start) {
                     add(block.food_id, foodName(block.food_id));
                 }
             });
             (schedule.rounds || []).forEach(round => {
+                if (round.start_date === start) addStart(round.food_id, round.food_name);
                 const roundEnd = addDays(round.start_date, round.observe_days - 1);
                 if (round.start_date <= end && roundEnd >= start) add(round.food_id, `${round.food_name}（观察中）`);
             });
-            return { strict: [...new Set(strict)], together: [...new Set(together)] };
+            return { strict: [...new Set(strict)], together: [...new Set(together)],
+                startPure: [...new Set(startPure)], startHalf: [...new Set(startHalf)] };
         }
 
         function refreshPreview() {
             const start = adjustedStart();
-            const { strict, together } = overlapsFor(start);
+            const { strict, together, startPure, startHalf } = overlapsFor(start);
             const dayLabel = `${Number(start.slice(5, 7))}月${Number(start.slice(8))}日`;
             // 要插入的同科已通过的食物：与谁重叠都能同期排敏，不用选处理方式
             const passed = !!state.food && passedIds.has(state.food.id);
-            let text = `从${dayLabel}开始` + (start !== dateStr ? '（已避开暂停段）' : '');
+            // 搭配规则：同一天第一次吃的新食物最多两种（纯新最多一种）。这一天名额满了就不合适
+            const already = [...startPure, ...startHalf];
+            const clash = !!state.food && Math.max(0, 2 - Math.min(startPure.length, 1) - startHalf.length) === 0;
+            const clashNote = `；这天第一次吃的新食物已有 ${already.length} 种（${already.join('、')}），再加「${state.food ? state.food.name : ''}」就超过两种`;
+            let text = `从${dayLabel}开始` + (start !== addDays(dateStr, state.offset) ? '（已避开暂停段）' : '');
             if (passed) {
                 const others = [...strict, ...together];
-                text += others.length ? `，与 ${others.join('、')} 同期排敏（同科已通过，不算冲突）`
-                    : '（同科已通过，可与其他新食物同期排敏）';
+                text += others.length ? `，与 ${others.join('、')} 同期排敏（「${state.food.name}」同科已通过，不算冲突）` : '';
+                text += clash ? clashNote : (others.length ? '' : '（同科已通过，可与其他新食物同期排敏）');
             } else if (strict.length) {
-                text += `，与 ${strict.join('、')} 的观察期重叠`;
+                text += `，与 ${strict.join('、')} 的观察期重叠` + (clash ? clashNote : '');
             } else if (together.length) {
-                text += `，与 ${together.join('、')} 同期（同科已通过，不算冲突）`;
+                text += `，与 ${together.join('、')} 同期（同科已通过，不算冲突）` + (clash ? clashNote : '');
+            } else {
+                text += clash ? clashNote.replace(/^；/, '，') : '';
             }
             preview.textContent = text;
             strategyGroup.replaceChildren();
-            strategyGroup.hidden = passed || !strict.length;
-            if (!passed && strict.length) {
+            // 同一天第一次吃太多的：可以改成从次日开始。纯新撞上别的纯新观察窗时，仍以顺延/保持重叠为主（提示里带上搭配问题）；
+            // 半新与纯新重叠本来就是允许的，不受它影响
+            const stagger = clash && (passed || !strict.length);
+            strategyGroup.hidden = stagger ? false : (passed || !strict.length);
+            if (stagger) {
+                const next = addDays(start, 1);
+                [['next', `从${Number(next.slice(5, 7))}月${Number(next.slice(8))}日开始`], ['overlap', '保持同一天']].forEach(([value, label]) => {
+                    const option = button(label, () => {
+                        if (value === 'next') {
+                            state.offset += 1;
+                            refreshPreview();
+                            return;
+                        }
+                        state.strategy = value;
+                        [...strategyGroup.children].forEach(child => child.classList.remove('active'));
+                        option.classList.add('active');
+                    }, 'planning-chip');
+                    if (state.strategy === value) option.classList.add('active');
+                    strategyGroup.append(option);
+                });
+            } else if (!passed && strict.length) {
                 [['defer', '现有排敏顺延'], ['overlap', '保持重叠，稍后自行调整']].forEach(([value, label]) => {
                     const option = button(label, () => {
                         state.strategy = value;
@@ -1381,7 +1425,8 @@
                 });
                 applySchedule(result);
                 closeDialog();
-                toast(`已插入排敏：${state.food.name}`);
+                const hint = conflictHint(result.conflicts);
+                toast(`已插入排敏：${state.food.name}${hint ? `（${hint}）` : ''}`);
             } catch (error) {
                 message(`插入失败：${error.message}`, true);
             }

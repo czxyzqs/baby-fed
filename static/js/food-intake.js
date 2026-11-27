@@ -122,6 +122,43 @@
         return unitAwareAmount(food);
     }
 
+    // 第一次吃（开始排敏）时的搭配把关；首页记录面板、首页选食物弹窗也经 window.confirmScreeningStart 用它。
+    // 同一天第一次吃的新食物最多两种，其中纯新最多一种（观察期里也不能有别的纯新）——出了反应才分得清是谁。
+    // 只提醒不阻断：宝宝已经吃了的得能记下来，家长确认后照记。
+    // starters：[{ id, name, strict }]，strict=按纯新算（重新尝试的过敏食物）；dateValue：这笔的日期（补记看当天）。
+    async function confirmScreeningStart(starters, dateValue = today()) {
+        if (!starters.length) return true;
+        const board = await api('screening/board');
+        const half = id => board.foods.some(food => food.id === id && food.family_passed);
+        const ids = starters.map(item => item.id);
+        const newPure = starters.filter(item => item.strict || !half(item.id));
+        const newHalf = starters.filter(item => !item.strict && half(item.id));
+        const names = items => items.map(item => item.name);
+        // 当天别的第一次吃 = 进行中的观察从当天开始
+        const firstEaten = board.foods.filter(food => food.status === 'screening'
+            && food.start_date === dateValue && !ids.includes(food.id));
+        const otherPure = firstEaten.filter(food => !food.family_passed).map(food => food.name);
+        const otherHalf = firstEaten.filter(food => food.family_passed).map(food => food.name);
+        const dayLabel = dateValue === today() ? '今天'
+            : `${Number(dateValue.slice(5, 7))}月${Number(dateValue.slice(8))}日`;
+        if (newPure.length >= 2) {
+            return window.confirm(`这笔里「${names(newPure).join('、')}」都是第一次吃。纯新食材要一种一种引入，同时吃出了反应难以归因。确定仍要记录吗？`);
+        }
+        if (newPure.length) {
+            const other = board.foods.find(food => food.status === 'screening'
+                && !food.family_passed && !ids.includes(food.id));
+            if (other) {
+                return window.confirm(
+                    `「${other.name}」正在排敏观察中。同时引入「${names(newPure).join('、')}」会让过敏反应难以归因，建议等观察期结束。确定仍要记录吗？`);
+            }
+        }
+        const all = [...names(newPure), ...names(newHalf), ...otherPure, ...otherHalf];
+        if (all.length >= 3) {
+            return window.confirm(`「${all.join('、')}」都是${dayLabel}第一次吃。同一天最多两种新食材第一次吃，多了出了反应难判断。确定仍要记录吗？`);
+        }
+        return true;
+    }
+
     function selectOccasion() {
         const occasion = (context.occasions || []).find(item => item.time === selectedTime);
         blocks = (occasion ? occasion.entries : []).map(entry => ({
@@ -419,6 +456,15 @@
         }
         // 改日期/时间 = 挪这笔：目标位置已有别的笔记时先提示，避免静默合并
         const moving = targetDate !== selectedDate || targetTime !== selectedTime;
+        // 这笔里第一次吃的（开始排敏 / 重新尝试）先过一遍搭配把关；家长取消就不保存，输入留着
+        const starters = blocks.filter(block => !isExisting(block) && ['start', 'retry'].includes(block.mode))
+            .map(block => ({ id: block.food_id, name: block.food_name, strict: block.mode === 'retry' }));
+        try {
+            if (!(await confirmScreeningStart(starters, targetDate))) return;
+        } catch (error) {
+            message(`保存失败：${error.message}。输入已保留。`, true);
+            return;
+        }
         setBusy(true);
         message('正在保存这笔…');
         try {
@@ -574,4 +620,5 @@
         loadHistory();
     }
     window.foodIntake = { open, close };
+    window.confirmScreeningStart = confirmScreeningStart;
 })();

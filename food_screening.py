@@ -449,19 +449,63 @@ class FoodScreeningStore(FoodLibraryStore):
                     })
         return intervals
 
+    def first_eaten_counts(self, connection, family_passed, skip_block_ids=()):
+        """每个起始日第一次吃的新食物种数：{日期: [纯新, 半新]}。数的是排期块 + 进行中的观察，按食物去重
+        （同一食物的排期块和观察可能同一天开始）；skip_block_ids 里的排期块不计入。"""
+        counts, seen = {}, set()
+        for row in connection.execute('''
+            SELECT p.id AS block_id, p.start_date AS start_date, p.food_id AS food_id
+            FROM food_plan_blocks p WHERE p.status = 'scheduled'
+            UNION ALL
+            SELECT NULL, r.start_date, r.food_id FROM food_rounds r WHERE r.status = 'active'
+        '''):
+            if row['block_id'] in skip_block_ids:
+                continue
+            key = (row['start_date'], row['food_id'])
+            if key in seen:
+                continue
+            seen.add(key)
+            counts.setdefault(row['start_date'], [0, 0])[row['food_id'] in family_passed] += 1
+        return counts
+
+    @staticmethod
+    def starter_room(counts, day):
+        """这一天还能不能再安排一种新食材第一次吃：同一天第一次吃的新食物最多两种（纯新最多一种，
+        纯新之间的重叠另由冲突把关）。counts 是 first_eaten_counts 的结果，day 是日期或 ISO 字符串。"""
+        pure, half = counts.get(day.isoformat() if isinstance(day, date) else day, (0, 0))
+        return max(0, 2 - pure - half)
+
+    def half_full_dates(self, connection):
+        """已经有两种半新食材第一次吃的日期（ISO 字符串集合）。纯新排期挪动时不落到这些天上——
+        同一天第一次吃的新食物最多两种；半新自己的落位由 settle_riders 按名额把关。"""
+        passed = family_passed_foods(connection)
+        return {day for day, (pure, half) in self.first_eaten_counts(connection, passed).items() if half >= 2}
+
     def conflicts_in(self, connection):
         intervals = self.block_intervals_in(connection)
         names = {row['id']: row['name'] for row in connection.execute('SELECT id, name FROM foods')}
         # 同科已有通过排敏的食物可与其他新食物同期排敏：它的观察窗与谁重叠都不算冲突
         family_passed = family_passed_foods(connection)
+        daily = self.first_eaten_counts(connection, family_passed)
         conflicts = []
         for i in range(len(intervals)):
             for j in range(i + 1, len(intervals)):
                 first, second = intervals[i], intervals[j]
                 if first['food_id'] == second['food_id']:
                     continue
-                if first['food_id'] in family_passed or second['food_id'] in family_passed:
+                first_half, second_half = first['food_id'] in family_passed, second['food_id'] in family_passed
+                if first_half and second_half:
+                    # 同一天第一次吃的新食物最多两种：超了的那天，把同天的半新两两报出来（纯新之间的重叠另报）
+                    if first['start'] == second['start'] and sum(daily.get(first['start'], (0, 0))) >= 3:
+                        conflicts.append({
+                            'foods': [names.get(first['food_id']), names.get(second['food_id'])],
+                            'first': {'start': first['start'], 'end': first['end']},
+                            'second': {'start': second['start'], 'end': second['end']},
+                            'reason': 'same_start',
+                        })
                     continue
+                if first_half or second_half:
+                    continue    # 纯新 + 半新可以同期
                 if first['start'] <= second['end'] and second['start'] <= first['end']:
                     conflicts.append({
                         'foods': [names.get(first['food_id']), names.get(second['food_id'])],
@@ -688,30 +732,66 @@ class FoodScreeningStore(FoodLibraryStore):
         return riding
 
     def settle_riders(self, connection, blocks, riding, starts, pauses, now, companions,
-                      earliest=None, latest=None):
+                      earliest=None, latest=None, stagger_all=False):
         """把跟随的块落到锚点旁边：起始日 = 锚点的新起始日 + 原偏移，途中绕开暂停段。
         earliest/latest 是每块起始日的下/上限（函数，返回 date 或 None）：只能往后挪的把「原起始日」当下限，
-        只往前补位的把「原起始日」当上限（超了就原地不动）。starts：各锚点的新起始日，键同 riding 的锚点。"""
-        for block in blocks:
-            ride = riding.get(block['id'])
-            if ride is None:
-                continue
-            anchor, offset = ride
-            original = date.fromisoformat(block['start_date'])
-            start = starts[anchor] + timedelta(days=offset)
+        只往前补位的把「原起始日」当上限（超了就原地不动）。starts：各锚点的新起始日，键同 riding 的锚点。
+        跟随的都是半新食材，落位时遵守「同一天第一次吃的新食物最多两种」：这一天名额满了就再往后让一天。
+        原本就超员的（这一天已经挤了三种）不动，那是家长的选择，由冲突提示去报——
+        一键重排（stagger_all）例外，它负责把排期恢复规整，这种也错开。"""
+        passed = family_passed_foods(connection)
+        # 每个起始日已经有几种新食物（纯新 / 半新）第一次吃：数所有不参与本次落位的新食物——不参与的就是没动的，
+        # 链上占位的、刚插入的都已在库里）
+        daily = self.first_eaten_counts(connection, passed, skip_block_ids=set(riding))
+
+        def full(day):
+            # 这一天第一次吃的新食物已经两种，不能再多
+            return self.starter_room(daily, day) == 0
+
+        def occupy(day):
+            daily.setdefault(day.isoformat(), [0, 0])[1] += 1
+
+        def place(block, candidate):
             low = earliest(block) if earliest else None
-            if low is not None and start < low:
-                start = low
+            if low is not None and candidate < low:
+                candidate = low
             while True:
-                end = start + timedelta(days=block['days'] - 1)
+                end = candidate + timedelta(days=block['days'] - 1)
                 hit = [pause_end for pause_start, pause_end in pauses
-                       if start <= pause_end and end >= pause_start]
+                       if candidate <= pause_end and end >= pause_start]
                 if not hit:
-                    break
-                start = max(hit) + timedelta(days=1)
+                    return candidate
+                candidate = max(hit) + timedelta(days=1)
+
+        def capped(block, start):
             high = latest(block) if latest else None
             if high is not None and start > high:
-                start = original
+                return date.fromisoformat(block['start_date'])    # 往后让不出位置就不动
+            return start
+
+        riders = [block for block in blocks if block['id'] in riding]
+        # 先看一遍各跟随块不避让时会落在哪：原地不动的先占住名额，要挪动的才让路
+        # （否则挪动的可能正好挤进一个没挪的所在的那天）。一键重排没有「不动」一说，超员的都要错开
+        provisional = {}
+        for block in riders:
+            anchor, offset = riding[block['id']]
+            anchor_start = provisional.get(anchor[1]) if anchor[0] == 'block' and anchor[1] in provisional \
+                else starts[anchor]
+            start = capped(block, place(block, anchor_start + timedelta(days=offset)))
+            provisional[block['id']] = start
+            if not stagger_all and start == date.fromisoformat(block['start_date']):
+                occupy(start)
+        for block in riders:
+            anchor, offset = riding[block['id']]
+            original = date.fromisoformat(block['start_date'])
+            start = capped(block, place(block, starts[anchor] + timedelta(days=offset)))
+            if (stagger_all or start != original) and full(start):
+                start = capped(block, place(block, start + timedelta(days=1)))
+                while full(start):
+                    start = capped(block, place(block, start + timedelta(days=1)))
+                    if start == original:
+                        break
+            occupy(start)
             starts[('block', block['id'])] = start
             if start != original:
                 connection.execute(
@@ -779,9 +859,10 @@ class FoodScreeningStore(FoodLibraryStore):
                         (start.isoformat(), now, block['id']),
                     )
                     self.move_segment_companions(connection, companions, block['id'], start.isoformat())
-            # 跟随的块不早于重排起点（贴着进行中的观察时也只排到明天起，今天及以前排不进）
+            # 跟随的块不早于重排起点（贴着进行中的观察时也只排到明天起，今天及以前排不进）；
+            # 两种半新食材排在同一天第一次吃的也一并错开
             self.settle_riders(connection, order, riding, starts, pauses, now, companions,
-                               earliest=lambda block: floor_date)
+                               earliest=lambda block: floor_date, stagger_all=True)
 
     def repack_schedule(self, start_date=None):
         start = None
@@ -985,6 +1066,7 @@ class FoodScreeningStore(FoodLibraryStore):
         fixed = self.active_round_intervals(connection)
         riding = self.riding_blocks(connection, movable, fixed)
         starts = {('fixed', start.isoformat()): start for start, _ in fixed}
+        half_full = self.half_full_dates(connection)
         chain_end = None
         settled = None        # 最后一个未移动的排期（含其结束日）
         settled_end = None
@@ -1002,20 +1084,30 @@ class FoodScreeningStore(FoodLibraryStore):
             start = original
             if chain_end is not None and start <= chain_end:
                 start = chain_end + timedelta(days=1)
-            end = start + timedelta(days=block['days'] - 1)
-            moved = start != original
             first_pause = None
-            overlap = True
-            while overlap:
-                overlap = False
-                for ob_start, ob_end in obstacles:
-                    if start <= ob_end and end >= ob_start:
-                        if first_pause is None and (ob_start, ob_end) in pauses:
-                            first_pause = ob_start
-                        start = ob_end + timedelta(days=1)
-                        end = start + timedelta(days=block['days'] - 1)
-                        overlap = True
-                        moved = True
+
+            def clear(candidate):
+                # 避开障碍（暂停段、进行中的观察/排期），并记下撞到的第一个暂停段（补位逻辑要用）
+                nonlocal first_pause
+                end = candidate + timedelta(days=block['days'] - 1)
+                overlap = True
+                while overlap:
+                    overlap = False
+                    for ob_start, ob_end in obstacles:
+                        if candidate <= ob_end and end >= ob_start:
+                            if first_pause is None and (ob_start, ob_end) in pauses:
+                                first_pause = ob_start
+                            candidate = ob_end + timedelta(days=1)
+                            end = candidate + timedelta(days=block['days'] - 1)
+                            overlap = True
+                return candidate, end
+
+            start, end = clear(start)
+            moved = start != original
+            if moved:
+                # 这天已经有两种半新食材第一次吃的，纯新不去挤（同一天最多两种）
+                while start.isoformat() in half_full:
+                    start, end = clear(start + timedelta(days=1))
             if moved:
                 connection.execute(
                     'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
@@ -1091,11 +1183,29 @@ class FoodScreeningStore(FoodLibraryStore):
                 (date.fromisoformat(row['start_date']), date.fromisoformat(row['end_date']))
                 for row in connection.execute('SELECT start_date, end_date FROM food_pauses')
             ]
-            while True:
-                hit = next((p_end for p_start, p_end in pauses if start <= p_end and start + timedelta(days=days - 1) >= p_start), None)
-                if hit is None:
-                    break
-                start = hit + timedelta(days=1)
+
+            def clear_of_pauses(day):
+                while True:
+                    hit = next((p_end for p_start, p_end in pauses
+                                if day <= p_end and day + timedelta(days=days - 1) >= p_start), None)
+                    if hit is None:
+                        return day
+                    day = hit + timedelta(days=1)
+
+            start = clear_of_pauses(start)
+            if strategy != 'overlap':
+                # 首次吃的搭配：同一天第一次吃的新食物最多两种（纯新最多一种）。没明确要「保持」的新排期
+                # 不落到名额已满的那天，往后找合适的一天。半新看的是「纯新占掉名额后还剩不剩」；
+                # 纯新只看这天有没有两种半新——这天原有的纯新不算，它会被下面的「顺延」挪走（或各留各的、报重叠冲突）
+                passed = family_passed_foods(connection)
+                daily = self.first_eaten_counts(connection, passed)
+
+                def no_room(day):
+                    pure, half = daily.get(day.isoformat(), (0, 0))
+                    return half >= 2 or (food_id in passed and pure >= 1)
+
+                while no_room(start):
+                    start = clear_of_pauses(start + timedelta(days=1))
             end = start + timedelta(days=days - 1)
             now = datetime.now(CN_TZ).isoformat()
             cursor = connection.execute(
@@ -1134,15 +1244,17 @@ class FoodScreeningStore(FoodLibraryStore):
                    if block['id'] != exclude_id and block['food_id'] not in active_foods]
         inserted = next((block for block in blocks if block['id'] == exclude_id), None)
         passed = family_passed_foods(connection)
-        inserted_strict = inserted is not None and inserted['food_id'] not in passed
         fixed = self.active_round_intervals(connection)
         # 锚点只认原有的排期：并排的块跟着原来的搭档一起顺延，而不是留在新插入的块旁边
         riding = self.riding_blocks(connection, movable, fixed)
         starts = {('fixed', start.isoformat()): start for start, _ in fixed}
-        if inserted_strict:
+        # 已有两种半新第一次吃的日期：纯新排期让位时不落到这些天上
+        half_full = self.half_full_dates(connection)
+        if inserted is not None:
+            # 新插入的那块（不论纯新还是半新）原地不动，可以当锚点
             starts[('block', exclude_id)] = obstacle_start
             for block in movable:
-                # 原来就没有搭档、只和新插入的这块同期的：留在它旁边就行
+                # 原来就没有搭档、只和新插入的这块同期的半新排期：留在它旁边就行，不往后挤
                 start = date.fromisoformat(block['start_date'])
                 only_new = (start <= obstacle_end
                             and start + timedelta(days=block['days'] - 1) >= obstacle_start)
@@ -1170,17 +1282,25 @@ class FoodScreeningStore(FoodLibraryStore):
                 limit = obstacle_end if cursor is None or obstacle_end >= cursor else cursor
             elif moved_region and cursor is not None and start <= cursor:
                 limit = cursor
-            if limit is not None:
-                start = limit + timedelta(days=1)
-                end = start + timedelta(days=block['days'] - 1)
+
+            def clear(candidate):
+                end = candidate + timedelta(days=block['days'] - 1)
                 overlap = True
                 while overlap:
                     overlap = False
                     for ob_start, ob_end in obstacles:
-                        if start <= ob_end and end >= ob_start:
-                            start = ob_end + timedelta(days=1)
-                            end = start + timedelta(days=block['days'] - 1)
+                        if candidate <= ob_end and end >= ob_start:
+                            candidate = ob_end + timedelta(days=1)
+                            end = candidate + timedelta(days=block['days'] - 1)
                             overlap = True
+                return candidate, end
+
+            if limit is not None:
+                start, end = clear(limit + timedelta(days=1))
+            if start != original:
+                # 这天已经有两种半新食材第一次吃的，纯新不去挤（同一天最多两种）
+                while start.isoformat() in half_full:
+                    start, end = clear(start + timedelta(days=1))
             if start != original:
                 connection.execute(
                     'UPDATE food_plan_blocks SET start_date = ?, updated_at = ? WHERE id = ?',
@@ -1275,20 +1395,29 @@ class FoodScreeningStore(FoodLibraryStore):
         fixed = self.active_round_intervals(connection)
         riding = self.riding_blocks(connection, movable, fixed)
         starts = {('fixed', start.isoformat()): start for start, _ in fixed}
+        half_full = self.half_full_dates(connection)
         for block in movable:
             if block['id'] in riding:
                 continue
             original = date.fromisoformat(block['start_date'])
-            start = cursor + timedelta(days=1)
-            end = start + timedelta(days=block['days'] - 1)
-            overlap = True
-            while overlap:
-                overlap = False
-                for ob_start, ob_end in obstacles:
-                    if start <= ob_end and end >= ob_start:
-                        start = ob_end + timedelta(days=1)
-                        end = start + timedelta(days=block['days'] - 1)
-                        overlap = True
+
+            def clear(candidate):
+                end = candidate + timedelta(days=block['days'] - 1)
+                overlap = True
+                while overlap:
+                    overlap = False
+                    for ob_start, ob_end in obstacles:
+                        if candidate <= ob_end and end >= ob_start:
+                            candidate = ob_end + timedelta(days=1)
+                            end = candidate + timedelta(days=block['days'] - 1)
+                            overlap = True
+                return candidate, end
+
+            start, end = clear(cursor + timedelta(days=1))
+            if start < original:
+                # 这天已经有两种半新食材第一次吃的，纯新不去挤（同一天最多两种）：再往后找一天
+                while start.isoformat() in half_full:
+                    start, end = clear(start + timedelta(days=1))
             if start >= original:
                 # 前移不允许晚于原位；这块保持原样，链从它的原位继续
                 cursor = original + timedelta(days=block['days'] - 1)

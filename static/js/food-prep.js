@@ -782,12 +782,14 @@
                     return;
                 }
             }
+            // 这笔里第一次吃的（计划带来的新食物、＋加一个的半新食材）一起过一遍搭配把关；家长取消就不保存
+            const starters = selected.map(row => row._dish)
+                .filter(dish => dish.newItem || dish.mode === 'start')
+                .map(dish => ({ id: dish.foodId, name: dish.name, strict: false }));
+            if (starters.length && !(await window.confirmScreeningStart?.(starters, dateValue))) return;
             const entries = [];
             for (const row of selected) {
                 const dish = row._dish;
-                if (dish.newItem && !(await window.FoodBanner?.confirmNoOtherScreening([dish.foodId], dish.name))) {
-                    return;
-                }
                 entries.push({
                     id: dish.entryId || undefined,
                     food_id: dish.foodId, amount: row._amount(),

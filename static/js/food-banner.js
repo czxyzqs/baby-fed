@@ -298,21 +298,8 @@
         return lastItems.filter(item => item.kind !== 'due' && item.kind !== 'upcoming');
     }
 
-    // 引入新食物时的归因提醒：还有别的食物在排敏观察中需确认。
-    // 同科已有通过排敏的食物（family_passed）不用单独排敏，允许和别的排敏同期：
-    // 所以被引入的它是、或者观察中的那个它是，都不提醒
-    async function confirmNoOtherScreening(foodIds, name) {
-        const board = await api('screening/board');
-        const passed = new Set(board.foods.filter(food => food.family_passed).map(food => food.id));
-        if (foodIds.some(id => passed.has(id))) return true;
-        const other = board.foods.find(food => food.status === 'screening'
-            && !foodIds.includes(food.id) && !passed.has(food.id));
-        if (!other) return true;
-        return window.confirm(
-            `「${other.name}」正在排敏观察中。同时引入「${name}」会让过敏反应难以归因，建议等观察期结束。确定仍要记录吗？`);
-    }
-
     // （横幅 ✓ 快捷勾选已随整餐替换接口移除：记录统一走「记」按钮的按笔面板）
+    // 引入新食物时的搭配把关在 food-intake.js 的 confirmScreeningStart（各记录入口共用）
 
     // ---------- 记录弹窗：进食 + 反应 ----------
 
@@ -593,9 +580,10 @@
         try {
             const dateValue = today();
             const mode = state.modeOverride || (item.kind === 'planned' ? 'start' : 'keep');
-            // 引入新食物（start/retry）时提醒：同时排敏多种食物会让反应难以归因
+            // 第一次吃（开始排敏/重新尝试）先过搭配把关；重新尝试的过敏食物按纯新算
             if ((mode === 'start' || mode === 'retry')
-                && !await confirmNoOtherScreening([item.food_id], item.food)) {
+                && !await window.confirmScreeningStart?.(
+                    [{ id: item.food_id, name: item.food, strict: mode === 'retry' }], dateValue)) {
                 return;
             }
             const result = await api(`entries?date=${dateValue}`);
@@ -651,7 +639,7 @@
 
     window.foodQuickRecord = { open: openQuickAdd };
     // 供 food-prep.js 的按餐记录面板复用：单食物完整记录、归因确认、刷新餐单
-    window.FoodBanner = { openFoodDialog, confirmNoOtherScreening, refresh: load };
+    window.FoodBanner = { openFoodDialog, refresh: load };
     window.addEventListener('pageshow', event => { if (event.persisted) load(); });
     load();
 })();
