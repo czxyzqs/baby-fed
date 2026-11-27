@@ -533,14 +533,22 @@ class FoodScreeningStore(FoodLibraryStore):
         for item in rounds:
             item['end_date'] = add_days(date.fromisoformat(item['start_date']), item['observe_days'] - 1)
             item['meal'] = self.block_meal_in(connection, item['food_id'], today)
-        # 已完成的排敏轮次（通过/过敏）作为历史展示在排期页，不再凭空消失
-        history = [dict(row) for row in connection.execute(
-            'SELECT r.id, r.food_id, r.start_date, r.observe_days, r.status, f.name AS food_name '
-            'FROM food_rounds r JOIN foods f ON f.id = r.food_id '
-            "WHERE r.status != 'active' ORDER BY r.start_date, r.id"
-        )]
-        for item in history:
+        # 已完成的排敏轮次（通过/过敏）作为历史展示在排期页，不再凭空消失。
+        # 没记过进食就判了正常的轮次（「已耐受，直接记正常」、同科已通过的直接记）并没有真的观察过：
+        # 只在记的那天标一下（direct），不按观察天数画成一段「排敏已通过」
+        history = []
+        for row in connection.execute('''
+            SELECT r.id, r.food_id, r.start_date, r.observe_days, r.status, f.name AS food_name,
+                   NOT EXISTS (SELECT 1 FROM food_entries e WHERE e.round_id = r.id) AS no_intake
+            FROM food_rounds r JOIN foods f ON f.id = r.food_id
+            WHERE r.status != 'active' ORDER BY r.start_date, r.id
+        '''):
+            item = dict(row)
+            item['direct'] = bool(item.pop('no_intake')) and item['status'] == 'normal'
+            if item['direct']:
+                item['observe_days'] = 1
             item['end_date'] = add_days(date.fromisoformat(item['start_date']), item['observe_days'] - 1)
+            history.append(item)
         normals = []
         for row in connection.execute('SELECT * FROM food_normal_plans ORDER BY start_date, id'):
             item = dict(row)

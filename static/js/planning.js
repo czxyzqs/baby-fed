@@ -810,7 +810,10 @@
             let text = '';
             if (item.kind === 'history') {
                 dot.classList.add(item.item.status === 'normal' ? 'done-normal' : 'done-allergic');
-                text = `${item.item.food_name} · 排敏${item.item.status === 'normal' ? '已通过' : '过敏'}（${item.item.start_date.slice(5).replace('-', '/')} 起）`;
+                // 没排敏、直接记为正常的只在记的那天出现：不写成「排敏已通过」
+                text = item.item.direct
+                    ? `${item.item.food_name} · 未排敏，直接记为正常（${item.item.start_date.slice(5).replace('-', '/')}）`
+                    : `${item.item.food_name} · 排敏${item.item.status === 'normal' ? '已通过' : '过敏'}（${item.item.start_date.slice(5).replace('-', '/')} 起）`;
             } else if (item.kind === 'pause') {
                 dot.classList.add('pause');
                 text = `⏸ 暂停排敏${item.pause.reason ? ` · ${item.pause.reason}` : ''}`;
@@ -982,7 +985,9 @@
             rows.push({
                 sort: item.start_date, end: addDays(item.start_date, item.observe_days - 1),
                 color: item.status === 'normal' ? 'done-normal' : 'done-allergic',
-                text: `${dateRange(item.start_date, item.observe_days)} ${item.food_name} · 排敏${item.status === 'normal' ? '已通过' : '过敏'}`
+                // 直接记为正常（没排敏）的只占记的那一天，不写成「排敏已通过」
+                text: `${dateRange(item.start_date, item.observe_days)} ${item.food_name} · ${
+                    item.direct ? '直接记为正常（未排敏）' : `排敏${item.status === 'normal' ? '已通过' : '过敏'}`}`
             });
         });
         rows.sort((first, second) => first.sort.localeCompare(second.sort));
