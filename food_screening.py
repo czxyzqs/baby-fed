@@ -290,6 +290,9 @@ class FoodScreeningStore(FoodLibraryStore):
                 )
                 connection.execute("UPDATE food_rounds SET status = 'allergic' WHERE id = ?", (latest['id'],))
                 if pause_days:
+                    # 先清掉它的排期再重排：否则这块会被当成还在的排敏一起排、占住一段日期，事后删掉留下空档
+                    connection.execute(
+                        "DELETE FROM food_plan_blocks WHERE food_id = ? AND status = 'scheduled'", (food_id,))
                     start = add_days(today, 1)
                     connection.execute(
                         'INSERT INTO food_pauses (start_date, end_date, reason, source, created_at) VALUES (?, ?, ?, ?, ?)',
