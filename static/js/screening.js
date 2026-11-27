@@ -168,9 +168,11 @@
             const head = node('h3', title + (foods.some(food => food.is_high_allergen) ? ' ⚠️' : ''), 'screening-group-title');
             if (status === 'untouched' && passed) {
                 const badge = node('span', `✓${passed}`, 'screening-family-pass');
-                // 「同科通过就不必再排敏」只认科属；按品类分组的（肉蛋鱼奶等没归科）只是参考
+                // 「同科通过就不必单独排敏」只认科属；按品类分组的（肉蛋鱼奶等没归科）只是参考。
+                // 组里还有没放开的高致敏食物（要等同科的高致敏食物通过）时，在提示里点明
+                const strictHigh = foods.some(food => food.is_high_allergen && !food.family_passed);
                 const tip = `这组已有 ${passed} 种食物通过排敏`
-                    + (byFamily ? '：同科食物可以直接记，也可以和其他新食物一起排敏' : '');
+                    + (byFamily ? `：同科食物可以直接记，也可以和其他新食物一起排敏${strictHigh ? '；⚠️ 高致敏的食物要等同科的高致敏食物通过' : ''}` : '');
                 badge.title = tip;
                 badge.setAttribute('aria-label', tip);
                 head.append(badge);

@@ -102,15 +102,21 @@ def add_days(parsed, count):
 def family_passed_foods(connection):
     """同科已有排敏通过的食物编号：所在科属（foods.family）里有食物最新一轮为正常。
 
-    同科致敏原相近，这科通过一种之后，同科其他食物不必再严苛排敏：可以直接记，也可以和其他新食物同期排敏。
+    同科致敏原相近，这科通过一种之后，同科其他食物不必单独排敏：可以直接记，也可以和其他新食物同期排敏。
+    通过的范围按食物本身高不高致敏区分（所在品类标了高致敏的算高致敏）：普通食物，同科有任何一种通过即可；
+    高致敏食物，要同科有高致敏的食物通过才算——低致敏的通过不能替它背书（四季豆通过，不代表花生酱、豆腐也没问题）。
     只认科属；没归科的（肉、蛋、鱼、奶等）同品类差异大（如鱼和虾），不在此列。"""
-    return {row['food_id'] for row in connection.execute('''
-        SELECT f.id AS food_id FROM foods f
-        WHERE f.family IS NOT NULL AND f.family != '' AND EXISTS (
-            SELECT 1 FROM foods g JOIN food_rounds r ON r.food_id = g.id
-            WHERE g.family = f.family AND r.status = 'normal'
-              AND r.id = (SELECT MAX(id) FROM food_rounds WHERE food_id = g.id))
-    ''')}
+    foods = connection.execute('''
+        SELECT f.id AS food_id, f.family AS family, COALESCE(c.is_high_allergen, 0) AS high_allergen, EXISTS (
+            SELECT 1 FROM food_rounds r WHERE r.food_id = f.id AND r.status = 'normal'
+              AND r.id = (SELECT MAX(id) FROM food_rounds r2 WHERE r2.food_id = f.id)) AS passed
+        FROM foods f LEFT JOIN categories c ON c.id = f.category_id
+        WHERE f.family IS NOT NULL AND f.family != ''
+    ''').fetchall()
+    passed_families = {row['family'] for row in foods if row['passed']}
+    high_passed_families = {row['family'] for row in foods if row['passed'] and row['high_allergen']}
+    return {row['food_id'] for row in foods
+            if row['family'] in (high_passed_families if row['high_allergen'] else passed_families)}
 
 
 class FoodScreeningStore(FoodLibraryStore):
